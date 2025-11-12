@@ -1,0 +1,119 @@
+name: EVConnect Full CI/CD
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  # Flutter Mobile App CI
+  flutter-ci:
+    name: Flutter CI
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile-app/evconnect_app
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.5'
+          channel: 'stable'
+          cache: true
+      
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+      
+      - name: Build Status
+        run: echo "✅ Flutter CI passed"
+  
+  # Node.js Backend CI
+  node-ci:
+    name: Node.js CI
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend-api/evconnect_backend
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: evconnect_test
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+          cache-dependency-path: backend-api/evconnect_backend/package-lock.json
+      
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run test
+        env:
+          DATABASE_HOST: localhost
+          DATABASE_PORT: 5432
+          DATABASE_USER: testuser
+          DATABASE_PASSWORD: testpass
+          DATABASE_NAME: evconnect_test
+          JWT_SECRET: test-secret
+          JWT_REFRESH_SECRET: test-refresh-secret
+      
+      - name: Build Status
+        run: echo "✅ Node.js CI passed"
+  
+  # Python AI Services CI
+  python-ci:
+    name: Python AI CI
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ai-services
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      
+      - run: python train_model.py
+      - run: pytest test_api.py -v
+      
+      - name: Build Status
+        run: echo "✅ Python AI CI passed"
+  
+  # Overall status check
+  ci-success:
+    name: All CI Checks Passed
+    runs-on: ubuntu-latest
+    needs: [flutter-ci, node-ci, python-ci]
+    
+    steps:
+      - name: Success notification
+        run: |
+          echo "🎉 All CI checks passed successfully!"
+          echo "✅ Flutter CI - Passed"
+          echo "✅ Node.js CI - Passed"
+          echo "✅ Python AI CI - Passed"
