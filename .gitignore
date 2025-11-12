@@ -27,12 +27,15 @@ htmlcov/
 # Node.js
 node_modules/
 npm-debug.log*
+pnpm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+lerna-debug.log*
 .npm
 
-# NestJS
-dist/
+# NestJS / Compiled output
+/dist
+/build
 *.tsbuildinfo
 
 # Flutter
@@ -82,8 +85,18 @@ captures/
 .env.production.local
 
 # IDE
-.vscode/
-.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+/.idea
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
 *.swp
 *.swo
 *~
@@ -105,9 +118,20 @@ yarn-error.log*
 
 # Testing
 coverage/
-.nyc_output/
+/.nyc_output
 
 # Temporary files
 tmp/
 temp/
+.temp
+.tmp
 *.tmp
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Diagnostic reports
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
