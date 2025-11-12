@@ -1,0 +1,120 @@
+version: '3.9'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: evconnect-postgres
+    environment:
+      POSTGRES_USER: evconnect
+      POSTGRES_PASSWORD: evconnect123
+      POSTGRES_DB: evconnect
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U evconnect"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - evconnect-network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: evconnect-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - evconnect-network
+
+  # NestJS Backend API
+  backend:
+    build:
+      context: ../evconnect_backend
+      dockerfile: Dockerfile
+    container_name: evconnect-backend
+    ports:
+      - "4000:4000"
+    environment:
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      DATABASE_USER: evconnect
+      DATABASE_PASSWORD: evconnect123
+      DATABASE_NAME: evconnect
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      NODE_ENV: production
+    env_file:
+      - ../evconnect_backend/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - evconnect-network
+    restart: unless-stopped
+
+  # FastAPI AI Services
+  ai-services:
+    build:
+      context: ../ai-services
+      dockerfile: Dockerfile
+    container_name: evconnect-ai
+    ports:
+      - "5000:5000"
+    environment:
+      API_PORT: 5000
+      MODEL_PATH: /app/models/route_optimizer.pkl
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - evconnect-network
+    restart: unless-stopped
+
+  # Nginx Reverse Proxy (Optional)
+  nginx:
+    image: nginx:alpine
+    container_name: evconnect-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - backend
+      - ai-services
+    networks:
+      - evconnect-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  evconnect-network:
+    driver: bridge
