@@ -4,5 +4,15 @@
   "sourceRoot": "src",
   "compilerOptions": {
     "deleteOutDir": true
-  }
+  },
+  "exclude": [
+    "admin-dashboard/**",
+    "mobile-app/**",
+    "ai-services/**",
+    "infra/**",
+    "design/**",
+    "docs/**",
+    "node_modules/**",
+    "dist/**"
+  ]
 }

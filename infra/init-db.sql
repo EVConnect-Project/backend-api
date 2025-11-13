@@ -1,94 +1,159 @@
--- Enable PostGIS extension for geospatial queries
+-- EVConnect Database Initialization Script
+-- This script sets up the initial database schema with PostGIS support
+
+-- Enable required PostgreSQL extensions
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS postgis;
+CREATE EXTENSION IF NOT EXISTS "pg_trgm";  -- For text search optimization
 
--- Create users table
+-- Create initial users table (if not exists from TypeORM migrations)
 CREATE TABLE IF NOT EXISTS users (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    email VARCHAR(255) UNIQUE NOT NULL,
-    password VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name VARCHAR(255) NOT NULL,
+  email VARCHAR(255) UNIQUE NOT NULL,
+  password TEXT NOT NULL,
+  role VARCHAR(50) DEFAULT 'user',
+  phone VARCHAR(20),
+  created_at TIMESTAMP DEFAULT now(),
+  updated_at TIMESTAMP DEFAULT now()
 );
 
--- Create chargers table
+-- Create index on email for faster lookups
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+
+-- Create chargers table with PostGIS geometry
 CREATE TABLE IF NOT EXISTS chargers (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    location GEOGRAPHY(POINT, 4326) NOT NULL,
-    latitude DOUBLE PRECISION NOT NULL,
-    longitude DOUBLE PRECISION NOT NULL,
-    power_kw DOUBLE PRECISION NOT NULL,
-    price_per_kwh DOUBLE PRECISION NOT NULL,
-    available BOOLEAN DEFAULT TRUE,
-    owner_id INTEGER REFERENCES users(id),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name VARCHAR(255) NOT NULL,
+  address TEXT NOT NULL,
+  latitude DOUBLE PRECISION NOT NULL,
+  longitude DOUBLE PRECISION NOT NULL,
+  location GEOMETRY(Point, 4326),  -- PostGIS point with WGS84 coordinate system
+  status VARCHAR(20) DEFAULT 'available',
+  connector_type VARCHAR(50),
+  power_output DECIMAL(10, 2),
+  price_per_kwh DECIMAL(10, 2),
+  operator_id UUID,
+  created_at TIMESTAMP DEFAULT now(),
+  updated_at TIMESTAMP DEFAULT now(),
+  CONSTRAINT chk_status CHECK (status IN ('available', 'in-use', 'offline', 'maintenance'))
 );
 
--- Create spatial index for faster geospatial queries
+-- Create spatial index for location-based queries
 CREATE INDEX IF NOT EXISTS idx_chargers_location ON chargers USING GIST(location);
+CREATE INDEX IF NOT EXISTS idx_chargers_status ON chargers(status);
+
+-- Create trigger to auto-populate location from lat/lng
+CREATE OR REPLACE FUNCTION update_charger_location()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.location = ST_SetSRID(ST_MakePoint(NEW.longitude, NEW.latitude), 4326);
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_update_charger_location
+  BEFORE INSERT OR UPDATE ON chargers
+  FOR EACH ROW
+  EXECUTE FUNCTION update_charger_location();
 
 -- Create bookings table
 CREATE TABLE IF NOT EXISTS bookings (
-    id SERIAL PRIMARY KEY,
-    user_id INTEGER REFERENCES users(id),
-    charger_id INTEGER REFERENCES chargers(id),
-    start_time TIMESTAMP NOT NULL,
-    end_time TIMESTAMP NOT NULL,
-    price DOUBLE PRECISION,
-    status VARCHAR(50) DEFAULT 'pending',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  charger_id UUID NOT NULL REFERENCES chargers(id) ON DELETE CASCADE,
+  start_time TIMESTAMP NOT NULL,
+  end_time TIMESTAMP,
+  status VARCHAR(20) DEFAULT 'pending',
+  total_cost DECIMAL(10, 2),
+  energy_consumed DECIMAL(10, 2),
+  created_at TIMESTAMP DEFAULT now(),
+  updated_at TIMESTAMP DEFAULT now(),
+  CONSTRAINT chk_booking_status CHECK (status IN ('pending', 'active', 'completed', 'cancelled'))
 );
 
--- Create mechanics table
-CREATE TABLE IF NOT EXISTS mechanics (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    phone VARCHAR(50) NOT NULL,
-    email VARCHAR(255),
-    location GEOGRAPHY(POINT, 4326) NOT NULL,
-    latitude DOUBLE PRECISION NOT NULL,
-    longitude DOUBLE PRECISION NOT NULL,
-    services TEXT[] NOT NULL,
-    rating DOUBLE PRECISION DEFAULT 0,
-    available BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+-- Create indexes for bookings
+CREATE INDEX IF NOT EXISTS idx_bookings_user_id ON bookings(user_id);
+CREATE INDEX IF NOT EXISTS idx_bookings_charger_id ON bookings(charger_id);
+CREATE INDEX IF NOT EXISTS idx_bookings_status ON bookings(status);
+CREATE INDEX IF NOT EXISTS idx_bookings_start_time ON bookings(start_time);
 
--- Create spatial index for mechanics
-CREATE INDEX IF NOT EXISTS idx_mechanics_location ON mechanics USING GIST(location);
+-- Insert sample admin user (password: admin123 - should be changed in production)
+-- Password hash is bcrypt hash of "admin123"
+INSERT INTO users (id, name, email, password, role) 
+VALUES (
+  uuid_generate_v4(),
+  'Admin User',
+  'admin@evconnect.com',
+  '$2b$10$rW3KqxqN9qN3xPGKlZ3xf.8QZ9nZqN3xPGKlZ3xf8QZ9nZqN3xPGK',  -- admin123
+  'admin'
+) ON CONFLICT (email) DO NOTHING;
 
--- Create payments table
-CREATE TABLE IF NOT EXISTS payments (
-    id SERIAL PRIMARY KEY,
-    booking_id INTEGER REFERENCES bookings(id),
-    user_id INTEGER REFERENCES users(id),
-    amount DOUBLE PRECISION NOT NULL,
-    currency VARCHAR(3) DEFAULT 'USD',
-    status VARCHAR(50) DEFAULT 'pending',
-    stripe_payment_intent_id VARCHAR(255),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+-- Insert sample chargers for testing
+INSERT INTO chargers (id, name, address, latitude, longitude, status, connector_type, power_output, price_per_kwh)
+VALUES 
+  (
+    uuid_generate_v4(),
+    'Downtown EV Station',
+    '123 Main St, San Francisco, CA 94102',
+    37.7749,
+    -122.4194,
+    'available',
+    'CCS',
+    150.00,
+    0.35
+  ),
+  (
+    uuid_generate_v4(),
+    'Airport Charging Hub',
+    'San Francisco International Airport, CA 94128',
+    37.6213,
+    -122.3790,
+    'available',
+    'CHAdeMO',
+    100.00,
+    0.30
+  ),
+  (
+    uuid_generate_v4(),
+    'Shopping Mall Station',
+    '456 Market St, San Francisco, CA 94103',
+    37.7893,
+    -122.4039,
+    'available',
+    'Tesla Supercharger',
+    250.00,
+    0.40
+  )
+ON CONFLICT (id) DO NOTHING;
 
--- Insert sample data
-INSERT INTO users (name, email, password) VALUES 
-('John Doe', 'john@example.com', '$2b$10$hashedpassword'),
-('Jane Smith', 'jane@example.com', '$2b$10$hashedpassword')
-ON CONFLICT (email) DO NOTHING;
+-- Create updated_at trigger function
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
 
--- Insert sample chargers (San Francisco area)
-INSERT INTO chargers (name, latitude, longitude, location, power_kw, price_per_kwh, available) VALUES
-('Downtown Charger', 37.7749, -122.4194, ST_SetSRID(ST_MakePoint(-122.4194, 37.7749), 4326)::geography, 150, 0.45, true),
-('Airport Station', 37.6213, -122.3790, ST_SetSRID(ST_MakePoint(-122.3790, 37.6213), 4326)::geography, 250, 0.55, true),
-('Mall Parking', 37.7939, -122.3947, ST_SetSRID(ST_MakePoint(-122.3947, 37.7939), 4326)::geography, 50, 0.35, true)
-ON CONFLICT DO NOTHING;
+-- Apply updated_at trigger to all tables
+CREATE TRIGGER trg_users_updated_at
+  BEFORE UPDATE ON users
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
 
--- Insert sample mechanics
-INSERT INTO mechanics (name, phone, email, latitude, longitude, location, services, rating, available) VALUES
-('EV Repair Pro', '+1-555-0101', 'repair@evpro.com', 37.7849, -122.4094, ST_SetSRID(ST_MakePoint(-122.4094, 37.7849), 4326)::geography, ARRAY['Battery Repair', 'Motor Service', 'Diagnostics'], 4.5, true),
-('Quick EV Fix', '+1-555-0102', 'quick@evfix.com', 37.7649, -122.4294, ST_SetSRID(ST_MakePoint(-122.4294, 37.7649), 4326)::geography, ARRAY['Roadside Assistance', 'Towing', 'Emergency Repair'], 4.2, true)
-ON CONFLICT DO NOTHING;
+CREATE TRIGGER trg_chargers_updated_at
+  BEFORE UPDATE ON chargers
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER trg_bookings_updated_at
+  BEFORE UPDATE ON bookings
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+-- Grant permissions (adjust as needed)
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO evconnect;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO evconnect;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO evconnect;

@@ -17,6 +17,12 @@ export class User {
   @Column({ default: false })
   isVerified: boolean;
 
+  @Column({ default: 'user' })
+  role: string; // 'user', 'admin', 'owner'
+
+  @Column({ default: false })
+  isBanned: boolean;
+
   @CreateDateColumn()
   createdAt: Date;
 

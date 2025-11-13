@@ -1,120 +1,94 @@
-version: '3.9'
+version: '3.8'
+
+networks:
+  evconnect_net:
+    driver: bridge
 
 services:
-  # PostgreSQL Database
   postgres:
-    image: postgres:15-alpine
-    container_name: evconnect-postgres
+    image: postgres:15
     environment:
       POSTGRES_USER: evconnect
-      POSTGRES_PASSWORD: evconnect123
+      POSTGRES_PASSWORD: evconnect_pass
       POSTGRES_DB: evconnect
-    ports:
-      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U evconnect"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
-      - evconnect-network
+      - evconnect_net
 
-  # Redis Cache
   redis:
     image: redis:7-alpine
-    container_name: evconnect-redis
-    ports:
-      - "6379:6379"
+    command: ["redis-server", "--save", "900", "1"]
     volumes:
       - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
-      timeout: 3s
+      timeout: 5s
       retries: 5
     networks:
-      - evconnect-network
+      - evconnect_net
 
-  # NestJS Backend API
-  backend:
+  evconnect_backend:
     build:
-      context: ../evconnect_backend
+      context: ../backend-api/evconnect_backend
       dockerfile: Dockerfile
-    container_name: evconnect-backend
-    ports:
-      - "4000:4000"
-    environment:
-      DATABASE_HOST: postgres
-      DATABASE_PORT: 5432
-      DATABASE_USER: evconnect
-      DATABASE_PASSWORD: evconnect123
-      DATABASE_NAME: evconnect
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      NODE_ENV: production
     env_file:
-      - ../evconnect_backend/.env
+      - ../backend-api/evconnect_backend/.env
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-    networks:
-      - evconnect-network
+    ports:
+      - '4000:4000'
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:4000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks:
+      - evconnect_net
 
-  # FastAPI AI Services
-  ai-services:
+  evconnect_ai:
     build:
       context: ../ai-services
       dockerfile: Dockerfile
-    container_name: evconnect-ai
+    env_file:
+      - ../ai-services/.env
     ports:
-      - "5000:5000"
-    environment:
-      API_PORT: 5000
-      MODEL_PATH: /app/models/route_optimizer.pkl
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    networks:
-      - evconnect-network
+      - '5000:5000'
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks:
+      - evconnect_net
 
-  # Nginx Reverse Proxy (Optional)
   nginx:
-    image: nginx:alpine
-    container_name: evconnect-nginx
+    image: nginx:stable-alpine
     ports:
-      - "80:80"
-      - "443:443"
+      - '80:80'
+      - '443:443'
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./certs:/etc/letsencrypt:ro
     depends_on:
-      - backend
-      - ai-services
+      - evconnect_backend
+      - evconnect_ai
     networks:
-      - evconnect-network
-    restart: unless-stopped
+      - evconnect_net
 
 volumes:
   postgres_data:
-    driver: local
   redis_data:
-    driver: local
-
-networks:
-  evconnect-network:
-    driver: bridge

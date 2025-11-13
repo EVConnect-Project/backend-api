@@ -79,6 +79,46 @@ export class AuthService {
     };
   }
 
+  async adminLogin(loginDto: LoginDto) {
+    const { email, password } = loginDto;
+
+    // Find user
+    const user = await this.userRepository.findOne({ where: { email } });
+    if (!user) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // Check if user is admin
+    if (user.role !== 'admin') {
+      throw new UnauthorizedException('Access denied. Admin role required.');
+    }
+
+    // Check if user is banned
+    if (user.isBanned) {
+      throw new UnauthorizedException('Your account has been banned');
+    }
+
+    // Verify password
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // Generate JWT token with role
+    const payload = { sub: user.id, email: user.email, role: user.role };
+    const access_token = this.jwtService.sign(payload);
+
+    return {
+      access_token,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+      },
+    };
+  }
+
   async validateUser(userId: string): Promise<User | null> {
     return this.userRepository.findOne({ where: { id: userId } });
   }
