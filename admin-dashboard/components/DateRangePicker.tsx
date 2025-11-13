@@ -109,15 +109,24 @@ export function DateRangePicker({
         <Calendar className="w-4 h-4" />
         <span className="text-sm font-medium">{formatDateRange()}</span>
         {(startDate || endDate) && (
-          <button
+          <span
             onClick={(e) => {
               e.stopPropagation();
               handleClear();
             }}
-            className="ml-2 p-0.5 hover:bg-slate-200 dark:hover:bg-slate-600 rounded"
+            className="ml-2 p-0.5 hover:bg-slate-200 dark:hover:bg-slate-600 rounded cursor-pointer inline-flex"
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                e.stopPropagation();
+                handleClear();
+              }
+            }}
           >
             <X className="w-3 h-3" />
-          </button>
+          </span>
         )}
       </button>
 

@@ -20,17 +20,20 @@ import {
   Zap,
   DollarSign,
   FileText,
+  Eye,
 } from 'lucide-react';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import { exportBookingsToExcel, exportBookingsToPDF } from '@/lib/export';
 import { useToast } from '@/components/ToastProvider';
 import { format, subDays } from 'date-fns';
+import MultiSelect from '@/components/MultiSelect';
+import { useRouter } from 'next/navigation';
 
 export default function BookingsPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [dateRange, setDateRange] = useState<DateRange>({
     startDate: subDays(new Date(), 30),
     endDate: new Date(),
@@ -39,11 +42,19 @@ export default function BookingsPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [selectedBookings, setSelectedBookings] = useState<Set<string>>(new Set());
   const toast = useToast();
+  const router = useRouter();
   const bookingsPerPage = 10;
+
+  const statusOptions = [
+    { value: 'pending', label: 'Pending' },
+    { value: 'active', label: 'Active' },
+    { value: 'completed', label: 'Completed' },
+    { value: 'cancelled', label: 'Cancelled' },
+  ];
 
   useEffect(() => {
     fetchBookings();
-  }, [currentPage, statusFilter, dateRange]);
+  }, [currentPage, selectedStatuses, dateRange]);
 
   const fetchBookings = async () => {
     try {
@@ -51,7 +62,7 @@ export default function BookingsPage() {
       const response = await getBookings({
         page: currentPage,
         limit: bookingsPerPage,
-        status: statusFilter !== 'all' ? statusFilter : undefined,
+        status: selectedStatuses.length > 0 ? selectedStatuses.join(',') : undefined,
       });
       
       setBookings(response.bookings || []);
@@ -340,28 +351,19 @@ export default function BookingsPage() {
               />
             </div>
 
-            {/* Status Filter */}
-            <div className="flex items-center gap-2 relative">
+            {/* Status Filter - MultiSelect */}
+            <div className="flex items-center gap-2 relative min-w-[200px]">
               <Filter className="w-5 h-5 text-slate-500 dark:text-slate-400" />
-              <div className="relative flex-1">
-                <select
-                  value={statusFilter}
-                  onChange={(e) => {
-                    setStatusFilter(e.target.value);
+              <div className="flex-1">
+                <MultiSelect
+                  options={statusOptions}
+                  selected={selectedStatuses}
+                  onChange={(statuses) => {
+                    setSelectedStatuses(statuses);
                     setCurrentPage(1);
                   }}
-                  className="w-full px-4 py-3 pr-10 border border-slate-300 dark:border-slate-600 rounded-lg 
-                    bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100
-                    focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 
-                    focus:border-transparent transition-all appearance-none cursor-pointer"
-                >
-                  <option value="all" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">All Status</option>
-                  <option value="pending" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">Pending</option>
-                  <option value="active" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">Active</option>
-                  <option value="completed" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">Completed</option>
-                  <option value="cancelled" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">Cancelled</option>
-                </select>
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
+                  placeholder="All Statuses"
+                />
               </div>
             </div>
 
@@ -540,10 +542,11 @@ export default function BookingsPage() {
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => alert(`View details for ${booking.id}`)}
+                          onClick={() => router.push(`/dashboard/bookings/${booking.id}`)}
                           className="inline-flex items-center px-3 py-1.5 text-xs font-semibold"
                         >
-                          View Details
+                          <Eye className="w-3.5 h-3.5 mr-1.5" />
+                          Details
                         </Button>
                       </td>
                     </tr>

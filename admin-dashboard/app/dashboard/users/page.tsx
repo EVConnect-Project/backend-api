@@ -24,6 +24,7 @@ import {
 import { formatDate } from '@/lib/utils';
 import { exportUsersToExcel, exportUsersToPDF } from '@/lib/export';
 import { useToast } from '@/components/ToastProvider';
+import MultiSelect from '@/components/MultiSelect';
 
 interface User {
   id: string;
@@ -38,7 +39,7 @@ export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [roleFilter, setRoleFilter] = useState('all');
+  const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -47,9 +48,15 @@ export default function UsersPage() {
 
   const usersPerPage = 10;
 
+  const roleOptions = [
+    { value: 'user', label: 'User' },
+    { value: 'owner', label: 'Owner' },
+    { value: 'admin', label: 'Admin' },
+  ];
+
   useEffect(() => {
     fetchUsers();
-  }, [currentPage, roleFilter, statusFilter, searchTerm]);
+  }, [currentPage, selectedRoles, statusFilter, searchTerm]);
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -63,8 +70,9 @@ export default function UsersPage() {
         params.search = searchTerm;
       }
 
-      if (roleFilter !== 'all') {
-        params.role = roleFilter;
+      // Send multiple roles as comma-separated or array
+      if (selectedRoles.length > 0) {
+        params.role = selectedRoles.join(',');
       }
 
       if (statusFilter !== 'all') {
@@ -200,22 +208,17 @@ export default function UsersPage() {
               </div>
             </div>
 
-            {/* Role Filter */}
-            <div className="relative">
-              <select
-                value={roleFilter}
-                onChange={(e) => {
-                  setRoleFilter(e.target.value);
+            {/* Role Filter - MultiSelect */}
+            <div>
+              <MultiSelect
+                options={roleOptions}
+                selected={selectedRoles}
+                onChange={(roles) => {
+                  setSelectedRoles(roles);
                   setCurrentPage(1);
                 }}
-                className="w-full px-4 py-3 pr-10 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent transition-all appearance-none cursor-pointer"
-              >
-                <option value="all" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">All Roles</option>
-                <option value="user" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">User</option>
-                <option value="owner" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">Owner</option>
-                <option value="admin" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">Admin</option>
-              </select>
-              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
+                placeholder="All Roles"
+              />
             </div>
 
             {/* Status Filter */}

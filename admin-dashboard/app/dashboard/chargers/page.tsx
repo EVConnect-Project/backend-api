@@ -21,11 +21,14 @@ import {
   ChevronDown,
   X,
   Download,
-  FileText
+  FileText,
+  Eye
 } from 'lucide-react';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import { exportChargersToExcel, exportChargersToPDF } from '@/lib/export';
 import { useToast } from '@/components/ToastProvider';
+import MultiSelect from '@/components/MultiSelect';
+import { useRouter } from 'next/navigation';
 
 interface Charger {
   id: string;
@@ -51,7 +54,7 @@ export default function ChargersPage() {
   const [chargers, setChargers] = useState<Charger[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [verifiedFilter, setVerifiedFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -59,12 +62,20 @@ export default function ChargersPage() {
   const [editingCharger, setEditingCharger] = useState<Charger | null>(null);
   const [rejectingCharger, setRejectingCharger] = useState<Charger | null>(null);
   const toast = useToast();
+  const router = useRouter();
 
   const chargersPerPage = 10;
 
+  const statusOptions = [
+    { value: 'available', label: 'Available' },
+    { value: 'in-use', label: 'In Use' },
+    { value: 'offline', label: 'Offline' },
+    { value: 'maintenance', label: 'Maintenance' },
+  ];
+
   useEffect(() => {
     fetchChargers();
-  }, [currentPage, statusFilter, verifiedFilter, searchTerm]);
+  }, [currentPage, selectedStatuses, verifiedFilter, searchTerm]);
 
   const fetchChargers = async () => {
     setLoading(true);
@@ -78,8 +89,9 @@ export default function ChargersPage() {
         params.search = searchTerm;
       }
 
-      if (statusFilter !== 'all') {
-        params.status = statusFilter;
+      // Send multiple statuses as comma-separated
+      if (selectedStatuses.length > 0) {
+        params.status = selectedStatuses.join(',');
       }
 
       if (verifiedFilter !== 'all') {
@@ -216,23 +228,17 @@ export default function ChargersPage() {
               </div>
             </div>
 
-            {/* Status Filter */}
-            <div className="relative">
-              <select
-                value={statusFilter}
-                onChange={(e) => {
-                  setStatusFilter(e.target.value);
+            {/* Status Filter - MultiSelect */}
+            <div>
+              <MultiSelect
+                options={statusOptions}
+                selected={selectedStatuses}
+                onChange={(statuses) => {
+                  setSelectedStatuses(statuses);
                   setCurrentPage(1);
                 }}
-                className="w-full px-4 py-3 pr-10 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent transition-all appearance-none cursor-pointer"
-              >
-                <option value="all" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">All Status</option>
-                <option value="available" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">Available</option>
-                <option value="in-use" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">In Use</option>
-                <option value="offline" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">Offline</option>
-                <option value="maintenance" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">Maintenance</option>
-              </select>
-              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
+                placeholder="All Statuses"
+              />
             </div>
 
             {/* Verified Filter */}
@@ -352,6 +358,16 @@ export default function ChargersPage() {
                           <span className="text-sm text-blue-600 dark:text-blue-400 font-medium">Loading...</span>
                         ) : (
                           <div className="flex justify-end gap-2">
+                            {/* View Details Button */}
+                            <button
+                              onClick={() => router.push(`/dashboard/chargers/${charger.id}`)}
+                              className="inline-flex items-center px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-all"
+                              title="View Details"
+                            >
+                              <Eye className="w-3.5 h-3.5 mr-1.5" />
+                              Details
+                            </button>
+
                             {/* Edit Button */}
                             <button
                               onClick={() => setEditingCharger(charger)}
