@@ -117,9 +117,10 @@ export default function ChargersPage() {
       await approveCharger(chargerId);
       await fetchChargers();
       toast.success('Charger approved successfully');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error approving charger:', error);
-      toast.error('Failed to approve charger');
+      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to approve charger';
+      toast.error(errorMessage);
     } finally {
       setActionLoading(null);
     }

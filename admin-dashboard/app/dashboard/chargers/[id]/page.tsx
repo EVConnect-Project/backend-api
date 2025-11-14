@@ -71,7 +71,7 @@ export default function ChargerDetailPage() {
       // Fetch charger details from API
       const response = await fetch(`http://localhost:4000/api/admin/chargers/${chargerId}`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${localStorage.getItem('admin_token')}`,
         },
       });
 

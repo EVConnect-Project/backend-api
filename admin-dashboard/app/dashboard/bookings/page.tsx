@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getBookings, Booking } from '@/lib/api';
+import { getBookings, Booking, approveBooking, cancelBooking } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { DateRangePicker, DateRange } from '@/components/DateRangePicker';
@@ -150,8 +150,17 @@ export default function BookingsPage() {
     if (!confirmed) return;
 
     try {
-      // TODO: Implement bulk action API
-      console.log(`${action} bookings:`, Array.from(selectedBookings));
+      const bookingIds = Array.from(selectedBookings);
+      
+      // Process each booking
+      const promises = bookingIds.map(id => 
+        action === 'approve' 
+          ? approveBooking(id) 
+          : cancelBooking(id, 'Cancelled by admin')
+      );
+      
+      await Promise.all(promises);
+      
       toast.success(`Successfully ${action}ed ${selectedBookings.size} booking(s)`);
       setSelectedBookings(new Set());
       await fetchBookings();
@@ -539,15 +548,54 @@ export default function BookingsPage() {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => router.push(`/dashboard/bookings/${booking.id}`)}
-                          className="inline-flex items-center px-3 py-1.5 text-xs font-semibold"
-                        >
-                          <Eye className="w-3.5 h-3.5 mr-1.5" />
-                          Details
-                        </Button>
+                        <div className="flex items-center justify-end gap-2">
+                          {booking.status === 'pending' && (
+                            <>
+                              <Button
+                                size="sm"
+                                onClick={async () => {
+                                  try {
+                                    await approveBooking(booking.id);
+                                    toast.success('Booking approved');
+                                    await fetchBookings();
+                                  } catch (error) {
+                                    toast.error('Failed to approve booking');
+                                  }
+                                }}
+                                className="inline-flex items-center px-3 py-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700"
+                              >
+                                <CheckCircle className="w-3.5 h-3.5 mr-1.5" />
+                                Approve
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={async () => {
+                                  try {
+                                    await cancelBooking(booking.id, 'Cancelled by admin');
+                                    toast.success('Booking cancelled');
+                                    await fetchBookings();
+                                  } catch (error) {
+                                    toast.error('Failed to cancel booking');
+                                  }
+                                }}
+                                className="inline-flex items-center px-3 py-1.5 text-xs font-semibold"
+                              >
+                                <XCircle className="w-3.5 h-3.5 mr-1.5" />
+                                Cancel
+                              </Button>
+                            </>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => router.push(`/dashboard/bookings/${booking.id}`)}
+                            className="inline-flex items-center px-3 py-1.5 text-xs font-semibold"
+                          >
+                            <Eye className="w-3.5 h-3.5 mr-1.5" />
+                            Details
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))

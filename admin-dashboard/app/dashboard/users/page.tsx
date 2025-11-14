@@ -97,9 +97,10 @@ export default function UsersPage() {
       await banUser(userId);
       await fetchUsers();
       toast.success('User banned successfully');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error banning user:', error);
-      toast.error('Failed to ban user');
+      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to ban user';
+      toast.error(errorMessage);
     } finally {
       setActionLoading(null);
     }
@@ -111,9 +112,10 @@ export default function UsersPage() {
       await unbanUser(userId);
       await fetchUsers();
       toast.success('User unbanned successfully');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error unbanning user:', error);
-      toast.error('Failed to unban user');
+      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to unban user';
+      toast.error(errorMessage);
     } finally {
       setActionLoading(null);
     }
@@ -135,9 +137,10 @@ export default function UsersPage() {
       await updateUserRole(userId, newRole);
       await fetchUsers();
       toast.success(`Role updated to ${newRole}`);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating role:', error);
-      toast.error('Failed to update role');
+      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to update role';
+      toast.error(errorMessage);
     } finally {
       setActionLoading(null);
     }

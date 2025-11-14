@@ -13,6 +13,8 @@ import {
 } from 'lucide-react';
 import { verifyAdminToken } from '@/lib/api';
 import { ToastProvider } from '@/components/ToastProvider';
+import { WebSocketProvider } from '@/contexts/WebSocketContext';
+import { ConnectionStatus } from '@/components/ConnectionStatus';
 
 interface NavItemProps {
   icon: React.ElementType;
@@ -156,6 +158,13 @@ function DashboardContent({
           sidebarOpen ? 'ml-64' : 'ml-20'
         }`}
       >
+        {/* Top Bar with Connection Status */}
+        <div className="sticky top-0 z-10 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex-1" />
+            <ConnectionStatus />
+          </div>
+        </div>
         {children}
       </main>
     </div>
@@ -169,7 +178,9 @@ export default function DashboardLayout({
 }) {
   return (
     <ToastProvider>
-      <DashboardContent>{children}</DashboardContent>
+      <WebSocketProvider>
+        <DashboardContent>{children}</DashboardContent>
+      </WebSocketProvider>
     </ToastProvider>
   );
 }

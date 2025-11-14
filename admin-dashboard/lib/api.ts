@@ -275,61 +275,28 @@ export const getUsers = async (params?: {
   search?: string;
   role?: string;
 }): Promise<{ users: User[]; total: number }> => {
-  try {
-    const response = await api.get('/admin/users', { params });
-    return response.data;
-  } catch (error) {
-    console.warn('Using mock users data');
-    const allUsers = generateMockUsers(50, params?.role);
-    const filtered = params?.search 
-      ? allUsers.filter(u => u.name.toLowerCase().includes(params.search!.toLowerCase()) || u.email.toLowerCase().includes(params.search!.toLowerCase()))
-      : allUsers;
-    const page = params?.page || 1;
-    const limit = params?.limit || 10;
-    const start = (page - 1) * limit;
-    return {
-      users: filtered.slice(start, start + limit),
-      total: filtered.length,
-    };
-  }
+  const response = await api.get('/admin/users', { params });
+  return response.data;
 };
 
 export const getUserById = async (id: string): Promise<User> => {
-  try {
-    const response = await api.get(`/admin/users/${id}`);
-    return response.data;
-  } catch (error) {
-    console.warn('Using mock user data');
-    const users = generateMockUsers(50);
-    return users.find(u => u.id === id) || users[0];
-  }
+  const response = await api.get(`/admin/users/${id}`);
+  return response.data;
 };
 
 export const banUser = async (id: string): Promise<void> => {
-  try {
-    await api.post(`/admin/users/${id}/ban`);
-  } catch (error) {
-    console.warn('Mock: User ban action');
-  }
+  await api.post(`/admin/users/${id}/ban`);
 };
 
 export const unbanUser = async (id: string): Promise<void> => {
-  try {
-    await api.post(`/admin/users/${id}/unban`);
-  } catch (error) {
-    console.warn('Mock: User unban action');
-  }
+  await api.post(`/admin/users/${id}/unban`);
 };
 
 export const updateUserRole = async (
   id: string,
   role: string
 ): Promise<void> => {
-  try {
-    await api.patch(`/admin/users/${id}/role`, { role });
-  } catch (error) {
-    console.warn('Mock: User role update');
-  }
+  await api.patch(`/admin/users/${id}/role`, { role });
 };
 
 // Charger Management APIs
@@ -340,78 +307,32 @@ export const getChargers = async (params?: {
   status?: string;
   verified?: boolean;
 }): Promise<{ chargers: Charger[]; total: number }> => {
-  try {
-    const response = await api.get('/admin/chargers', { params });
-    return response.data;
-  } catch (error) {
-    console.warn('Using mock chargers data');
-    let allChargers = generateMockChargers(50, params?.status);
-    
-    if (params?.verified !== undefined) {
-      allChargers = allChargers.filter(c => c.verified === params.verified);
-    }
-    
-    if (params?.search) {
-      allChargers = allChargers.filter(c => 
-        c.name.toLowerCase().includes(params.search!.toLowerCase()) || 
-        c.address.toLowerCase().includes(params.search!.toLowerCase())
-      );
-    }
-    
-    const page = params?.page || 1;
-    const limit = params?.limit || 10;
-    const start = (page - 1) * limit;
-    return {
-      chargers: allChargers.slice(start, start + limit),
-      total: allChargers.length,
-    };
-  }
+  const response = await api.get('/admin/chargers', { params });
+  return response.data;
 };
 
 export const getChargerById = async (id: string): Promise<Charger> => {
-  try {
-    const response = await api.get(`/admin/chargers/${id}`);
-    return response.data;
-  } catch (error) {
-    console.warn('Using mock charger data');
-    const chargers = generateMockChargers(50);
-    return chargers.find(c => c.id === id) || chargers[0];
-  }
+  const response = await api.get(`/admin/chargers/${id}`);
+  return response.data;
 };
 
 export const approveCharger = async (id: string): Promise<void> => {
-  try {
-    await api.post(`/admin/chargers/${id}/approve`);
-  } catch (error) {
-    console.warn('Mock: Charger approval');
-  }
+  await api.post(`/admin/chargers/${id}/approve`);
 };
 
 export const rejectCharger = async (id: string, reason: string): Promise<void> => {
-  try {
-    await api.post(`/admin/chargers/${id}/reject`, { reason });
-  } catch (error) {
-    console.warn('Mock: Charger rejection');
-  }
+  await api.post(`/admin/chargers/${id}/reject`, { reason });
 };
 
 export const updateCharger = async (
   id: string,
   data: Partial<Charger>
 ): Promise<void> => {
-  try {
-    await api.patch(`/admin/chargers/${id}`, data);
-  } catch (error) {
-    console.warn('Mock: Charger update');
-  }
+  await api.patch(`/admin/chargers/${id}`, data);
 };
 
 export const deleteCharger = async (id: string): Promise<void> => {
-  try {
-    await api.delete(`/admin/chargers/${id}`);
-  } catch (error) {
-    console.warn('Mock: Charger deletion');
-  }
+  await api.delete(`/admin/chargers/${id}`);
 };
 
 // Booking APIs
@@ -422,20 +343,16 @@ export const getBookings = async (params?: {
   startDate?: string;
   endDate?: string;
 }): Promise<{ bookings: Booking[]; total: number }> => {
-  try {
-    const response = await api.get('/admin/bookings', { params });
-    return response.data;
-  } catch (error) {
-    console.warn('Using mock bookings data');
-    const allBookings = generateMockBookings(100, params?.status);
-    const page = params?.page || 1;
-    const limit = params?.limit || 10;
-    const start = (page - 1) * limit;
-    return {
-      bookings: allBookings.slice(start, start + limit),
-      total: allBookings.length,
-    };
-  }
+  const response = await api.get('/admin/bookings', { params });
+  return response.data;
+};
+
+export const approveBooking = async (id: string): Promise<void> => {
+  await api.post(`/admin/bookings/${id}/approve`);
+};
+
+export const cancelBooking = async (id: string, reason?: string): Promise<void> => {
+  await api.post(`/admin/bookings/${id}/cancel`, { reason });
 };
 
 // Analytics APIs
@@ -545,32 +462,12 @@ export const adminLogin = async (
   email: string,
   password: string
 ): Promise<{ token: string; user: User }> => {
-  try {
-    const response = await api.post('/auth/admin/login', { email, password });
-    // Backend returns access_token, map it to token
-    return {
-      token: response.data.access_token,
-      user: response.data.user,
-    };
-  } catch (error) {
-    console.warn('Using mock login');
-    // For demo purposes, accept any credentials
-    if (email === 'admin@evconnect.com' && password === 'admin123') {
-      return {
-        token: 'mock-token-123456789',
-        user: {
-          id: 'admin-1',
-          name: 'Admin User',
-          email: 'admin@evconnect.com',
-          role: 'admin',
-          isBanned: false,
-          createdAt: new Date().toISOString(),
-          status: 'active',
-        },
-      };
-    }
-    throw new Error('Invalid credentials');
-  }
+  const response = await api.post('/auth/admin/login', { email, password });
+  // Backend returns access_token, map it to token
+  return {
+    token: response.data.access_token,
+    user: response.data.user,
+  };
 };
 
 export const verifyAdminToken = async (): Promise<User> => {
