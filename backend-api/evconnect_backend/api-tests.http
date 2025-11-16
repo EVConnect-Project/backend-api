@@ -1,0 +1,252 @@
+### EVConnect API Test Collection
+### You can use the REST Client extension in VS Code to execute these requests
+
+### Variables
+@baseUrl = http://localhost:4000/api
+@adminEmail = admin@evconnect.com
+@adminPassword = password123
+
+### 1. Admin Login
+# @name adminLogin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{adminEmail}}",
+  "password": "{{adminPassword}}"
+}
+
+### 2. User Login  
+# @name userLogin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "user1@example.com",
+  "password": "password123"
+}
+
+### 3. Owner Login
+# @name ownerLogin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "owner1@example.com",
+  "password": "password123"
+}
+
+### 4. Merchant Login
+# @name merchantLogin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "merchant1@example.com",
+  "password": "password123"
+}
+
+###############################################
+### SHOP MODULE TESTS
+###############################################
+
+### 5. Apply for Shop (as Merchant - requires auth token)
+POST {{baseUrl}}/shops/apply
+Content-Type: application/json
+Authorization: Bearer {{merchantLogin.response.body.access_token}}
+
+{
+  "name": "EV Parts & Accessories",
+  "description": "Premium EV parts and accessories",
+  "address": "123 Main St, Colombo",
+  "contactNumber": "+94771234567",
+  "businessRegistration": "BR123456",
+  "taxId": "TAX123456"
+}
+
+### 6. Get All Approved Shops (public)
+GET {{baseUrl}}/shops
+
+### 7. Get My Shop (as Merchant)
+GET {{baseUrl}}/shops/my-shop
+Authorization: Bearer {{merchantLogin.response.body.access_token}}
+
+### 8. Get Pending Shops (admin only)
+GET {{baseUrl}}/shops/pending
+Authorization: Bearer {{adminLogin.response.body.access_token}}
+
+### 9. Get Shop by ID
+GET {{baseUrl}}/shops/1
+
+### 10. Approve Shop (admin only)
+PATCH {{baseUrl}}/shops/1/approve
+Authorization: Bearer {{adminLogin.response.body.access_token}}
+
+### 11. Create Product Category (admin only)
+# @name createCategory
+POST {{baseUrl}}/categories
+Content-Type: application/json
+Authorization: Bearer {{adminLogin.response.body.access_token}}
+
+{
+  "name": "Charging Cables",
+  "description": "EV charging cables and connectors"
+}
+
+### 12. Get All Categories
+GET {{baseUrl}}/categories
+
+### 13. Create Product (as Merchant)
+# @name createProduct
+POST {{baseUrl}}/products
+Content-Type: application/json
+Authorization: Bearer {{merchantLogin.response.body.access_token}}
+
+{
+  "name": "Type 2 Charging Cable",
+  "description": "High-quality Type 2 charging cable, 5 meters",
+  "price": 15000,
+  "categoryId": 1,
+  "stockQuantity": 50,
+  "specifications": {
+    "length": "5m",
+    "type": "Type 2",
+    "amperage": "32A"
+  },
+  "images": ["cable1.jpg", "cable2.jpg"]
+}
+
+### 14. Get All Products
+GET {{baseUrl}}/products
+
+### 15. Get Products by Shop
+GET {{baseUrl}}/products/shop/1
+
+### 16. Get Product by ID
+GET {{baseUrl}}/products/1
+
+### 17. Update Product (as Merchant)
+PATCH {{baseUrl}}/products/1
+Content-Type: application/json
+Authorization: Bearer {{merchantLogin.response.body.access_token}}
+
+{
+  "price": 14500,
+  "stockQuantity": 45
+}
+
+### 18. Update Product Inventory (as Merchant)
+PATCH {{baseUrl}}/products/1/inventory
+Content-Type: application/json
+Authorization: Bearer {{merchantLogin.response.body.access_token}}
+
+{
+  "quantity": -5,
+  "reason": "Sold 5 units"
+}
+
+### 19. Create Order (as User)
+# @name createOrder
+POST {{baseUrl}}/orders
+Content-Type: application/json
+Authorization: Bearer {{userLogin.response.body.access_token}}
+
+{
+  "items": [
+    {
+      "productId": 1,
+      "quantity": 2
+    }
+  ],
+  "shippingAddress": "456 Beach Rd, Galle",
+  "contactNumber": "+94777654321"
+}
+
+### 20. Get All Orders (admin only)
+GET {{baseUrl}}/orders
+Authorization: Bearer {{adminLogin.response.body.access_token}}
+
+### 21. Get My Orders (as User)
+GET {{baseUrl}}/orders/my-orders
+Authorization: Bearer {{userLogin.response.body.access_token}}
+
+### 22. Get Merchant Orders (as Merchant)
+GET {{baseUrl}}/orders/merchant-orders
+Authorization: Bearer {{merchantLogin.response.body.access_token}}
+
+### 23. Get Order by ID
+GET {{baseUrl}}/orders/1
+Authorization: Bearer {{userLogin.response.body.access_token}}
+
+### 24. Update Order Status (as Merchant)
+PATCH {{baseUrl}}/orders/1/status
+Content-Type: application/json
+Authorization: Bearer {{merchantLogin.response.body.access_token}}
+
+{
+  "status": "shipped",
+  "notes": "Package dispatched via courier"
+}
+
+### 25. Create Review (as User)
+POST {{baseUrl}}/reviews
+Content-Type: application/json
+Authorization: Bearer {{userLogin.response.body.access_token}}
+
+{
+  "productId": 1,
+  "orderId": 1,
+  "rating": 5,
+  "comment": "Excellent quality cable, works perfectly!"
+}
+
+### 26. Get Product Reviews
+GET {{baseUrl}}/reviews/product/1
+
+### 27. Reply to Review (as Merchant)
+PATCH {{baseUrl}}/reviews/1/reply
+Content-Type: application/json
+Authorization: Bearer {{merchantLogin.response.body.access_token}}
+
+{
+  "merchantReply": "Thank you for your positive feedback!"
+}
+
+### 28. Process Payment (as User)
+POST {{baseUrl}}/payments
+Content-Type: application/json
+Authorization: Bearer {{userLogin.response.body.access_token}}
+
+{
+  "orderId": 1,
+  "paymentMethod": "stripe",
+  "amount": 29000
+}
+
+### 29. Get Merchant Analytics (as Merchant)
+GET {{baseUrl}}/merchant/dashboard/analytics
+Authorization: Bearer {{merchantLogin.response.body.access_token}}
+
+### 30. Get Best Sellers (as Merchant)
+GET {{baseUrl}}/merchant/dashboard/best-sellers
+Authorization: Bearer {{merchantLogin.response.body.access_token}}
+
+### 31. Get Low Stock Products (as Merchant)
+GET {{baseUrl}}/merchant/dashboard/low-stock?threshold=10
+Authorization: Bearer {{merchantLogin.response.body.access_token}}
+
+###############################################
+### OTHER MODULE TESTS
+###############################################
+
+### Get All Chargers
+GET {{baseUrl}}/chargers
+
+### Get Nearby Chargers
+GET {{baseUrl}}/chargers/nearby?latitude=6.9271&longitude=79.8612&radius=5000
+
+### Get All Mechanics
+GET {{baseUrl}}/mechanics
+
+### Get Nearby Mechanics  
+GET {{baseUrl}}/mechanics/nearby?latitude=6.9271&longitude=79.8612&radius=5000

@@ -9,7 +9,8 @@ import {
   TrendingUp,
   LogOut,
   Menu,
-  LayoutDashboard
+  LayoutDashboard,
+  Wrench
 } from 'lucide-react';
 import { verifyAdminToken } from '@/lib/api';
 import { ToastProvider } from '@/components/ToastProvider';
@@ -122,6 +123,13 @@ function DashboardContent({
             active={pathname === '/dashboard/chargers'}
             collapsed={!sidebarOpen}
             onClick={() => router.push('/dashboard/chargers')}
+          />
+          <NavItem
+            icon={Wrench}
+            label="Mechanics"
+            active={pathname?.startsWith('/dashboard/mechanics')}
+            collapsed={!sidebarOpen}
+            onClick={() => router.push('/dashboard/mechanics')}
           />
           <NavItem
             icon={Calendar}

@@ -109,6 +109,55 @@ export interface Booking {
   createdAt: string;
 }
 
+export interface MechanicApplication {
+  id: string;
+  userId: string;
+  fullName: string;
+  phoneNumber: string;
+  skills: string;
+  yearsOfExperience: number;
+  certifications?: string;
+  serviceArea: string;
+  serviceLat?: number;
+  serviceLng?: number;
+  licenseNumber?: string;
+  additionalInfo?: string;
+  status: 'pending' | 'approved' | 'rejected';
+  reviewedBy?: string;
+  reviewNotes?: string;
+  reviewedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  user?: {
+    id: string;
+    name: string;
+    email: string;
+  };
+}
+
+export interface Mechanic {
+  id: string;
+  userId: string;
+  specialization: string;
+  yearsOfExperience: number;
+  rating: number;
+  completedJobs: number;
+  available: boolean;
+  services: string[];
+  lat?: number;
+  lng?: number;
+  licenseNumber?: string;
+  certifications?: string;
+  user?: {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface RevenueData {
   date: string;
   revenue: number;
@@ -491,3 +540,60 @@ export const verifyAdminToken = async (): Promise<User> => {
     throw error;
   }
 };
+
+// Mechanic Management APIs
+export const getMechanicApplications = async (params?: {
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: string;
+}): Promise<{ applications: MechanicApplication[]; total: number }> => {
+  const response = await api.get('/admin/mechanic-applications', { params });
+  return response.data;
+};
+
+export const getMechanicApplicationById = async (id: string): Promise<MechanicApplication> => {
+  const response = await api.get(`/admin/mechanic-applications/${id}`);
+  return response.data;
+};
+
+export const approveMechanicApplication = async (
+  id: string,
+  reviewNotes: string
+): Promise<void> => {
+  await api.post(`/admin/mechanic-applications/${id}/approve`, { reviewNotes });
+};
+
+export const rejectMechanicApplication = async (
+  id: string,
+  reviewNotes: string
+): Promise<void> => {
+  await api.post(`/admin/mechanic-applications/${id}/reject`, { reviewNotes });
+};
+
+export const getMechanics = async (params?: {
+  page?: number;
+  limit?: number;
+  search?: string;
+  available?: boolean;
+}): Promise<{ mechanics: Mechanic[]; total: number }> => {
+  const response = await api.get('/admin/mechanics', { params });
+  return response.data;
+};
+
+export const getMechanicById = async (id: string): Promise<Mechanic> => {
+  const response = await api.get(`/admin/mechanics/${id}`);
+  return response.data;
+};
+
+export const updateMechanic = async (
+  id: string,
+  data: Partial<Mechanic>
+): Promise<void> => {
+  await api.patch(`/admin/mechanics/${id}`, data);
+};
+
+export const deleteMechanic = async (id: string): Promise<void> => {
+  await api.delete(`/admin/mechanics/${id}`);
+};
+
