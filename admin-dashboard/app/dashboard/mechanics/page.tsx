@@ -264,6 +264,7 @@ export default function MechanicsPage() {
               {viewMode === 'applications' ? (
                 <>
                   <select
+                    aria-label="Filter applications by status"
                     value={statusFilter}
                     onChange={(e) => {
                       setStatusFilter(e.target.value);
@@ -281,6 +282,7 @@ export default function MechanicsPage() {
               ) : (
                 <>
                   <select
+                    aria-label="Filter mechanics by availability"
                     value={availableFilter}
                     onChange={(e) => {
                       setAvailableFilter(e.target.value);
@@ -596,6 +598,7 @@ export default function MechanicsPage() {
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-50">Approve Application</h2>
               <button
+                aria-label="Close approve application modal"
                 onClick={() => setApprovingApplication(null)}
                 className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
               >
@@ -654,6 +657,7 @@ export default function MechanicsPage() {
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-50">Reject Application</h2>
               <button
+                aria-label="Close reject application modal"
                 onClick={() => setRejectingApplication(null)}
                 className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
               >
@@ -715,6 +719,7 @@ export default function MechanicsPage() {
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-50">Edit Mechanic</h2>
                 <button
+                  aria-label="Close edit mechanic modal"
                   onClick={() => setEditingMechanic(null)}
                   className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
                 >

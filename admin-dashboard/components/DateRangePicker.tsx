@@ -110,6 +110,7 @@ export function DateRangePicker({
         <span className="text-sm font-medium">{formatDateRange()}</span>
         {(startDate || endDate) && (
           <span
+            aria-label="Clear date range"
             onClick={(e) => {
               e.stopPropagation();
               handleClear();

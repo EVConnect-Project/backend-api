@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { 
   getChargers, 
   approveCharger, 
@@ -24,7 +24,7 @@ import {
   FileText,
   Eye
 } from 'lucide-react';
-import { formatDate, formatCurrency } from '@/lib/utils';
+import { formatCurrency } from '@/lib/utils';
 import { exportChargersToExcel, exportChargersToPDF } from '@/lib/export';
 import { useToast } from '@/components/ToastProvider';
 import MultiSelect from '@/components/MultiSelect';
@@ -77,10 +77,18 @@ export default function ChargersPage() {
     fetchChargers();
   }, [currentPage, selectedStatuses, verifiedFilter, searchTerm]);
 
-  const fetchChargers = async () => {
+  const fetchChargers = useCallback(async () => {
     setLoading(true);
     try {
-      const params: any = {
+      type FetchChargersParams = {
+        page: number;
+        limit: number;
+        search?: string;
+        status?: string;
+        verified?: boolean;
+      };
+
+      const params: FetchChargersParams = {
         page: currentPage,
         limit: chargersPerPage,
       };
@@ -107,7 +115,7 @@ export default function ChargersPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentPage, selectedStatuses, verifiedFilter, searchTerm]);
 
   const handleApproveCharger = async (chargerId: string) => {
     if (!confirm('Are you sure you want to approve this charger?')) return;
@@ -117,9 +125,16 @@ export default function ChargersPage() {
       await approveCharger(chargerId);
       await fetchChargers();
       toast.success('Charger approved successfully');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error approving charger:', error);
-      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to approve charger';
+      const errorMessage = 
+        (error && typeof error === 'object' && 'response' in error && 
+         error.response && typeof error.response === 'object' && 'data' in error.response &&
+         error.response.data && typeof error.response.data === 'object' && 'message' in error.response.data
+         ? String(error.response.data.message)
+         : error && typeof error === 'object' && 'message' in error
+         ? String(error.message)
+         : 'Failed to approve charger');
       toast.error(errorMessage);
     } finally {
       setActionLoading(null);
@@ -245,6 +260,7 @@ export default function ChargersPage() {
             {/* Verified Filter */}
             <div className="relative">
               <select
+                aria-label="Filter by verification status"
                 value={verifiedFilter}
                 onChange={(e) => {
                   setVerifiedFilter(e.target.value);
@@ -449,6 +465,7 @@ export default function ChargersPage() {
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-50">Edit Charger</h2>
                 <button
+                  aria-label="Close edit charger modal"
                   onClick={() => setEditingCharger(null)}
                   className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
                 >
@@ -462,6 +479,7 @@ export default function ChargersPage() {
                     Charger Name
                   </label>
                   <input
+                    aria-label="Charger name"
                     type="text"
                     value={editingCharger.name}
                     onChange={(e) =>
@@ -480,6 +498,7 @@ export default function ChargersPage() {
                     Address
                   </label>
                   <input
+                    aria-label="Charger address"
                     type="text"
                     value={editingCharger.address}
                     onChange={(e) =>
@@ -499,6 +518,7 @@ export default function ChargersPage() {
                   </label>
                   <div className="relative">
                     <select
+                      aria-label="Charger status"
                       value={editingCharger.status}
                       onChange={(e) =>
                         setEditingCharger({ ...editingCharger, status: e.target.value })
@@ -522,6 +542,7 @@ export default function ChargersPage() {
                     Price per kWh ($)
                   </label>
                   <input
+                    aria-label="Price per kilowatt hour"
                     type="number"
                     step="0.01"
                     value={editingCharger.pricePerKwh}
@@ -569,6 +590,7 @@ export default function ChargersPage() {
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-50">Reject Charger</h2>
               <button
+                aria-label="Close reject charger modal"
                 onClick={() => setRejectingCharger(null)}
                 className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
               >
@@ -583,7 +605,7 @@ export default function ChargersPage() {
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                const reason = (e.target as any).reason.value;
+                const reason = (e.target as HTMLFormElement).reason.value;
                 if (reason.trim()) {
                   handleRejectCharger(reason);
                 }

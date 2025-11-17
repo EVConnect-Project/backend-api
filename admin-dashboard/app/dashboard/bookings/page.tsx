@@ -438,6 +438,7 @@ export default function BookingsPage() {
                   bg-slate-50 dark:bg-slate-800/80">
                   <th className="px-6 py-4 text-left">
                     <input
+                      aria-label="Select all bookings"
                       type="checkbox"
                       checked={
                         selectedBookings.size === filteredBookings.length &&
@@ -485,6 +486,7 @@ export default function BookingsPage() {
                     >
                       <td className="px-6 py-4">
                         <input
+                          aria-label={`Select booking ${booking.id}`}
                           type="checkbox"
                           checked={selectedBookings.has(booking.id)}
                           onChange={() => handleSelectBooking(booking.id)}

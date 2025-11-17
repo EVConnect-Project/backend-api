@@ -35,12 +35,15 @@
   --sidebar-border: #334155;
 }
 
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--muted-foreground) var(--muted);
+/* Modern browsers (Chrome 121+, Firefox) */
+@supports (scrollbar-width: thin) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--muted-foreground) var(--muted);
+  }
 }
 
-*::-webkit-scrollbar {
+/* Webkit browsers (Safari, older Chrome) */*::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
@@ -78,4 +81,37 @@ body {
 
 .animate-slide-in {
   animation: slide-in 0.3s ease-out;
+}
+
+/* Dynamic color indicator - uses data attribute to avoid inline styles */
+.color-indicator[data-color="#0088FE"] {
+  background-color: #0088FE;
+}
+
+.color-indicator[data-color="#00C49F"] {
+  background-color: #00C49F;
+}
+
+.color-indicator[data-color="#FFBB28"] {
+  background-color: #FFBB28;
+}
+
+.color-indicator[data-color="#FF8042"] {
+  background-color: #FF8042;
+}
+
+.color-indicator[data-color="#8884D8"] {
+  background-color: #8884D8;
+}
+
+.color-indicator[data-color="#82CA9D"] {
+  background-color: #82CA9D;
+}
+
+.color-indicator[data-color="#FFC658"] {
+  background-color: #FFC658;
+}
+
+.color-indicator[data-color="#FF6B9D"] {
+  background-color: #FF6B9D;
 }

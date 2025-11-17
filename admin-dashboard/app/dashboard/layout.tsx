@@ -10,7 +10,8 @@ import {
   LogOut,
   Menu,
   LayoutDashboard,
-  Wrench
+  Wrench,
+  ShoppingBag
 } from 'lucide-react';
 import { verifyAdminToken } from '@/lib/api';
 import { ToastProvider } from '@/components/ToastProvider';
@@ -95,6 +96,7 @@ function DashboardContent({
             </h2>
           )}
           <button
+            aria-label="Toggle sidebar"
             onClick={() => setSidebarOpen(!sidebarOpen)}
             className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
           >
@@ -130,6 +132,13 @@ function DashboardContent({
             active={pathname?.startsWith('/dashboard/mechanics')}
             collapsed={!sidebarOpen}
             onClick={() => router.push('/dashboard/mechanics')}
+          />
+          <NavItem
+            icon={ShoppingBag}
+            label="Marketplace"
+            active={pathname?.startsWith('/dashboard/marketplace')}
+            collapsed={!sidebarOpen}
+            onClick={() => router.push('/dashboard/marketplace')}
           />
           <NavItem
             icon={Calendar}

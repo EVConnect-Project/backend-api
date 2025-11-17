@@ -5,6 +5,7 @@ import { getAnalytics } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { DateRangePicker, DateRange } from '@/components/DateRangePicker';
+import { ColorIndicator } from '@/components/ColorIndicator';
 import {
   LineChart,
   Line,
@@ -522,20 +523,20 @@ export default function AnalyticsPage() {
               </PieChart>
             </ResponsiveContainer>
             <div className="mt-4 space-y-2">
-              {data.revenueByLocation.map((loc, index) => (
-                <div key={loc.location} className="flex items-center justify-between text-sm">
-                  <div className="flex items-center gap-2">
-                    <div
-                      className="w-3 h-3 rounded-full"
-                      style={{ backgroundColor: COLORS[index % COLORS.length] }}
-                    />
-                    <span className="text-slate-700 dark:text-slate-300">{loc.location}</span>
+              {data.revenueByLocation.map((loc, index) => {
+                const color = COLORS[index % COLORS.length];
+                return (
+                  <div key={loc.location} className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <ColorIndicator color={color} />
+                      <span className="text-slate-700 dark:text-slate-300">{loc.location}</span>
+                    </div>
+                    <div className="text-slate-900 dark:text-slate-100 font-semibold">
+                      ${loc.revenue.toFixed(2)} ({loc.bookings} bookings)
+                    </div>
                   </div>
-                  <div className="text-slate-900 dark:text-slate-100 font-semibold">
-                    ${loc.revenue.toFixed(2)} ({loc.bookings} bookings)
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </CardContent>
         </Card>

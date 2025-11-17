@@ -227,6 +227,7 @@ export default function UsersPage() {
             {/* Status Filter */}
             <div className="relative">
               <select
+                aria-label="Filter by status"
                 value={statusFilter}
                 onChange={(e) => {
                   setStatusFilter(e.target.value);
