@@ -11,6 +11,7 @@ import {
   ApplicationStatus,
 } from './entities/mechanic-application.entity';
 import { UserEntity } from '../users/entities/user.entity';
+import { MechanicEntity } from '../mechanics/entities/mechanic.entity';
 import { CreateMechanicApplicationDto } from './dto/create-mechanic-application.dto';
 import { ReviewApplicationDto } from './dto/review-application.dto';
 
@@ -21,6 +22,8 @@ export class MechanicService {
     private applicationRepository: Repository<MechanicApplication>,
     @InjectRepository(UserEntity)
     private userRepository: Repository<UserEntity>,
+    @InjectRepository(MechanicEntity)
+    private mechanicRepository: Repository<MechanicEntity>,
   ) {}
 
   /**
@@ -142,15 +145,41 @@ export class MechanicService {
     application.reviewedBy = adminId;
     application.reviewedAt = new Date();
 
-    // If approved, upgrade user to mechanic role
+    // If approved, create mechanic profile and upgrade user role
     if (reviewDto.status === ApplicationStatus.APPROVED) {
       const user = await this.userRepository.findOne({
         where: { id: application.userId },
       });
 
       if (user) {
+        // Update user role to mechanic
         user.role = 'mechanic';
         await this.userRepository.save(user);
+
+        // Check if mechanic profile already exists
+        const existingMechanic = await this.mechanicRepository.findOne({
+          where: { userId: application.userId },
+        });
+
+        // Create mechanic profile if it doesn't exist
+        if (!existingMechanic) {
+          const mechanic = this.mechanicRepository.create({
+            userId: application.userId,
+            name: application.fullName,
+            specialization: application.skills,
+            yearsOfExperience: application.yearsOfExperience,
+            rating: 0,
+            completedJobs: 0,
+            available: true,
+            services: application.skills.split(',').map(s => s.trim()),
+            lat: application.serviceLat,
+            lng: application.serviceLng,
+            phone: application.phoneNumber,
+            licenseNumber: application.licenseNumber,
+            certifications: application.certifications,
+          });
+          await this.mechanicRepository.save(mechanic);
+        }
       }
     }
 
