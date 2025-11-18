@@ -37,10 +37,10 @@ services:
 
   evconnect_backend:
     build:
-      context: ../backend-api/evconnect_backend
+      context: ../evconnect_backend
       dockerfile: Dockerfile
     env_file:
-      - ../backend-api/evconnect_backend/.env
+      - ../evconnect_backend/.env
     depends_on:
       postgres:
         condition: service_healthy
