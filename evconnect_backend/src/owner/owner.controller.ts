@@ -14,6 +14,7 @@ import { OwnerService } from './owner.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { IsChargerOwnerGuard } from './guards/is-charger-owner.guard';
 import { CreateChargerDto } from '../charger/dto/create-charger.dto';
 import { UpdateChargerDto } from '../charger/dto/update-charger.dto';
 
@@ -62,7 +63,7 @@ export class OwnerController {
    * Get specific charger details (must be owned by user)
    */
   @Get('chargers/:id')
-  @Roles('owner', 'admin')
+  @UseGuards(IsChargerOwnerGuard)
   async getChargerById(@Param('id') id: string, @Request() req) {
     return this.ownerService.getChargerById(id, req.user.userId);
   }
@@ -71,7 +72,7 @@ export class OwnerController {
    * Update charger details (must be owned by user)
    */
   @Patch('chargers/:id')
-  @Roles('owner', 'admin')
+  @UseGuards(IsChargerOwnerGuard)
   async updateCharger(
     @Param('id') id: string,
     @Body() updateChargerDto: UpdateChargerDto,
@@ -86,7 +87,7 @@ export class OwnerController {
    * Only admin can verify chargers via /admin/chargers/:id/approve
    */
   @Patch('chargers/:id/status')
-  @Roles('owner', 'admin')
+  @UseGuards(IsChargerOwnerGuard)
   async updateChargerStatus(
     @Param('id') id: string,
     @Body('status') status: 'available' | 'in-use' | 'offline',
@@ -96,8 +97,8 @@ export class OwnerController {
   }
 
   /**
-   * Delete charger (soft delete - mark as inactive)
-   * Any owner can delete their own charger at any time
+   * Delete charger permanently
+   * Owner can delete their own charger if it has no active bookings
    */
   @Delete('chargers/:id')
   async deleteCharger(@Param('id') id: string, @Request() req) {
@@ -108,7 +109,7 @@ export class OwnerController {
    * Get all bookings for chargers owned by current user
    */
   @Get('bookings')
-  @Roles('owner', 'admin')
+  @UseGuards(IsChargerOwnerGuard)
   async getMyBookings(
     @Request() req,
     @Query('status') status?: string,
@@ -125,7 +126,7 @@ export class OwnerController {
    * Get specific booking details (must be for owned charger)
    */
   @Get('bookings/:id')
-  @Roles('owner', 'admin')
+  @UseGuards(IsChargerOwnerGuard)
   async getBookingById(@Param('id') id: string, @Request() req) {
     return this.ownerService.getBookingById(id, req.user.userId);
   }
@@ -134,7 +135,7 @@ export class OwnerController {
    * Get booking statistics for owned chargers
    */
   @Get('stats/bookings')
-  @Roles('owner', 'admin')
+  @UseGuards(IsChargerOwnerGuard)
   async getBookingStats(@Request() req) {
     return this.ownerService.getBookingStats(req.user.userId);
   }
@@ -143,7 +144,7 @@ export class OwnerController {
    * Get revenue statistics for owned chargers
    */
   @Get('stats/revenue')
-  @Roles('owner', 'admin')
+  @UseGuards(IsChargerOwnerGuard)
   async getRevenueStats(
     @Request() req,
     @Query('startDate') startDate?: string,
@@ -160,7 +161,7 @@ export class OwnerController {
    * Get charger utilization statistics
    */
   @Get('stats/utilization')
-  @Roles('owner', 'admin')
+  @UseGuards(IsChargerOwnerGuard)
   async getUtilizationStats(@Request() req) {
     return this.ownerService.getUtilizationStats(req.user.userId);
   }

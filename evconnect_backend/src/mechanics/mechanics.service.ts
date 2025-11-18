@@ -116,4 +116,38 @@ export class MechanicsService {
     
     return this.mechanicRepository.save(mechanic);
   }
+
+  async updateMyAvailability(userId: string, available: boolean): Promise<MechanicEntity> {
+    const mechanic = await this.mechanicRepository.findOne({
+      where: { userId },
+    });
+
+    if (!mechanic) {
+      throw new NotFoundException(`Mechanic profile not found for user ${userId}`);
+    }
+
+    mechanic.available = available;
+    return this.mechanicRepository.save(mechanic);
+  }
+
+  async getMyMechanicProfile(userId: string): Promise<MechanicEntity | null> {
+    return this.mechanicRepository.findOne({
+      where: { userId },
+    });
+  }
+
+  async resignMechanicRole(userId: string): Promise<void> {
+    const mechanic = await this.mechanicRepository.findOne({
+      where: { userId },
+    });
+
+    if (!mechanic) {
+      throw new NotFoundException(`Mechanic profile not found for user ${userId}`);
+    }
+
+    // Completely remove the mechanic profile
+    // User will need to reapply if they want to be a mechanic again
+    await this.mechanicRepository.remove(mechanic);
+    console.log(`✅ Mechanic profile deleted for user ${userId}`);
+  }
 }

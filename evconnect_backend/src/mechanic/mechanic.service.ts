@@ -45,9 +45,22 @@ export class MechanicService {
         );
       }
       if (existingApplication.status === ApplicationStatus.APPROVED) {
-        throw new BadRequestException(
-          'You are already approved as a mechanic',
-        );
+        // Check if they have an active mechanic profile
+        const mechanicProfile = await this.mechanicRepository.findOne({
+          where: { userId },
+        });
+        
+        if (mechanicProfile) {
+          // They have an approved application AND active profile
+          throw new BadRequestException(
+            'You are already approved as a mechanic. Use the mechanic dashboard to manage your profile.',
+          );
+        }
+        
+        // They have approved application but NO profile (resigned previously)
+        // Allow them to reapply by deleting old application and creating new one
+        console.log('🔄 User resigned previously - allowing reapplication:', userId);
+        await this.applicationRepository.remove(existingApplication);
       }
     }
 

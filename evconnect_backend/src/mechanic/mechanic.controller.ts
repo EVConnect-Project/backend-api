@@ -26,7 +26,7 @@ export class MechanicController {
    * Apply to become a mechanic
    */
   @Post('apply')
-  @Roles('user', 'owner', 'admin')
+  @Roles('user', 'owner', 'mechanic', 'admin')
   async applyAsMechanic(
     @Body() createDto: CreateMechanicApplicationDto,
     @Request() req,

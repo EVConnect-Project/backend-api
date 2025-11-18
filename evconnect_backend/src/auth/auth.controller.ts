@@ -1,12 +1,22 @@
-import { Controller, Post, Body, ValidationPipe, Get, UseGuards, Request } from '@nestjs/common';
+import { Controller, Post, Body, ValidationPipe, Get, UseGuards, Request, Inject } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Charger } from '../charger/entities/charger.entity';
+import { MechanicEntity } from '../mechanics/entities/mechanic.entity';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    @InjectRepository(Charger)
+    private chargerRepository: Repository<Charger>,
+    @InjectRepository(MechanicEntity)
+    private mechanicRepository: Repository<MechanicEntity>,
+  ) {}
 
   @Post('register')
   async register(@Body(ValidationPipe) registerDto: RegisterDto) {
@@ -44,8 +54,31 @@ export class AuthController {
     const user = await this.authService.validateUser(req.user.userId);
     
     if (!user) {
+      console.log('❌ /auth/me: User not found for ID:', req.user.userId);
       return { error: 'User not found' };
     }
+
+    console.log('🔍 /auth/me: Checking chargers for user:', user.email, 'ID:', user.id);
+    
+    // Check if user owns any chargers (determines isOwner status)
+    const chargerCount = await this.chargerRepository.count({
+      where: { ownerId: user.id },
+    });
+    const hasChargers = chargerCount > 0;
+
+    // Check if user has an active mechanic profile
+    const mechanicProfile = await this.mechanicRepository.findOne({
+      where: { userId: user.id },
+    });
+    const hasMechanicProfile = mechanicProfile !== null;
+
+    console.log('📊 /auth/me: User:', user.email);
+    console.log('   - Role:', user.role);
+    console.log('   - Charger count:', chargerCount);
+    console.log('   - hasChargers:', hasChargers);
+    console.log('   - Has mechanic profile:', hasMechanicProfile);
+    console.log('   - Calculated isOwner:', user.role === 'owner' || user.role === 'admin' || hasChargers);
+    console.log('   - Calculated isMechanic:', hasMechanicProfile || user.role === 'admin');
 
     return {
       user: {
@@ -55,9 +88,11 @@ export class AuthController {
         role: user.role,
         isVerified: user.isVerified,
         isBanned: user.isBanned,
-        // Add computed boolean flags for role-based checks
-        isOwner: user.role === 'owner' || user.role === 'admin',
-        isMechanic: user.role === 'mechanic' || user.role === 'admin',
+        // isOwner is true if user has role 'owner', 'admin', OR owns any chargers
+        isOwner: user.role === 'owner' || user.role === 'admin' || hasChargers,
+        // isMechanic is true ONLY if user has an active mechanic profile OR is admin
+        // Having role='mechanic' is not enough - they must have completed mechanic registration
+        isMechanic: hasMechanicProfile || user.role === 'admin',
         isAdmin: user.role === 'admin',
       },
     };

@@ -25,14 +25,16 @@ export class OwnerService {
 
   /**
    * Register a new charger and upgrade user to 'owner' role if needed
+   * Note: If user is already a mechanic, they keep mechanic role but can still own chargers
    */
   async registerCharger(createChargerDto: CreateChargerDto, userId: string) {
-    // Upgrade user to 'owner' role if they're just a regular user
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) {
       throw new NotFoundException('User not found');
     }
 
+    // Upgrade role to 'owner' only if user is a regular 'user' (not mechanic or admin)
+    // Mechanics and admins can own chargers without changing their role
     if (user.role === 'user') {
       user.role = 'owner';
       await this.userRepository.save(user);

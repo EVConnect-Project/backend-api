@@ -11,11 +11,13 @@ import { VehicleProfileController } from './vehicle-profile.controller';
 import { VehicleProfileService } from './vehicle-profile.service';
 import { UserEntity } from '../users/entities/user.entity';
 import { VehicleProfile } from './entities/vehicle-profile.entity';
+import { Charger } from '../charger/entities/charger.entity';
+import { MechanicEntity } from '../mechanics/entities/mechanic.entity';
 import { JwtStrategy } from './strategies/jwt.strategy';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([UserEntity, VehicleProfile]),
+    TypeOrmModule.forFeature([UserEntity, VehicleProfile, Charger, MechanicEntity]),
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],

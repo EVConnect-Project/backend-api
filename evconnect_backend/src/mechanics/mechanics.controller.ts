@@ -8,7 +8,11 @@ import {
   Delete,
   Query,
   ValidationPipe,
+  UseGuards,
+  Request,
+  Put,
 } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { MechanicsService } from './mechanics.service';
 import { CreateMechanicDto } from './dto/create-mechanic.dto';
 import { UpdateMechanicDto } from './dto/update-mechanic.dto';
@@ -74,5 +78,31 @@ export class MechanicsController {
     @Body('rating') rating: number,
   ) {
     return this.mechanicsService.updateRating(id, rating);
+  }
+
+  @Get('me/profile')
+  @UseGuards(JwtAuthGuard)
+  async getMyProfile(@Request() req) {
+    return this.mechanicsService.getMyMechanicProfile(req.user.userId);
+  }
+
+  @Put('me/availability')
+  @UseGuards(JwtAuthGuard)
+  async updateMyAvailability(
+    @Request() req,
+    @Body('available') available: boolean,
+  ) {
+    console.log('🔄 Mechanic availability update:', req.user.email, '-> available:', available);
+    return this.mechanicsService.updateMyAvailability(req.user.userId, available);
+  }
+
+  @Delete('me/resign')
+  @UseGuards(JwtAuthGuard)
+  async resignMechanicRole(@Request() req) {
+    console.log('👋 Mechanic resigning:', req.user.email);
+    await this.mechanicsService.resignMechanicRole(req.user.userId);
+    return {
+      message: 'Your mechanic profile has been removed successfully. You can reapply as a mechanic anytime from the home screen.',
+    };
   }
 }
