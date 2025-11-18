@@ -50,18 +50,24 @@ export class MarketplaceService {
   }
 
   async getPublicListings(): Promise<MarketplaceListing[]> {
-    return this.listingRepository.find({
-      where: { status: 'approved' },
-      relations: ['seller', 'images'],
-      order: { createdAt: 'DESC' },
-    });
+    return this.listingRepository
+      .createQueryBuilder('listing')
+      .leftJoin('listing.seller', 'seller')
+      .addSelect(['seller.id', 'seller.name', 'seller.email'])
+      .leftJoinAndSelect('listing.images', 'images')
+      .where('listing.status = :status', { status: 'approved' })
+      .orderBy('listing.createdAt', 'DESC')
+      .getMany();
   }
 
   async getListingById(id: string, requestingUserId?: string): Promise<MarketplaceListing> {
-    const listing = await this.listingRepository.findOne({
-      where: { id },
-      relations: ['seller', 'images'],
-    });
+    const listing = await this.listingRepository
+      .createQueryBuilder('listing')
+      .leftJoin('listing.seller', 'seller')
+      .addSelect(['seller.id', 'seller.name', 'seller.email'])
+      .leftJoinAndSelect('listing.images', 'images')
+      .where('listing.id = :id', { id })
+      .getOne();
 
     if (!listing) {
       throw new NotFoundException(`Listing with ID ${id} not found`);
@@ -90,10 +96,13 @@ export class MarketplaceService {
     dto: UpdateListingDto,
     userId: string,
   ): Promise<MarketplaceListing> {
-    const listing = await this.listingRepository.findOne({
-      where: { id },
-      relations: ['seller', 'images'],
-    });
+    const listing = await this.listingRepository
+      .createQueryBuilder('listing')
+      .leftJoin('listing.seller', 'seller')
+      .addSelect(['seller.id', 'seller.name', 'seller.email'])
+      .leftJoinAndSelect('listing.images', 'images')
+      .where('listing.id = :id', { id })
+      .getOne();
 
     if (!listing) {
       throw new NotFoundException(`Listing with ID ${id} not found`);
@@ -162,10 +171,13 @@ export class MarketplaceService {
   }
 
   async markListingAsSold(id: string, userId: string): Promise<MarketplaceListing> {
-    const listing = await this.listingRepository.findOne({
-      where: { id },
-      relations: ['seller', 'images'],
-    });
+    const listing = await this.listingRepository
+      .createQueryBuilder('listing')
+      .leftJoin('listing.seller', 'seller')
+      .addSelect(['seller.id', 'seller.name', 'seller.email'])
+      .leftJoinAndSelect('listing.images', 'images')
+      .where('listing.id = :id', { id })
+      .getOne();
 
     if (!listing) {
       throw new NotFoundException(`Listing with ID ${id} not found`);
@@ -184,10 +196,13 @@ export class MarketplaceService {
   }
 
   async adminApproveListing(id: string): Promise<MarketplaceListing> {
-    const listing = await this.listingRepository.findOne({
-      where: { id },
-      relations: ['seller', 'images'],
-    });
+    const listing = await this.listingRepository
+      .createQueryBuilder('listing')
+      .leftJoin('listing.seller', 'seller')
+      .addSelect(['seller.id', 'seller.name', 'seller.email'])
+      .leftJoinAndSelect('listing.images', 'images')
+      .where('listing.id = :id', { id })
+      .getOne();
 
     if (!listing) {
       throw new NotFoundException(`Listing with ID ${id} not found`);
@@ -207,10 +222,13 @@ export class MarketplaceService {
   }
 
   async adminRejectListing(id: string, reason: string): Promise<MarketplaceListing> {
-    const listing = await this.listingRepository.findOne({
-      where: { id },
-      relations: ['seller', 'images'],
-    });
+    const listing = await this.listingRepository
+      .createQueryBuilder('listing')
+      .leftJoin('listing.seller', 'seller')
+      .addSelect(['seller.id', 'seller.name', 'seller.email'])
+      .leftJoinAndSelect('listing.images', 'images')
+      .where('listing.id = :id', { id })
+      .getOne();
 
     if (!listing) {
       throw new NotFoundException(`Listing with ID ${id} not found`);
@@ -244,7 +262,8 @@ export class MarketplaceService {
     // Build query
     const queryBuilder = this.listingRepository
       .createQueryBuilder('listing')
-      .leftJoinAndSelect('listing.seller', 'seller')
+      .leftJoin('listing.seller', 'seller')
+      .addSelect(['seller.id', 'seller.name', 'seller.email'])
       .leftJoinAndSelect('listing.images', 'images');
 
     // Filter by status if provided (handle comma-separated statuses)
@@ -312,7 +331,8 @@ export class MarketplaceService {
     // Build query
     const queryBuilder = this.listingRepository
       .createQueryBuilder('listing')
-      .leftJoinAndSelect('listing.seller', 'seller')
+      .leftJoin('listing.seller', 'seller')
+      .addSelect(['seller.id', 'seller.name', 'seller.email'])
       .leftJoinAndSelect('listing.images', 'images')
       .where('listing.status = :status', { status: 'approved' });
 
