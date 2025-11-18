@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { VehicleProfile } from './entities/vehicle-profile.entity';
@@ -7,16 +7,28 @@ import { UpdateVehicleDto } from './dto/update-vehicle.dto';
 
 @Injectable()
 export class VehicleProfileService {
+  private readonly logger = new Logger(VehicleProfileService.name);
+
   constructor(
     @InjectRepository(VehicleProfile)
     private vehicleProfileRepository: Repository<VehicleProfile>,
   ) {}
 
   async findAllByUser(userId: string): Promise<VehicleProfile[]> {
-    return this.vehicleProfileRepository.find({
-      where: { userId },
-      order: { isPrimary: 'DESC', createdAt: 'DESC' },
-    });
+    try {
+      this.logger.debug(`Finding all vehicles for user: ${userId}`);
+      
+      const vehicles = await this.vehicleProfileRepository.find({
+        where: { userId },
+        order: { isPrimary: 'DESC', createdAt: 'DESC' },
+      });
+      
+      this.logger.debug(`Found ${vehicles.length} vehicles for user ${userId}`);
+      return vehicles;
+    } catch (error) {
+      this.logger.error(`Error finding vehicles for user ${userId}: ${error.message}`, error.stack);
+      throw error;
+    }
   }
 
   async findOne(id: string, userId: string): Promise<VehicleProfile> {

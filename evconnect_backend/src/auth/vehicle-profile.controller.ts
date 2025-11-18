@@ -8,6 +8,9 @@ import {
   Param,
   UseGuards,
   Request,
+  Logger,
+  HttpException,
+  HttpStatus,
 } from '@nestjs/common';
 import { VehicleProfileService } from './vehicle-profile.service';
 import { CreateVehicleDto } from './dto/create-vehicle.dto';
@@ -17,11 +20,26 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 @Controller('auth/vehicle-profiles')
 @UseGuards(JwtAuthGuard)
 export class VehicleProfileController {
+  private readonly logger = new Logger(VehicleProfileController.name);
+
   constructor(private readonly vehicleProfileService: VehicleProfileService) {}
 
   @Get()
   async findAll(@Request() req) {
-    return this.vehicleProfileService.findAllByUser(req.user.userId);
+    try {
+      this.logger.debug(`GET /auth/vehicle-profiles - User: ${req.user?.userId}`);
+      return await this.vehicleProfileService.findAllByUser(req.user.userId);
+    } catch (error) {
+      this.logger.error(`Error in findAll: ${error.message}`, error.stack);
+      throw new HttpException(
+        {
+          statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+          message: 'Failed to fetch vehicle profiles',
+          error: error.message,
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
   }
 
   @Get(':id')

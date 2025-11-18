@@ -55,6 +55,10 @@ export class AuthController {
         role: user.role,
         isVerified: user.isVerified,
         isBanned: user.isBanned,
+        // Add computed boolean flags for role-based checks
+        isOwner: user.role === 'owner' || user.role === 'admin',
+        isMechanic: user.role === 'mechanic' || user.role === 'admin',
+        isAdmin: user.role === 'admin',
       },
     };
   }

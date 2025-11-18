@@ -70,6 +70,48 @@ export class AppModule implements OnModuleInit {
     try {
       await queryRunner.connect();
       
+      // Create vehicle_profiles table if it doesn't exist
+      await queryRunner.query(`
+        CREATE TABLE IF NOT EXISTS vehicle_profiles (
+          id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+          "userId" UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          make VARCHAR(100) NOT NULL,
+          model VARCHAR(100) NOT NULL,
+          year INTEGER NOT NULL CHECK (year >= 1900 AND year <= 2100),
+          "batteryCapacity" DECIMAL(10, 2) NOT NULL CHECK ("batteryCapacity" > 0),
+          "connectorType" VARCHAR(50) NOT NULL,
+          "rangeKm" DECIMAL(10, 2) NOT NULL CHECK ("rangeKm" > 0),
+          "isPrimary" BOOLEAN DEFAULT FALSE,
+          "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      
+      await queryRunner.query(`CREATE INDEX IF NOT EXISTS idx_vehicle_profiles_user_id ON vehicle_profiles("userId")`);
+      await queryRunner.query(`CREATE INDEX IF NOT EXISTS idx_vehicle_profiles_is_primary ON vehicle_profiles("isPrimary")`);
+      
+      // Create trigger function for vehicle_profiles if not exists
+      await queryRunner.query(`
+        CREATE OR REPLACE FUNCTION update_vehicle_profiles_updated_at()
+        RETURNS TRIGGER AS $$
+        BEGIN
+          NEW."updatedAt" = CURRENT_TIMESTAMP;
+          RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql
+      `);
+      
+      await queryRunner.query(`
+        DROP TRIGGER IF EXISTS trigger_update_vehicle_profiles_updated_at ON vehicle_profiles
+      `);
+      
+      await queryRunner.query(`
+        CREATE TRIGGER trigger_update_vehicle_profiles_updated_at
+        BEFORE UPDATE ON vehicle_profiles
+        FOR EACH ROW
+        EXECUTE FUNCTION update_vehicle_profiles_updated_at()
+      `);
+      
       // Restore columns that TypeORM keeps dropping
       await queryRunner.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR`);
       await queryRunner.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS vehicle_type VARCHAR`);
