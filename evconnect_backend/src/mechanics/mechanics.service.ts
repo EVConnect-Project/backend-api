@@ -36,67 +36,37 @@ export class MechanicsService {
 
   async findNearby(lat: number, lng: number, radiusKm: number = 10): Promise<any[]> {
     try {
-      // Use Haversine formula to find nearby mechanics
-      const query = `
-        SELECT 
-          id,
-          user_id as "userId",
-          name,
-          services,
-          specialization,
-          years_of_experience as "yearsOfExperience",
-          lat,
-          lng,
-          rating,
-          phone,
-          email,
-          description,
-          available,
-          price_per_hour as "pricePerHour",
-          completed_jobs as "completedJobs",
-          license_number as "licenseNumber",
-          certifications,
-          created_at as "createdAt",
-          updated_at as "updatedAt",
-          ( 6371 * acos( 
-            cos( radians($1) ) * 
-            cos( radians(lat::FLOAT) ) * 
-            cos( radians(lng::FLOAT) - radians($2) ) + 
-            sin( radians($1) ) * 
-            sin( radians(lat::FLOAT) ) 
-          ) ) AS distance 
-        FROM mechanics 
-        WHERE available = true
-          AND lat IS NOT NULL
-          AND lng IS NOT NULL
-          AND ( 6371 * acos( 
-            cos( radians($1) ) * 
-            cos( radians(lat::FLOAT) ) * 
-            cos( radians(lng::FLOAT) - radians($2) ) + 
-            sin( radians($1) ) * 
-            sin( radians(lat::FLOAT) ) 
-          ) ) < $3
-        ORDER BY distance, rating DESC
-      `;
-
-      const results = await this.mechanicRepository.query(query, [lat, lng, radiusKm]);
-      return results;
-    } catch (error) {
-      console.error('Error finding nearby mechanics:', error);
-      console.error('Error details:', error.message);
-      
-      // Fallback: return all mechanics if geospatial query fails
+      // Get all available mechanics
       const allMechanics = await this.mechanicRepository.find({
         where: { available: true },
         order: { rating: 'DESC' },
       });
       
       // Calculate distance manually for each mechanic
-      return allMechanics.map(mechanic => ({
-        ...mechanic,
-        distance: this.calculateDistance(lat, lng, Number(mechanic.lat), Number(mechanic.lng)),
-      })).filter(m => m.distance <= radiusKm)
+      const mechanicsWithDistance = allMechanics
+        .map(mechanic => ({
+          id: mechanic.id,
+          userId: mechanic.userId,
+          name: mechanic.name,
+          services: mechanic.services,
+          lat: parseFloat(mechanic.lat as any),
+          lng: parseFloat(mechanic.lng as any),
+          rating: parseFloat(mechanic.rating as any),
+          phone: mechanic.phone,
+          email: mechanic.email,
+          description: mechanic.description,
+          available: mechanic.available,
+          pricePerHour: mechanic.pricePerHour ? parseFloat(mechanic.pricePerHour as any) : null,
+          distance: this.calculateDistance(lat, lng, parseFloat(mechanic.lat as any), parseFloat(mechanic.lng as any)),
+        }))
+        .filter(m => m.distance <= radiusKm)
         .sort((a, b) => a.distance - b.distance);
+
+      return mechanicsWithDistance;
+    } catch (error) {
+      console.error('Error finding nearby mechanics:', error);
+      console.error('Error details:', error.message);
+      return [];
     }
   }
 
