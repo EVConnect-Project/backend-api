@@ -7,12 +7,15 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { EnhancedAuthController } from './enhanced-auth.controller';
 import { EnhancedAuthService } from './enhanced-auth.service';
+import { VehicleProfileController } from './vehicle-profile.controller';
+import { VehicleProfileService } from './vehicle-profile.service';
 import { UserEntity } from '../users/entities/user.entity';
+import { VehicleProfile } from './entities/vehicle-profile.entity';
 import { JwtStrategy } from './strategies/jwt.strategy';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([UserEntity]),
+    TypeOrmModule.forFeature([UserEntity, VehicleProfile]),
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -25,8 +28,8 @@ import { JwtStrategy } from './strategies/jwt.strategy';
       inject: [ConfigService],
     }),
   ],
-  controllers: [AuthController, EnhancedAuthController],
-  providers: [AuthService, EnhancedAuthService, JwtStrategy],
+  controllers: [AuthController, EnhancedAuthController, VehicleProfileController],
+  providers: [AuthService, EnhancedAuthService, VehicleProfileService, JwtStrategy],
   exports: [AuthService, EnhancedAuthService, JwtModule],
 })
 export class AuthModule {}

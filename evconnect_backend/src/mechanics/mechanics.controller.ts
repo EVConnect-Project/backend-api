@@ -35,8 +35,8 @@ export class MechanicsController {
   ) {
     const latNum = parseFloat(lat);
     const lngNum = parseFloat(lng);
-    // Convert radius from meters to kilometers (Flutter sends meters, backend expects km)
-    const radiusNum = radius ? parseFloat(radius) / 1000 : 10;
+    // Radius is already in kilometers from Flutter app
+    const radiusNum = radius ? parseFloat(radius) : 10;
     
     if (isNaN(latNum) || isNaN(lngNum)) {
       throw new Error('Invalid latitude or longitude');
