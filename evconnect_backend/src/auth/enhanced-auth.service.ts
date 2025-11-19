@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { UserEntity } from '../users/entities/user.entity';
+import { VehicleProfile } from './entities/vehicle-profile.entity';
 import { EnhancedRegisterDto } from './dto/enhanced-register.dto';
 
 @Injectable()
@@ -11,6 +12,8 @@ export class EnhancedAuthService {
   constructor(
     @InjectRepository(UserEntity)
     private userRepository: Repository<UserEntity>,
+    @InjectRepository(VehicleProfile)
+    private vehicleProfileRepository: Repository<VehicleProfile>,
     private jwtService: JwtService,
   ) {}
 
@@ -75,6 +78,28 @@ export class EnhancedAuthService {
     });
 
     await this.userRepository.save(user);
+
+    // Create VehicleProfile if vehicle details were provided
+    if (vehicleType && vehicleBrand && vehicleModel && batteryCapacity) {
+      try {
+        const vehicleProfile = this.vehicleProfileRepository.create({
+          userId: user.id,
+          make: vehicleBrand,
+          model: vehicleModel,
+          year: new Date().getFullYear(), // Default to current year
+          batteryCapacity: Number(batteryCapacity),
+          connectorType: connectorType || 'Type2',
+          rangeKm: 300, // Default value (reasonable estimate), user can update later
+          isPrimary: true, // First vehicle is primary
+        });
+
+        await this.vehicleProfileRepository.save(vehicleProfile);
+        console.log(`✅ Created vehicle profile for user ${user.email}`);
+      } catch (error) {
+        console.error('❌ Error creating vehicle profile:', error);
+        // Don't fail registration if vehicle profile creation fails
+      }
+    }
 
     // Generate JWT token
     const payload = { 

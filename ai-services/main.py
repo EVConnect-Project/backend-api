@@ -25,6 +25,8 @@ app.add_middleware(
 # Global model storage
 ml_model = None
 scaler = None
+mechanic_model = None
+mechanic_scaler = None
 
 class RouteRequest(BaseModel):
     start_lat: float = Field(..., ge=-90, le=90, description="Starting latitude")
@@ -66,6 +68,30 @@ class RouteResponse(BaseModel):
     model_version: str
     timestamp: str
 
+class MechanicFeatures(BaseModel):
+    distance_km: float = Field(..., ge=0, description="Distance from user to mechanic in km")
+    rating: float = Field(..., ge=0, le=5, description="Mechanic rating (0-5)")
+    available: int = Field(..., ge=0, le=1, description="Is mechanic available (0 or 1)")
+    service_match: float = Field(..., ge=0, le=1, description="Percentage of required services offered (0-1)")
+    completed_jobs: int = Field(..., ge=0, description="Number of completed jobs")
+    years_experience: float = Field(..., ge=0, description="Years of experience")
+    urgency_level: int = Field(..., ge=0, le=3, description="0=low, 1=medium, 2=high, 3=critical")
+    price_per_hour: float = Field(..., ge=0, description="Mechanic hourly rate")
+
+class MechanicRankingRequest(BaseModel):
+    mechanics: List[MechanicFeatures]
+
+class MechanicScore(BaseModel):
+    mechanic_index: int
+    predicted_score: float
+    confidence: float
+
+class MechanicRankingResponse(BaseModel):
+    success: bool
+    scores: List[MechanicScore]
+    model_version: str
+    timestamp: str
+
 def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """
     Calculate the great circle distance between two points on earth (in km)
@@ -95,30 +121,52 @@ def load_ml_model():
     Load pre-trained ML model for charging stop prediction
     In production, this would load a trained TensorFlow/Scikit-learn model
     """
-    global ml_model, scaler
+    global ml_model, scaler, mechanic_model, mechanic_scaler
     
     model_path = os.path.join(os.path.dirname(__file__), 'models', 'route_optimizer.pkl')
     scaler_path = os.path.join(os.path.dirname(__file__), 'models', 'scaler.pkl')
+    mechanic_model_path = os.path.join(os.path.dirname(__file__), 'models', 'mechanic_ranker.pkl')
+    mechanic_scaler_path = os.path.join(os.path.dirname(__file__), 'models', 'mechanic_scaler.pkl')
     
-    # For now, we'll use a mock model. Replace with actual trained model
+    # Load route optimizer
     try:
         if os.path.exists(model_path):
             ml_model = joblib.load(model_path)
-            print("✓ ML model loaded successfully")
+            print("✓ Route optimizer model loaded successfully")
         else:
-            print("⚠ Using mock model - train and save model to models/route_optimizer.pkl")
+            print("⚠ Using mock route model - train and save model to models/route_optimizer.pkl")
             ml_model = None
             
         if os.path.exists(scaler_path):
             scaler = joblib.load(scaler_path)
-            print("✓ Scaler loaded successfully")
+            print("✓ Route scaler loaded successfully")
         else:
-            print("⚠ Using mock scaler")
+            print("⚠ Using mock route scaler")
             scaler = None
     except Exception as e:
-        print(f"Error loading model: {e}")
+        print(f"Error loading route model: {e}")
         ml_model = None
         scaler = None
+    
+    # Load mechanic ranking model
+    try:
+        if os.path.exists(mechanic_model_path):
+            mechanic_model = joblib.load(mechanic_model_path)
+            print("✓ Mechanic ranking model loaded successfully")
+        else:
+            print("⚠ Mechanic ranking model not found - run train_mechanic_model.py first")
+            mechanic_model = None
+            
+        if os.path.exists(mechanic_scaler_path):
+            mechanic_scaler = joblib.load(mechanic_scaler_path)
+            print("✓ Mechanic scaler loaded successfully")
+        else:
+            print("⚠ Mechanic scaler not found")
+            mechanic_scaler = None
+    except Exception as e:
+        print(f"Error loading mechanic model: {e}")
+        mechanic_model = None
+        mechanic_scaler = None
 
 def predict_optimal_stops(
     start_lat: float, 
@@ -294,17 +342,118 @@ async def predict_route(request: RouteRequest):
 async def model_info():
     """Get information about the loaded ML model"""
     return {
-        "model_type": "Scikit-learn RandomForest" if ml_model else "Mock Model",
-        "model_loaded": ml_model is not None,
-        "scaler_loaded": scaler is not None,
-        "features": [
-            "latitude", "longitude", "distance_from_start", 
-            "battery_capacity", "total_distance", "stop_number"
-        ],
-        "predictions": ["power_kw", "duration_minutes", "cost_usd", "confidence"],
-        "training_samples": "N/A" if ml_model is None else "10000+",
-        "accuracy": "N/A" if ml_model is None else "0.92"
+        "route_optimizer": {
+            "model_type": "Scikit-learn RandomForest" if ml_model else "Mock Model",
+            "model_loaded": ml_model is not None,
+            "scaler_loaded": scaler is not None,
+        },
+        "mechanic_ranker": {
+            "model_type": "Gradient Boosting Regressor" if mechanic_model else "Not Loaded",
+            "model_loaded": mechanic_model is not None,
+            "scaler_loaded": mechanic_scaler is not None,
+            "features": [
+                "distance_km", "rating", "available", "service_match",
+                "completed_jobs", "years_experience", "urgency_level", "price_per_hour"
+            ] if mechanic_model else [],
+        }
     }
+
+@app.post("/predict/mechanic-ranking", response_model=MechanicRankingResponse)
+async def predict_mechanic_ranking(request: MechanicRankingRequest):
+    """
+    AI-powered mechanic ranking using trained Gradient Boosting model
+    
+    Predicts selection scores for mechanics based on:
+    - Distance from user
+    - Mechanic rating
+    - Availability
+    - Service match
+    - Experience (completed jobs)
+    - Years of experience
+    - Urgency level
+    - Price per hour
+    
+    Returns predicted scores (0-100) indicating likelihood of user selection
+    """
+    try:
+        if not request.mechanics:
+            raise HTTPException(status_code=400, detail="No mechanics provided")
+        
+        # Prepare features
+        features_list = []
+        for mechanic in request.mechanics:
+            features_list.append([
+                mechanic.distance_km,
+                mechanic.rating,
+                mechanic.available,
+                mechanic.service_match,
+                mechanic.completed_jobs,
+                mechanic.years_experience,
+                mechanic.urgency_level,
+                mechanic.price_per_hour
+            ])
+        
+        features_array = np.array(features_list)
+        
+        # Use ML model if available
+        if mechanic_model is not None and mechanic_scaler is not None:
+            # Scale features
+            features_scaled = mechanic_scaler.transform(features_array)
+            
+            # Predict scores
+            predictions = mechanic_model.predict(features_scaled)
+            
+            # Calculate confidence based on prediction certainty
+            # Higher scores = higher confidence
+            confidences = np.clip(predictions / 100, 0, 1)
+            
+            model_version = "1.0.0-trained-gb"
+        else:
+            # Fallback: Rule-based scoring
+            predictions = []
+            confidences = []
+            
+            for features in features_list:
+                score = 0.0
+                # Distance (closer = better)
+                score += (1 - min(features[0] / 50, 1)) * 30
+                # Rating
+                score += (features[1] / 5) * 25
+                # Available
+                score += features[2] * 20
+                # Service match
+                score += features[3] * 15
+                # Jobs (capped at 200)
+                score += (min(features[4], 200) / 200) * 10
+                
+                predictions.append(score)
+                confidences.append(0.65)  # Lower confidence for rule-based
+            
+            predictions = np.array(predictions)
+            confidences = np.array(confidences)
+            model_version = "1.0.0-fallback"
+        
+        # Create response
+        scores = [
+            MechanicScore(
+                mechanic_index=i,
+                predicted_score=round(float(predictions[i]), 2),
+                confidence=round(float(confidences[i]), 3)
+            )
+            for i in range(len(predictions))
+        ]
+        
+        return MechanicRankingResponse(
+            success=True,
+            scores=scores,
+            model_version=model_version,
+            timestamp=datetime.utcnow().isoformat()
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Prediction error: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn

@@ -18,6 +18,7 @@ import { BreakdownModule } from './breakdown/breakdown.module';
 import { MarketplaceModule } from './marketplace/marketplace.module';
 import { CloudinaryModule } from './cloudinary/cloudinary.module';
 import { MarketplaceChatModule } from './marketplace-chat/marketplace-chat.module';
+import { ChatModule } from './chat/chat.module';
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { MarketplaceChatModule } from './marketplace-chat/marketplace-chat.modul
     BreakdownModule,
     MarketplaceModule,
     MarketplaceChatModule,
+    ChatModule,
   ],
   controllers: [AppController],
   providers: [AppService],

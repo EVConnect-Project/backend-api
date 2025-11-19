@@ -27,10 +27,12 @@ export class VehicleProfileController {
   @Get()
   async findAll(@Request() req) {
     try {
-      this.logger.debug(`GET /auth/vehicle-profiles - User: ${req.user?.userId}`);
-      return await this.vehicleProfileService.findAllByUser(req.user.userId);
+      this.logger.log(`🚗 GET /auth/vehicle-profiles - User: ${req.user?.userId}`);
+      const vehicles = await this.vehicleProfileService.findAllByUser(req.user.userId);
+      this.logger.log(`🚗 Returning ${vehicles.length} vehicles for user ${req.user.userId}`);
+      return vehicles;
     } catch (error) {
-      this.logger.error(`Error in findAll: ${error.message}`, error.stack);
+      this.logger.error(`❌ Error in findAll: ${error.message}`, error.stack);
       throw new HttpException(
         {
           statusCode: HttpStatus.INTERNAL_SERVER_ERROR,

@@ -348,6 +348,10 @@ export const updateUserRole = async (
   await api.patch(`/admin/users/${id}/role`, { role });
 };
 
+export const deleteUser = async (id: string): Promise<void> => {
+  await api.delete(`/admin/users/${id}`);
+};
+
 // Charger Management APIs
 export const getChargers = async (params?: {
   page?: number;

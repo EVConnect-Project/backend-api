@@ -274,6 +274,23 @@ export class AdminService {
     return { message: 'User role updated successfully' };
   }
 
+  async deleteUser(id: string) {
+    const user = await this.userRepository.findOne({ where: { id } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Prevent deleting admin users
+    if (user.role === 'admin') {
+      throw new BadRequestException('Cannot delete admin users');
+    }
+
+    // The cascade delete in the database schema will handle related records
+    await this.userRepository.remove(user);
+    
+    return { message: 'User permanently deleted' };
+  }
+
   // Charger Management
   async getChargers(params: {
     page: number;

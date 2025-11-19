@@ -9,8 +9,11 @@ export class UserEntity {
   @Column({ nullable: true })
   email: string;
 
-  // @Column({ nullable: true })
-  // phone: string;
+  @Column({ nullable: true })
+  phone: string;
+
+  @Column({ nullable: true })
+  countryCode: string;
 
   @Column()
   @Exclude()

@@ -5,7 +5,8 @@ import {
   getUsers, 
   banUser, 
   unbanUser, 
-  updateUserRole
+  updateUserRole,
+  deleteUser
 } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,7 +20,8 @@ import {
   ChevronRight,
   ChevronDown,
   Download,
-  FileText
+  FileText,
+  Trash2
 } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 import { exportUsersToExcel, exportUsersToPDF } from '@/lib/export';
@@ -140,6 +142,35 @@ export default function UsersPage() {
     } catch (error: any) {
       console.error('Error updating role:', error);
       const errorMessage = error?.response?.data?.message || error?.message || 'Failed to update role';
+      toast.error(errorMessage);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleDeleteUser = async (userId: string, userName: string, userRole: string) => {
+    if (userRole === 'admin') {
+      toast.error('Cannot delete admin users');
+      return;
+    }
+
+    const confirmMessage = `⚠️ PERMANENT DELETION WARNING ⚠️\n\nYou are about to PERMANENTLY DELETE:\n\nUser: ${userName}\n\nThis action will:\n✗ Delete the user account\n✗ Delete all associated data\n✗ Cannot be undone\n\nType "DELETE" to confirm:`;
+    
+    const confirmation = prompt(confirmMessage);
+
+    if (confirmation !== 'DELETE') {
+      if (confirmation) toast.warning('Deletion cancelled - confirmation text did not match');
+      return;
+    }
+
+    setActionLoading(userId);
+    try {
+      await deleteUser(userId);
+      await fetchUsers();
+      toast.success('User permanently deleted');
+    } catch (error: any) {
+      console.error('Error deleting user:', error);
+      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to delete user';
       toast.error(errorMessage);
     } finally {
       setActionLoading(null);
@@ -350,6 +381,18 @@ export default function UsersPage() {
                               >
                                 <UserX className="w-3.5 h-3.5 mr-1.5" />
                                 Ban
+                              </button>
+                            )}
+
+                            {/* Delete Button */}
+                            {user.role !== 'admin' && (
+                              <button
+                                onClick={() => handleDeleteUser(user.id, user.name || user.email, user.role)}
+                                className="inline-flex items-center px-3 py-1.5 text-xs font-semibold text-orange-700 dark:text-orange-300 bg-orange-50 dark:bg-orange-900/30 border border-orange-200 dark:border-orange-700 rounded-lg hover:bg-orange-100 dark:hover:bg-orange-900/50 transition-all"
+                                title="Permanently Delete User"
+                              >
+                                <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                                Delete
                               </button>
                             )}
                           </div>

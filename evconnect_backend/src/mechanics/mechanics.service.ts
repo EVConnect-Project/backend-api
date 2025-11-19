@@ -2,14 +2,25 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { MechanicEntity } from './entities/mechanic.entity';
+import { UserEntity } from '../users/entities/user.entity';
+import { MechanicApplication } from '../mechanic/entities/mechanic-application.entity';
+import { Charger } from '../charger/entities/charger.entity';
 import { CreateMechanicDto } from './dto/create-mechanic.dto';
 import { UpdateMechanicDto } from './dto/update-mechanic.dto';
+import { EmergencyRequestDto } from './dto/emergency-request.dto';
+import axios from 'axios';
 
 @Injectable()
 export class MechanicsService {
   constructor(
     @InjectRepository(MechanicEntity)
     private mechanicRepository: Repository<MechanicEntity>,
+    @InjectRepository(UserEntity)
+    private userRepository: Repository<UserEntity>,
+    @InjectRepository(MechanicApplication)
+    private applicationRepository: Repository<MechanicApplication>,
+    @InjectRepository(Charger)
+    private chargerRepository: Repository<Charger>,
   ) {}
 
   async register(createMechanicDto: CreateMechanicDto): Promise<MechanicEntity> {
@@ -137,17 +148,262 @@ export class MechanicsService {
   }
 
   async resignMechanicRole(userId: string): Promise<void> {
+    // Get the user and check their role
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`User not found: ${userId}`);
+    }
+
+    // Check if user has chargers (need to determine new role)
+    const chargers = await this.chargerRepository.find({
+      where: { ownerId: userId },
+    });
+    const hasChargers = chargers.length > 0;
+
+    // Find mechanic profile (may not exist if application was approved but profile not created)
     const mechanic = await this.mechanicRepository.findOne({
       where: { userId },
     });
 
-    if (!mechanic) {
-      throw new NotFoundException(`Mechanic profile not found for user ${userId}`);
+    // Find mechanic application (may exist even if profile doesn't)
+    const application = await this.applicationRepository.findOne({
+      where: { userId },
+    });
+
+    // Check if user has any mechanic-related records
+    if (!mechanic && !application) {
+      throw new NotFoundException(`No mechanic profile or application found for user ${userId}`);
     }
 
-    // Completely remove the mechanic profile
-    // User will need to reapply if they want to be a mechanic again
-    await this.mechanicRepository.remove(mechanic);
-    console.log(`✅ Mechanic profile deleted for user ${userId}`);
+    // Remove mechanic profile if it exists
+    if (mechanic) {
+      await this.mechanicRepository.remove(mechanic);
+      console.log(`✅ Mechanic profile deleted for user ${userId}`);
+    } else {
+      console.log(`ℹ️ No mechanic profile to delete for user ${userId}`);
+    }
+
+    // Remove mechanic application if it exists
+    if (application) {
+      await this.applicationRepository.remove(application);
+      console.log(`✅ Mechanic application deleted for user ${userId}`);
+    } else {
+      console.log(`ℹ️ No mechanic application to delete for user ${userId}`);
+    }
+
+    // Update user role: if they own chargers, set to 'owner', otherwise 'user'
+    if (user.role === 'mechanic') {
+      user.role = hasChargers ? 'owner' : 'user';
+      await this.userRepository.save(user);
+      console.log(`✅ User role updated to '${user.role}' for ${userId}`);
+    } else {
+      console.log(`ℹ️ User role is '${user.role}', no role change needed`);
+    }
+  }
+
+  /**
+   * AI-Powered Emergency Mechanic Recommendation System
+   * Analyzes 10+ factors to recommend the best mechanics
+   */
+  async getAIRecommendations(request: EmergencyRequestDto, userId: string) {
+    const radiusKm = request.radiusKm || 10;
+    const urgencyMultiplier = this.getUrgencyMultiplier(request.urgencyLevel);
+
+    console.log(`🤖 AI Analysis for emergency at (${request.lat}, ${request.lng}), radius: ${radiusKm}km`);
+
+    // Get all available mechanics within radius
+    const nearbyMechanics = await this.findNearby(request.lat, request.lng, radiusKm);
+
+    if (nearbyMechanics.length === 0) {
+      return {
+        recommendations: [],
+        message: 'No mechanics found within the specified radius. Try increasing the search radius.',
+        searchRadius: radiusKm,
+      };
+    }
+
+    // Prepare features for AI model
+    const mechanicsForAI = nearbyMechanics.map(mechanic => {
+      const serviceMatch = this.calculateServiceMatch(mechanic, request);
+      
+      return {
+        distance_km: mechanic.distance,
+        rating: mechanic.rating,
+        available: mechanic.available ? 1 : 0,
+        service_match: serviceMatch,
+        completed_jobs: mechanic.completedJobs || 0,
+        years_experience: mechanic.yearsOfExperience || 0,
+        urgency_level: this.getUrgencyNumber(request.urgencyLevel),
+        price_per_hour: mechanic.pricePerHour || 50,
+      };
+    });
+
+    // Call AI service for ML predictions
+    let aiScores: number[] = [];
+    let usingAI = false;
+
+    try {
+      const aiResponse = await axios.post('http://localhost:5000/predict/mechanic-ranking', {
+        mechanics: mechanicsForAI,
+      }, {
+        timeout: 3000,
+      });
+
+      if (aiResponse.data.success) {
+        aiScores = aiResponse.data.scores.map((s: any) => s.predicted_score);
+        usingAI = true;
+        console.log(`✅ AI Model predictions received (${aiResponse.data.model_version})`);
+      }
+    } catch (error) {
+      console.warn(`⚠️ AI service unavailable, using fallback scoring:`, error.message);
+      // Fallback to rule-based scoring
+      aiScores = nearbyMechanics.map((_, idx) => 
+        this.calculateFallbackScore(mechanicsForAI[idx], urgencyMultiplier)
+      );
+    }
+
+    // Combine AI scores with additional factors
+    const scoredMechanics = nearbyMechanics.map((mechanic, idx) => {
+      const baseScore = aiScores[idx] || 50;
+      const eta = this.estimateArrivalTime(mechanic.distance, urgencyMultiplier);
+
+      return {
+        ...mechanic,
+        aiScore: baseScore,
+        estimatedArrivalMinutes: eta,
+        recommendationTier: this.getRecommendationTier(baseScore),
+        matchReasons: this.getMatchReasons(mechanic, request, baseScore),
+        usingMLModel: usingAI,
+      };
+    });
+
+    // Sort by AI score (highest first)
+    scoredMechanics.sort((a, b) => b.aiScore - a.aiScore);
+
+    return {
+      recommendations: scoredMechanics,
+      totalFound: scoredMechanics.length,
+      bestMatch: scoredMechanics[0] || null,
+      searchRadius: radiusKm,
+      urgencyLevel: request.urgencyLevel || 'medium',
+      aiModelUsed: usingAI,
+    };
+  }
+
+  private calculateServiceMatch(mechanic: any, request: EmergencyRequestDto): number {
+    if (!request.requiredServices || request.requiredServices.length === 0) {
+      return 0.5; // Neutral if no services specified
+    }
+
+    const matches = request.requiredServices.filter(s => 
+      mechanic.services.includes(s)
+    );
+
+    return matches.length / request.requiredServices.length;
+  }
+
+  private getUrgencyNumber(urgencyLevel?: string): number {
+    switch (urgencyLevel) {
+      case 'critical': return 3;
+      case 'high': return 2;
+      case 'medium': return 1;
+      case 'low': return 0;
+      default: return 1;
+    }
+  }
+
+  private calculateFallbackScore(features: any, urgencyMultiplier: number): number {
+    let score = 0;
+
+    // Distance factor
+    score += (1 - Math.min(features.distance_km / 50, 1)) * 30;
+    // Rating factor
+    score += (features.rating / 5) * 25;
+    // Availability
+    score += features.available * 20;
+    // Service match
+    score += features.service_match * 15;
+    // Experience
+    score += (Math.min(features.completed_jobs, 200) / 200) * 10;
+
+    // Urgency modifier
+    if (urgencyMultiplier > 1) {
+      const urgencyBonus = (score * 0.2) * (urgencyMultiplier - 1);
+      score += urgencyBonus;
+    }
+
+    return Math.min(100, Math.max(0, score));
+  }
+
+  private getUrgencyMultiplier(urgencyLevel?: string): number {
+    switch (urgencyLevel) {
+      case 'critical': return 2.0;
+      case 'high': return 1.5;
+      case 'medium': return 1.0;
+      case 'low': return 0.8;
+      default: return 1.0;
+    }
+  }
+
+  private estimateArrivalTime(distanceKm: number, urgencyMultiplier: number): number {
+    // Assume average speed of 40 km/h in city, 60 km/h on highway
+    // Add 5-10 minutes preparation time
+    const baseSpeed = urgencyMultiplier > 1.2 ? 60 : 40; // Faster in emergencies
+    const travelTimeMinutes = (distanceKm / baseSpeed) * 60;
+    const preparationTime = urgencyMultiplier > 1.5 ? 5 : 10;
+    
+    return Math.round(travelTimeMinutes + preparationTime);
+  }
+
+  private getRecommendationTier(score: number): string {
+    if (score >= 80) return 'best_match';
+    if (score >= 60) return 'recommended';
+    if (score >= 40) return 'alternative';
+    return 'available';
+  }
+
+  private getMatchReasons(mechanic: any, request: EmergencyRequestDto, score: number): string[] {
+    const reasons: string[] = [];
+
+    if (mechanic.distance < 2) {
+      reasons.push('Very close to your location');
+    } else if (mechanic.distance < 5) {
+      reasons.push('Nearby location');
+    }
+
+    if (mechanic.rating >= 4.5) {
+      reasons.push('Highly rated');
+    } else if (mechanic.rating >= 4.0) {
+      reasons.push('Well rated');
+    }
+
+    if (mechanic.completedJobs >= 50) {
+      reasons.push('Experienced professional');
+    }
+
+    if (request.requiredServices && request.requiredServices.length > 0) {
+      const matches = request.requiredServices.filter(s => 
+        mechanic.services.includes(s)
+      );
+      if (matches.length === request.requiredServices.length) {
+        reasons.push('Offers all required services');
+      } else if (matches.length > 0) {
+        reasons.push(`Offers ${matches.length} of ${request.requiredServices.length} services`);
+      }
+    }
+
+    if (mechanic.available) {
+      reasons.push('Currently available');
+    }
+
+    if (score >= 80) {
+      reasons.push('🏆 Best overall match');
+    }
+
+    return reasons;
   }
 }
+

@@ -9,6 +9,18 @@ import { LoginDto } from './dto/login.dto';
 
 @Injectable()
 export class AuthService {
+    async updateUserProfile(userId: string, data: Partial<{ name: string; email: string; phone: string; countryCode: string }>) {
+      const user = await this.userRepository.findOne({ where: { id: userId } });
+      if (!user) {
+        throw new UnauthorizedException('User not found');
+      }
+      if (data.name) user.name = data.name;
+      if (data.email) user.email = data.email;
+      if (data.phone) user.phone = data.phone;
+      if (data.countryCode) user.countryCode = data.countryCode;
+      await this.userRepository.save(user);
+      return user;
+    }
   constructor(
     @InjectRepository(UserEntity)
     private userRepository: Repository<UserEntity>,

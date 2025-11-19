@@ -16,6 +16,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { MechanicsService } from './mechanics.service';
 import { CreateMechanicDto } from './dto/create-mechanic.dto';
 import { UpdateMechanicDto } from './dto/update-mechanic.dto';
+import { EmergencyRequestDto } from './dto/emergency-request.dto';
 
 @Controller('mechanics')
 export class MechanicsController {
@@ -104,5 +105,15 @@ export class MechanicsController {
     return {
       message: 'Your mechanic profile has been removed successfully. You can reapply as a mechanic anytime from the home screen.',
     };
+  }
+
+  @Post('emergency/recommend')
+  @UseGuards(JwtAuthGuard)
+  async getEmergencyRecommendations(
+    @Request() req,
+    @Body(ValidationPipe) emergencyRequest: EmergencyRequestDto,
+  ) {
+    console.log('🚨 Emergency request from:', req.user.email, 'at location:', emergencyRequest.lat, emergencyRequest.lng);
+    return this.mechanicsService.getAIRecommendations(emergencyRequest, req.user.userId);
   }
 }

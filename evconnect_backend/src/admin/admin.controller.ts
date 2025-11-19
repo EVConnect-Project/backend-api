@@ -107,6 +107,16 @@ export class AdminController {
     return user;
   }
 
+  @Delete('users/:id')
+  async deleteUser(@Param('id') id: string) {
+    await this.adminService.deleteUser(id);
+    
+    return { 
+      message: 'User permanently deleted',
+      deletedUserId: id 
+    };
+  }
+
   // Charger Management
   @Get('chargers')
   async getChargers(

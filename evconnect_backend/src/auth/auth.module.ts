@@ -9,6 +9,7 @@ import { EnhancedAuthController } from './enhanced-auth.controller';
 import { EnhancedAuthService } from './enhanced-auth.service';
 import { VehicleProfileController } from './vehicle-profile.controller';
 import { VehicleProfileService } from './vehicle-profile.service';
+import { MigrationController } from './migration.controller';
 import { UserEntity } from '../users/entities/user.entity';
 import { VehicleProfile } from './entities/vehicle-profile.entity';
 import { Charger } from '../charger/entities/charger.entity';
@@ -30,7 +31,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
       inject: [ConfigService],
     }),
   ],
-  controllers: [AuthController, EnhancedAuthController, VehicleProfileController],
+  controllers: [AuthController, EnhancedAuthController, VehicleProfileController, MigrationController],
   providers: [AuthService, EnhancedAuthService, VehicleProfileService, JwtStrategy],
   exports: [AuthService, EnhancedAuthService, JwtModule],
 })
