@@ -1,27 +1,53 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Charger } from './entities/charger.entity';
 import { CreateChargerDto } from './dto/create-charger.dto';
 import { UpdateChargerDto } from './dto/update-charger.dto';
+import { ChargerIntegrationService } from '../charger-integration/charger-integration.service';
 
 @Injectable()
 export class ChargerService {
   constructor(
     @InjectRepository(Charger)
     private chargerRepository: Repository<Charger>,
+    @Inject(forwardRef(() => ChargerIntegrationService))
+    private integrationService: ChargerIntegrationService,
   ) {}
 
-  async create(createChargerDto: CreateChargerDto, ownerId: string): Promise<Charger> {
+  async create(createChargerDto: CreateChargerDto, ownerId: string): Promise<any> {
     const charger = this.chargerRepository.create({
       ...createChargerDto,
       ownerId,
     });
     const savedCharger = await this.chargerRepository.save(charger);
     
-    // WebSocket broadcasting removed - implement REST-based notifications if needed
+    // Auto-generate OCPP credentials for the new charger
+    let ocppCredentials: {
+      chargeBoxIdentity: string;
+      setupInstructions: string;
+      wsUrl: string;
+    } | null = null;
     
-    return savedCharger;
+    try {
+      ocppCredentials = await this.integrationService.generateOcppCredentials(savedCharger.id);
+    } catch (error) {
+      console.error('Failed to generate OCPP credentials:', error);
+      // Don't fail charger creation if OCPP setup fails
+    }
+    
+    // Reload charger to get updated OCPP fields
+    const updatedCharger = await this.findOne(savedCharger.id);
+    
+    // Return charger with OCPP credentials
+    return {
+      ...updatedCharger,
+      ocppCredentials: ocppCredentials ? {
+        chargeBoxIdentity: ocppCredentials.chargeBoxIdentity,
+        wsUrl: ocppCredentials.wsUrl,
+        setupInstructions: ocppCredentials.setupInstructions,
+      } : null,
+    };
   }
 
   async findAll(): Promise<Charger[]> {

@@ -19,6 +19,10 @@ import { MarketplaceModule } from './marketplace/marketplace.module';
 import { CloudinaryModule } from './cloudinary/cloudinary.module';
 import { MarketplaceChatModule } from './marketplace-chat/marketplace-chat.module';
 import { ChatModule } from './chat/chat.module';
+import { ChargingModule } from './charging/charging.module';
+import { ChargerIntegrationModule } from './charger-integration/charger-integration.module';
+import { ReviewsModule } from './reviews/reviews.module';
+import { FavoritesModule } from './favorites/favorites.module';
 
 @Module({
   imports: [
@@ -57,6 +61,10 @@ import { ChatModule } from './chat/chat.module';
     MarketplaceModule,
     MarketplaceChatModule,
     ChatModule,
+    ChargingModule,
+    ChargerIntegrationModule,
+    ReviewsModule,
+    FavoritesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

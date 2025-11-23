@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  ev-charging-service:
+    build: 
+      context: ./ev-charging-service
+      dockerfile: Dockerfile
+    container_name: evconnect-charging-service
+    ports:
+      - '4000:4000'
+    environment:
+      - DATABASE_URL=postgresql://evuser:evpass@postgres-charging:5432/evcharging
+      - PORT=4000
+      - OCPP_PATH=/ocpp
+      - NODE_ENV=production
+      - API_KEY_BACKEND=evconnect-backend-api-key-production
+      - PRICE_PER_KWH=0.30
+      - LOG_LEVEL=info
+    depends_on:
+      - postgres-charging
+    networks:
+      - evconnect-network
+    restart: unless-stopped
+    volumes:
+      - ./ev-charging-service/logs:/usr/src/app/logs
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  postgres-charging:
+    image: postgres:15-alpine
+    container_name: evconnect-postgres-charging
+    environment:
+      POSTGRES_DB: evcharging
+      POSTGRES_USER: evuser
+      POSTGRES_PASSWORD: evpass
+    ports:
+      - '5433:5432'
+    volumes:
+      - pgdata-charging:/var/lib/postgresql/data
+    networks:
+      - evconnect-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U evuser -d evcharging"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  evconnect-backend:
+    build:
+      context: ./evconnect_backend
+      dockerfile: Dockerfile
+    container_name: evconnect-backend
+    ports:
+      - '3000:3000'
+    environment:
+      - CHARGING_SERVICE_URL=http://ev-charging-service:4000
+      - CHARGING_SERVICE_API_KEY=evconnect-backend-api-key-production
+    depends_on:
+      - ev-charging-service
+    networks:
+      - evconnect-network
+    restart: unless-stopped
+
+  ai-services:
+    build:
+      context: ./ai-services
+      dockerfile: Dockerfile
+    container_name: evconnect-ai-services
+    ports:
+      - '5000:5000'
+    networks:
+      - evconnect-network
+    restart: unless-stopped
+
+networks:
+  evconnect-network:
+    driver: bridge
+
+volumes:
+  pgdata-charging:

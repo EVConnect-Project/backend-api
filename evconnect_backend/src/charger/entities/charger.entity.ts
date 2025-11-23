@@ -40,6 +40,19 @@ export class Charger {
   @Column({ type: 'varchar', default: 'available' })
   status: 'available' | 'in-use' | 'offline';
 
+  // OCPP Integration Fields
+  @Column({ type: 'varchar', length: 100, nullable: true, unique: true })
+  chargeBoxIdentity: string;
+
+  @Column({ type: 'varchar', default: 'not_configured' })
+  ocppStatus: 'not_configured' | 'pending' | 'configured' | 'connected';
+
+  @Column({ default: false })
+  isOnline: boolean;
+
+  @Column({ type: 'timestamp', nullable: true })
+  lastHeartbeat: Date | null;
+
   @CreateDateColumn()
   createdAt: Date;
 
