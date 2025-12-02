@@ -58,4 +58,29 @@ export class BookingsController {
   ) {
     return this.bookingsService.updateStatus(id, status);
   }
+
+  @Post(':id/verify-presence')
+  verifyPhysicalPresence(
+    @Param('id') id: string,
+    @Body('lat') lat: number,
+    @Body('lng') lng: number,
+    @Request() req,
+  ) {
+    return this.bookingsService.verifyPhysicalPresence(id, req.user.userId, lat, lng);
+  }
+
+  @Get('alternatives/:chargerId')
+  getAlternatives(
+    @Param('chargerId') chargerId: string,
+    @Body('startTime') startTime: string,
+    @Body('endTime') endTime: string,
+    @Body('radiusKm') radiusKm?: number,
+  ) {
+    return this.bookingsService.getAlternativeChargers(
+      chargerId,
+      new Date(startTime),
+      new Date(endTime),
+      radiusKm
+    );
+  }
 }

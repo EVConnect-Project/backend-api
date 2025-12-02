@@ -92,6 +92,35 @@ class MechanicRankingResponse(BaseModel):
     model_version: str
     timestamp: str
 
+class ChargerFeatures(BaseModel):
+    charger_id: str = Field(..., description="Unique charger identifier")
+    distance_km: float = Field(..., ge=0, description="Distance from user to charger in km")
+    power_kw: float = Field(..., ge=0, description="Charger power rating in kW")
+    available: int = Field(..., ge=0, le=1, description="Is charger available (0 or 1)")
+    rating: float = Field(..., ge=0, le=5, description="Charger rating (0-5)")
+    price_per_kwh: float = Field(..., ge=0, description="Price per kWh")
+    access_type: str = Field(..., description="public, semi-public, or private")
+    connector_type: str = Field(..., description="Connector type (Type 2, CCS, CHAdeMO, etc)")
+    currently_in_use: int = Field(..., ge=0, le=1, description="Is currently in use (0 or 1)")
+
+class ChargerRankingRequest(BaseModel):
+    chargers: List[ChargerFeatures]
+    user_battery_level: float = Field(default=50.0, ge=0, le=100, description="Current battery percentage")
+    user_urgency: int = Field(default=1, ge=0, le=3, description="0=low, 1=medium, 2=high, 3=critical")
+
+class ChargerScore(BaseModel):
+    charger_id: str
+    predicted_score: float
+    confidence: float
+    distance_km: float
+    recommendation_reason: str
+
+class ChargerRankingResponse(BaseModel):
+    success: bool
+    scores: List[ChargerScore]
+    model_version: str
+    timestamp: str
+
 def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """
     Calculate the great circle distance between two points on earth (in km)
@@ -447,6 +476,133 @@ async def predict_mechanic_ranking(request: MechanicRankingRequest):
             success=True,
             scores=scores,
             model_version=model_version,
+            timestamp=datetime.utcnow().isoformat()
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Prediction error: {str(e)}")
+
+@app.post("/predict/charger-ranking", response_model=ChargerRankingResponse)
+async def predict_charger_ranking(request: ChargerRankingRequest):
+    """
+    AI-powered charger ranking for real-time nearby stations
+    
+    Intelligently ranks chargers based on:
+    - Distance from user (closer = better)
+    - Charger availability (available > occupied)
+    - Power rating (faster = better for urgent situations)
+    - Price (lower = better, but balanced with other factors)
+    - Rating (higher = better)
+    - Access type (public > semi-public > private)
+    - User's battery level and urgency
+    
+    Returns predicted scores (0-100) with ranking reasons
+    """
+    try:
+        if not request.chargers:
+            raise HTTPException(status_code=400, detail="No chargers provided")
+        
+        scores = []
+        
+        for charger in request.chargers:
+            score = 0.0
+            reasons = []
+            
+            # Distance factor (40% weight) - exponential decay
+            # 0 km = 40, 5 km = 30, 10 km = 20, 20+ km = 5
+            if charger.distance_km < 1:
+                distance_score = 40
+                reasons.append("Very close")
+            elif charger.distance_km < 5:
+                distance_score = 35 - (charger.distance_km * 2)
+                reasons.append("Nearby")
+            elif charger.distance_km < 10:
+                distance_score = 25 - charger.distance_km
+                reasons.append("Short drive")
+            else:
+                distance_score = max(5, 20 - charger.distance_km * 0.5)
+                reasons.append("Moderate distance")
+            
+            score += distance_score
+            
+            # Availability (25% weight)
+            if charger.available == 1 and charger.currently_in_use == 0:
+                score += 25
+                reasons.append("Available now")
+            elif charger.available == 1:
+                score += 15
+                reasons.append("May be in use")
+            else:
+                score += 5
+                reasons.append("Limited availability")
+            
+            # Power rating (15% weight) - adjusted by urgency
+            # Fast chargers (150+ kW) get bonus when urgency is high
+            power_factor = min(charger.power_kw / 350, 1) * 15
+            if request.user_urgency >= 2 and charger.power_kw >= 150:
+                power_factor *= 1.5  # Boost fast chargers for urgent needs
+                reasons.append("Fast charging")
+            elif charger.power_kw >= 50:
+                reasons.append("Quick charging")
+            score += power_factor
+            
+            # Rating (10% weight)
+            score += (charger.rating / 5) * 10
+            if charger.rating >= 4.5:
+                reasons.append("Highly rated")
+            
+            # Price (5% weight) - inverse relationship
+            # Assume average price is $0.40/kWh
+            price_factor = max(0, 5 - (charger.price_per_kwh - 0.40) * 10)
+            score += price_factor
+            if charger.price_per_kwh < 0.35:
+                reasons.append("Great price")
+            
+            # Access type (5% weight)
+            access_scores = {"public": 5, "semi-public": 3, "private": 1}
+            score += access_scores.get(charger.access_type.lower(), 2)
+            
+            # Battery level adjustment - if low battery, prioritize closer stations
+            if request.user_battery_level < 20:
+                # Critical battery - heavily prioritize distance
+                score = score * (1 + (1 - min(charger.distance_km / 10, 1)) * 0.3)
+                if charger.distance_km < 3:
+                    reasons.insert(0, "🔋 Critical - closest option")
+            elif request.user_battery_level < 50:
+                # Low battery - moderately prioritize distance
+                score = score * (1 + (1 - min(charger.distance_km / 20, 1)) * 0.15)
+            
+            # Confidence calculation
+            # Higher confidence for available chargers with good ratings closer by
+            confidence = 0.7
+            if charger.available == 1:
+                confidence += 0.1
+            if charger.rating >= 4.0:
+                confidence += 0.1
+            if charger.distance_km < 5:
+                confidence += 0.1
+            confidence = min(confidence, 1.0)
+            
+            # Create recommendation reason
+            recommendation = " • ".join(reasons[:3])  # Top 3 reasons
+            
+            scores.append(ChargerScore(
+                charger_id=charger.charger_id,
+                predicted_score=round(float(score), 2),
+                confidence=round(float(confidence), 3),
+                distance_km=round(charger.distance_km, 2),
+                recommendation_reason=recommendation
+            ))
+        
+        # Sort by score (highest first)
+        scores.sort(key=lambda x: x.predicted_score, reverse=True)
+        
+        return ChargerRankingResponse(
+            success=True,
+            scores=scores,
+            model_version="1.0.0-realtime-ai",
             timestamp=datetime.utcnow().isoformat()
         )
         

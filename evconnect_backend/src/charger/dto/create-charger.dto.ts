@@ -34,4 +34,12 @@ export class CreateChargerDto {
   @IsString()
   @IsOptional()
   description?: string;
+
+  @IsString()
+  @IsOptional()
+  speedType?: 'ac_slow' | 'ac_fast' | 'dc_fast' | 'dc_rapid' | 'ultra_rapid' | 'tesla_supercharger';
+
+  @IsString()
+  @IsOptional()
+  connectorType?: 'type2' | 'type1_j1772' | 'ccs2' | 'chademo' | 'tesla_nacs';
 }

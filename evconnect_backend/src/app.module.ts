@@ -23,6 +23,7 @@ import { ChargingModule } from './charging/charging.module';
 import { ChargerIntegrationModule } from './charger-integration/charger-integration.module';
 import { ReviewsModule } from './reviews/reviews.module';
 import { FavoritesModule } from './favorites/favorites.module';
+import { TripPlannerModule } from './trip-planner/trip-planner.module';
 
 @Module({
   imports: [
@@ -65,6 +66,7 @@ import { FavoritesModule } from './favorites/favorites.module';
     ChargerIntegrationModule,
     ReviewsModule,
     FavoritesModule,
+    TripPlannerModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -40,6 +40,41 @@ export class Charger {
   @Column({ type: 'varchar', default: 'available' })
   status: 'available' | 'in-use' | 'offline';
 
+  // Charger Type Fields
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  speedType: 'ac_slow' | 'ac_fast' | 'dc_fast' | 'dc_rapid' | 'ultra_rapid' | 'tesla_supercharger' | null;
+
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  connectorType: 'type2' | 'type1_j1772' | 'ccs2' | 'chademo' | 'tesla_nacs' | null;
+
+  // Access Management Fields
+  @Column({ type: 'varchar', length: 20, default: 'private' })
+  accessType: 'private' | 'public' | 'semi-public';
+
+  @Column({ default: true })
+  requiresAuth: boolean;
+
+  @Column({ default: false })
+  requiresPhysicalCheck: boolean;
+
+  @Column({ type: 'int', default: 15 })
+  bookingGracePeriod: number;
+
+  @Column({ type: 'int', default: 30 })
+  autoCancelAfter: number;
+
+  @Column({ type: 'timestamp', nullable: true })
+  lastPhysicalCheck: Date | null;
+
+  @Column({ default: false })
+  hasOccupancySensor: boolean;
+
+  @Column({ default: false })
+  manualOverride: boolean;
+
+  @Column({ type: 'text', nullable: true })
+  publicAccessWarning: string | null;
+
   // OCPP Integration Fields
   @Column({ type: 'varchar', length: 100, nullable: true, unique: true })
   chargeBoxIdentity: string;
