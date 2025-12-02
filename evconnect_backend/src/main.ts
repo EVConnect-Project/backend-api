@@ -7,13 +7,10 @@ async function bootstrap() {
   
   // Enable CORS for admin dashboard and mobile app (Flutter Web uses random ports)
   app.enableCors({
-    origin: [
-      'http://localhost:3000',        // Admin dashboard
-      /^http:\/\/localhost:\d+$/,     // Flutter Web (any port)
-      'http://10.0.2.2:4000',         // Android emulator
-      /^http:\/\/192\.168\.\d+\.\d+:\d+$/, // Local network devices
-    ],
+    origin: true,  // Allow all origins in development
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
   });
 
   // Enable global validation with transform to apply DTO transformations (XSS sanitization)

@@ -24,20 +24,29 @@ export class CloudinaryController {
   @Post('upload')
   @UseInterceptors(FileInterceptor('file'))
   async uploadImage(@UploadedFile() file: Express.Multer.File) {
+    console.log('📸 Upload request received');
+    console.log('   File:', file ? 'present' : 'MISSING');
+    if (file) {
+      console.log('   Filename:', file.originalname);
+      console.log('   Mimetype:', file.mimetype);
+      console.log('   Size:', file.size);
+      console.log('   Buffer:', file.buffer ? 'present' : 'MISSING');
+    }
+
     if (!file) {
       throw new BadRequestException('No file uploaded');
     }
 
     // Validate file type
-    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
+    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg', 'image/gif'];
     if (!allowedMimeTypes.includes(file.mimetype)) {
-      throw new BadRequestException('Only JPEG, PNG, and WebP images are allowed');
+      throw new BadRequestException(`Only JPEG, PNG, WebP and GIF images are allowed. Got: ${file.mimetype}`);
     }
 
-    // Validate file size (max 5MB)
-    const maxSize = 5 * 1024 * 1024; // 5MB
+    // Validate file size (max 10MB for better compatibility)
+    const maxSize = 10 * 1024 * 1024; // 10MB
     if (file.size > maxSize) {
-      throw new BadRequestException('File size must not exceed 5MB');
+      throw new BadRequestException('File size must not exceed 10MB');
     }
 
     const secureUrl = await this.cloudinaryService.uploadImage(file, 'marketplace');

@@ -122,7 +122,17 @@ export class ChatService {
       unreadCountParticipant: isUser ? conversation.unreadCountParticipant + 1 : conversation.unreadCountParticipant,
     });
 
-    return savedMessage;
+    // Load sender relation before returning
+    const messageWithSender = await this.messageRepo.findOne({
+      where: { id: savedMessage.id },
+      relations: ['sender'],
+    });
+
+    if (!messageWithSender) {
+      throw new Error('Failed to retrieve saved message');
+    }
+
+    return messageWithSender;
   }
 
   /**

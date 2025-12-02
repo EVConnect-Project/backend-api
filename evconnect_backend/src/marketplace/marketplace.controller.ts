@@ -44,6 +44,7 @@ export class MarketplaceController {
   @Get('my-listings')
   @UseGuards(JwtAuthGuard)
   getMyListings(@Request() req) {
+    console.log('📱 /my-listings called by user:', req.user);
     return this.marketplaceService.getUserListings(req.user.userId);
   }
 

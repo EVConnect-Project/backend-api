@@ -46,7 +46,7 @@ export class MarketplaceService {
       await this.imageRepository.save(images);
     }
 
-    return this.getListingById(savedListing.id);
+    return this.getListingById(savedListing.id, sellerId);
   }
 
   async getPublicListings(): Promise<MarketplaceListing[]> {
@@ -84,11 +84,20 @@ export class MarketplaceService {
   }
 
   async getUserListings(userId: string): Promise<MarketplaceListing[]> {
-    return this.listingRepository.find({
+    console.log('🔍 Getting listings for userId:', userId);
+    
+    const listings = await this.listingRepository.find({
       where: { seller: { id: userId } },
-      relations: ['images'],
+      relations: ['images', 'seller'],
       order: { createdAt: 'DESC' },
     });
+    
+    console.log(`📋 Found ${listings.length} listings for user ${userId}`);
+    if (listings.length > 0) {
+      console.log('   First listing:', { id: listings[0].id, title: listings[0].title, sellerId: listings[0].seller?.id });
+    }
+    
+    return listings;
   }
 
   async updateListing(
@@ -137,23 +146,31 @@ export class MarketplaceService {
   }
 
   async deleteListing(id: string, userId: string): Promise<{ message: string }> {
+    console.log(`🗑️ Delete listing request: id=${id}, userId=${userId}`);
+    
     const listing = await this.listingRepository.findOne({
       where: { id },
       relations: ['seller'],
     });
 
     if (!listing) {
+      console.log(`❌ Listing ${id} not found`);
       throw new NotFoundException(`Listing with ID ${id} not found`);
     }
 
+    console.log(`📋 Listing found: ${listing.title}, status: ${listing.status}, seller: ${listing.seller.id}`);
+
     // Only seller can delete their own listing
     if (listing.seller.id !== userId) {
+      console.log(`❌ Permission denied: seller ${listing.seller.id} !== user ${userId}`);
       throw new ForbiddenException('You can only delete your own listings');
     }
 
+    console.log(`✅ Deleting listing ${id}...`);
     await this.listingRepository.remove(listing);
     // Images will be cascade deleted due to onDelete: 'CASCADE'
 
+    console.log(`✅ Listing ${id} deleted successfully`);
     return { message: 'Listing deleted successfully' };
   }
 
