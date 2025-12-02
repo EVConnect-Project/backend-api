@@ -10,6 +10,7 @@ import { BreakdownRequest, BreakdownStatus } from './entities/breakdown-request.
 import { UserEntity } from '../users/entities/user.entity';
 import { CreateBreakdownRequestDto } from './dto/create-breakdown-request.dto';
 import { UpdateBreakdownStatusDto } from './dto/update-breakdown-status.dto';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class BreakdownService {
@@ -18,6 +19,7 @@ export class BreakdownService {
     private breakdownRequestRepository: Repository<BreakdownRequest>,
     @InjectRepository(UserEntity)
     private userRepository: Repository<UserEntity>,
+    private notificationsService: NotificationsService,
   ) {}
 
   /**
@@ -140,6 +142,13 @@ export class BreakdownService {
 
     const updated = await this.breakdownRequestRepository.save(request);
 
+    // Send mechanic assigned notification to user
+    await this.notificationsService.sendMechanicAssigned(
+      request.userId,
+      request.id,
+      mechanic.name,
+    );
+
     return {
       ...updated,
       message: 'Mechanic assigned successfully',
@@ -171,6 +180,12 @@ export class BreakdownService {
 
     if (updateDto.status === BreakdownStatus.RESOLVED) {
       request.resolvedAt = new Date();
+      
+      // Send service completed notification
+      await this.notificationsService.sendServiceCompleted(
+        request.userId,
+        request.id,
+      );
     }
 
     const updated = await this.breakdownRequestRepository.save(request);

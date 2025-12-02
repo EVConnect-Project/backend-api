@@ -2,7 +2,18 @@ import { Injectable, Logger, HttpException, HttpStatus } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
+import { NotificationsService } from '../notifications/notifications.service';
 
+/**
+ * ChargingService handles OCPP charging station operations.
+ * 
+ * NOTE: Charging notifications (started, 80%, completed) should be triggered
+ * by OCPP webhooks from the ev-charging-service. Add webhook endpoints to
+ * receive these events and call:
+ * - notificationsService.sendChargingStarted()
+ * - notificationsService.sendCharging80Percent()
+ * - notificationsService.sendChargingCompleted()
+ */
 @Injectable()
 export class ChargingService {
   private readonly logger = new Logger(ChargingService.name);
@@ -12,6 +23,7 @@ export class ChargingService {
   constructor(
     private readonly httpService: HttpService,
     private readonly configService: ConfigService,
+    private readonly notificationsService: NotificationsService,
   ) {
     this.chargingServiceUrl = this.configService.get<string>(
       'CHARGING_SERVICE_URL',
@@ -283,6 +295,78 @@ export class ChargingService {
         error.response?.data?.error || 'Failed to set availability',
         error.response?.status || HttpStatus.INTERNAL_SERVER_ERROR,
       );
+    }
+  }
+
+  // OCPP Webhook Handlers
+  async handleSessionStartedWebhook(payload: any) {
+    try {
+      const { sessionId, userId, chargerId, chargerName, connectorId } = payload;
+
+      this.logger.log(`Session started webhook: ${sessionId} for user ${userId}`);
+
+      // Send notification to user
+      await this.notificationsService.sendChargingStarted(
+        userId,
+        sessionId,
+        chargerName || chargerId,
+        connectorId || 1,
+      );
+
+      return { success: true, message: 'Session started notification sent' };
+    } catch (error) {
+      this.logger.error('Failed to handle session started webhook', error.message);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async handleMeterValuesWebhook(payload: any) {
+    try {
+      const { sessionId, userId, chargerName, meterValues, targetKwh } = payload;
+
+      this.logger.log(`Meter values webhook: ${sessionId}, values: ${JSON.stringify(meterValues)}`);
+
+      // Check if charging reached 80%
+      const energyDelivered = meterValues?.energyActiveImportRegister || 0;
+      const target = targetKwh || 100; // Default target if not provided
+      const percentage = (energyDelivered / target) * 100;
+
+      if (percentage >= 80 && percentage < 85) {
+        // Send 80% notification (using narrow window to avoid duplicates)
+        await this.notificationsService.sendCharging80Percent(
+          userId,
+          chargerName,
+          chargerName,
+          sessionId,
+        );
+        this.logger.log(`80% notification sent for session ${sessionId}`);
+      }
+
+      return { success: true, message: 'Meter values processed', percentage };
+    } catch (error) {
+      this.logger.error('Failed to handle meter values webhook', error.message);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async handleSessionCompletedWebhook(payload: any) {
+    try {
+      const { sessionId, userId, chargerName, energyDelivered, duration, cost } = payload;
+
+      this.logger.log(`Session completed webhook: ${sessionId} for user ${userId}`);
+
+      // Send notification to user
+      await this.notificationsService.sendChargingCompleted(
+        userId,
+        chargerName,
+        chargerName,
+        sessionId,
+      );
+
+      return { success: true, message: 'Session completed notification sent' };
+    } catch (error) {
+      this.logger.error('Failed to handle session completed webhook', error.message);
+      return { success: false, error: error.message };
     }
   }
 }

@@ -5,6 +5,7 @@ import { BookingEntity } from './entities/booking.entity';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { Charger } from '../charger/entities/charger.entity';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { NotificationsService } from '../notifications/notifications.service';
 
 export interface BookingWarning {
   type: 'public_charger' | 'semi_public_charger' | 'no_occupancy_sensor' | 'requires_verification';
@@ -31,6 +32,7 @@ export class BookingsService {
     private bookingRepository: Repository<BookingEntity>,
     @InjectRepository(Charger)
     private chargerRepository: Repository<Charger>,
+    private notificationsService: NotificationsService,
   ) {}
 
   /**
@@ -163,6 +165,14 @@ export class BookingsService {
 
     this.logger.log(`Booking created: ${savedBooking.id} for charger ${chargerId} (${accessType}) by user ${userId}`);
 
+    // Send booking confirmation notification
+    await this.notificationsService.sendBookingConfirmed(
+      userId,
+      savedBooking.id,
+      charger.name || 'charging station',
+      start,
+    );
+
     // Return comprehensive response
     return {
       booking: savedBooking,
@@ -239,6 +249,51 @@ export class BookingsService {
   }
 
   /**
+   * Send booking reminder notifications 15 minutes before start time
+   * Runs every 5 minutes
+   */
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async handleBookingReminders() {
+    try {
+      // Find bookings starting in 13-17 minutes (15 min ± 2 min buffer for 5-min cron)
+      const now = new Date();
+      const reminderStart = new Date(now.getTime() + 13 * 60 * 1000);
+      const reminderEnd = new Date(now.getTime() + 17 * 60 * 1000);
+
+      const upcomingBookings = await this.bookingRepository
+        .createQueryBuilder('booking')
+        .leftJoinAndSelect('booking.charger', 'charger')
+        .where('booking.status IN (:...statuses)', { statuses: ['confirmed', 'pending'] })
+        .andWhere('booking.startTime >= :reminderStart', { reminderStart })
+        .andWhere('booking.startTime <= :reminderEnd', { reminderEnd })
+        .getMany();
+
+      for (const booking of upcomingBookings) {
+        const charger = booking.charger;
+        const minutesUntil = Math.round((booking.startTime.getTime() - now.getTime()) / 60000);
+
+        // Send reminder notification
+        await this.notificationsService.sendBookingReminder(
+          booking.userId,
+          booking.id,
+          charger.name || 'your charging station',
+          minutesUntil,
+        );
+
+        this.logger.log(
+          `Sent booking reminder for booking ${booking.id} (${minutesUntil} minutes until start)`
+        );
+      }
+
+      if (upcomingBookings.length > 0) {
+        this.logger.log(`Processed ${upcomingBookings.length} booking reminders`);
+      }
+    } catch (error) {
+      this.logger.error('Error processing booking reminders', error);
+    }
+  }
+
+  /**
    * Auto-cancel bookings that exceeded grace period without physical verification
    * Runs every 5 minutes
    */
@@ -274,9 +329,12 @@ export class BookingsService {
           `User ${booking.userId} did not verify within ${autoCancelMinutes} minutes`
         );
 
-        // TODO: Send push notification to user
-        // TODO: Update charger availability status
-        // TODO: Offer compensation (discount code) if it was a PRIVATE charger
+        // Send auto-cancel notification
+        await this.notificationsService.sendBookingAutoCancelled(
+          booking.userId,
+          booking.id,
+          charger.name || 'charging station',
+        );
       }
     }
 

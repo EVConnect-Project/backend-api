@@ -4,7 +4,9 @@ import { Repository } from 'typeorm';
 import { Charger } from './entities/charger.entity';
 import { CreateChargerDto } from './dto/create-charger.dto';
 import { UpdateChargerDto } from './dto/update-charger.dto';
+import { FilterChargersDto } from './dto/filter-chargers.dto';
 import { ChargerIntegrationService } from '../charger-integration/charger-integration.service';
+import { ChargersGateway } from './chargers.gateway';
 
 @Injectable()
 export class ChargerService {
@@ -13,6 +15,8 @@ export class ChargerService {
     private chargerRepository: Repository<Charger>,
     @Inject(forwardRef(() => ChargerIntegrationService))
     private integrationService: ChargerIntegrationService,
+    @Inject(forwardRef(() => ChargersGateway))
+    private chargersGateway: ChargersGateway,
   ) {}
 
   async create(createChargerDto: CreateChargerDto, ownerId: string): Promise<any> {
@@ -38,6 +42,13 @@ export class ChargerService {
     
     // Reload charger to get updated OCPP fields
     const updatedCharger = await this.findOne(savedCharger.id);
+    
+    // Broadcast new charger via WebSocket
+    try {
+      this.chargersGateway.broadcastChargerUpdate(updatedCharger, 'created');
+    } catch (error) {
+      console.error('Failed to broadcast new charger:', error);
+    }
     
     // Return charger with OCPP credentials
     return {
@@ -103,7 +114,12 @@ export class ChargerService {
     Object.assign(charger, updateChargerDto);
     const updatedCharger = await this.chargerRepository.save(charger);
     
-    // WebSocket broadcasting removed - implement REST-based notifications if needed
+    // Broadcast update via WebSocket
+    try {
+      this.chargersGateway.broadcastChargerUpdate(updatedCharger, 'updated');
+    } catch (error) {
+      console.error('Failed to broadcast charger update:', error);
+    }
     
     return updatedCharger;
   }
@@ -116,9 +132,14 @@ export class ChargerService {
       throw new ForbiddenException('You can only delete your own chargers');
     }
 
-    await this.chargerRepository.remove(charger);
+    // Broadcast deletion before removing
+    try {
+      this.chargersGateway.broadcastChargerUpdate(charger, 'deleted');
+    } catch (error) {
+      console.error('Failed to broadcast charger deletion:', error);
+    }
     
-    // WebSocket broadcasting removed - implement REST-based notifications if needed
+    await this.chargerRepository.remove(charger);
   }
 
   async findByOwner(ownerId: string): Promise<Charger[]> {
@@ -137,11 +158,118 @@ export class ChargerService {
   async updateStatus(id: string, newStatus: 'available' | 'in-use' | 'offline'): Promise<Charger> {
     const charger = await this.findOne(id);
     
+    const oldStatus = charger.status;
     charger.status = newStatus;
     const updatedCharger = await this.chargerRepository.save(charger);
     
-    // WebSocket broadcasting removed - implement REST-based notifications if needed
+    // Broadcast status change via WebSocket
+    try {
+      this.chargersGateway.broadcastChargerUpdate(updatedCharger, 'updated');
+      this.chargersGateway.broadcastAvailabilityChange(
+        updatedCharger.id, 
+        newStatus === 'available',
+        { lat: updatedCharger.lat, lng: updatedCharger.lng }
+      );
+    } catch (error) {
+      console.error('Failed to broadcast status change:', error);
+    }
     
     return updatedCharger;
+  }
+
+  /**
+   * Filter chargers with advanced criteria
+   */
+  async filterChargers(filters: FilterChargersDto): Promise<any> {
+    const query = this.chargerRepository.createQueryBuilder('charger')
+      .leftJoinAndSelect('charger.owner', 'owner');
+
+    // Location filters (if provided)
+    if (filters.lat && filters.lng) {
+      const radius = filters.radius || 10;
+      query.addSelect(
+        `( 6371 * acos( 
+          cos( radians(${filters.lat}) ) * 
+          cos( radians(charger.lat) ) * 
+          cos( radians(charger.lng) - radians(${filters.lng}) ) + 
+          sin( radians(${filters.lat}) ) * 
+          sin( radians(charger.lat) ) 
+        ) )`,
+        'distance'
+      );
+      query.having('distance < :radius', { radius });
+    }
+
+    // Power filters
+    if (filters.minPowerKw) {
+      query.andWhere('charger.powerKw >= :minPowerKw', { minPowerKw: filters.minPowerKw });
+    }
+    if (filters.maxPowerKw) {
+      query.andWhere('charger.powerKw <= :maxPowerKw', { maxPowerKw: filters.maxPowerKw });
+    }
+
+    // Speed type filters
+    if (filters.speedTypes && filters.speedTypes.length > 0) {
+      query.andWhere('charger.speedType IN (:...speedTypes)', { speedTypes: filters.speedTypes });
+    }
+
+    // Connector type filters
+    if (filters.connectorTypes && filters.connectorTypes.length > 0) {
+      query.andWhere('charger.connectorType IN (:...connectorTypes)', { connectorTypes: filters.connectorTypes });
+    }
+
+    // Price filters
+    if (filters.minPrice) {
+      query.andWhere('charger.pricePerKwh >= :minPrice', { minPrice: filters.minPrice });
+    }
+    if (filters.maxPrice) {
+      query.andWhere('charger.pricePerKwh <= :maxPrice', { maxPrice: filters.maxPrice });
+    }
+
+    // Availability filter
+    if (filters.availableNow) {
+      query.andWhere('charger.status = :status', { status: 'available' });
+    }
+
+    // Access type filters
+    if (filters.accessTypes && filters.accessTypes.length > 0) {
+      query.andWhere('charger.accessType IN (:...accessTypes)', { accessTypes: filters.accessTypes });
+    }
+
+    // Sorting
+    if (filters.sortBy) {
+      switch (filters.sortBy) {
+        case 'distance':
+          if (filters.lat && filters.lng) {
+            query.orderBy('distance', filters.sortOrder === 'desc' ? 'DESC' : 'ASC');
+          }
+          break;
+        case 'price':
+          query.orderBy('charger.pricePerKwh', filters.sortOrder === 'desc' ? 'DESC' : 'ASC');
+          break;
+        case 'power':
+          query.orderBy('charger.powerKw', filters.sortOrder === 'desc' ? 'DESC' : 'ASC');
+          break;
+        default:
+          query.orderBy('charger.createdAt', 'DESC');
+      }
+    } else {
+      query.orderBy('charger.createdAt', 'DESC');
+    }
+
+    // Pagination
+    const limit = filters.limit || 50;
+    const offset = filters.offset || 0;
+    query.take(limit).skip(offset);
+
+    const [chargers, total] = await query.getManyAndCount();
+
+    return {
+      data: chargers,
+      total,
+      limit,
+      offset,
+      hasMore: offset + chargers.length < total,
+    };
   }
 }

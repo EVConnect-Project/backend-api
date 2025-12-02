@@ -6,9 +6,13 @@ import { BreakdownRequest } from './entities/breakdown-request.entity';
 import { UserEntity } from '../users/entities/user.entity';
 import { MechanicApplication } from '../mechanic/entities/mechanic-application.entity';
 import { MechanicAccessGuard } from './guards/mechanic-access.guard';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([BreakdownRequest, UserEntity, MechanicApplication])],
+  imports: [
+    TypeOrmModule.forFeature([BreakdownRequest, UserEntity, MechanicApplication]),
+    NotificationsModule,
+  ],
   providers: [BreakdownService, MechanicAccessGuard],
   controllers: [BreakdownController],
   exports: [BreakdownService],

@@ -6,6 +6,7 @@ import { createHash } from 'crypto';
 import { PaymentEntity } from './entities/payment.entity';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { BookingEntity } from '../bookings/entities/booking.entity';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class PaymentsService {
@@ -22,6 +23,7 @@ export class PaymentsService {
     @InjectRepository(BookingEntity)
     private bookingRepository: Repository<BookingEntity>,
     private configService: ConfigService,
+    private notificationsService: NotificationsService,
   ) {
     this.payhereBaseUrl = this.configService.get<string>('PAYHERE_BASE_URL') || 'https://sandbox.payhere.lk';
     this.payhereMerchantId = this.configService.get<string>('PAYHERE_MERCHANT_ID') || 'MERCHANT_ID';
@@ -190,6 +192,15 @@ export class PaymentsService {
       });
     }
 
+    // Send payment success notification
+    if (booking) {
+      await this.notificationsService.sendPaymentSuccess(
+        booking.userId,
+        payment.amount,
+        payment.id,
+      );
+    }
+
     console.log(`Payment ${payment.id} succeeded. Booking ${payment.bookingId} confirmed.`);
   }
 
@@ -198,6 +209,20 @@ export class PaymentsService {
       status: 'failed',
       metadata: JSON.stringify({ payhereStatusCode: statusCode }),
     });
+
+    // Get booking to access userId
+    const booking = await this.bookingRepository.findOne({
+      where: { id: payment.bookingId },
+    });
+
+    // Send payment failed notification
+    if (booking) {
+      await this.notificationsService.sendPaymentFailed(
+        booking.userId,
+        payment.amount,
+        payment.id,
+      );
+    }
 
     console.log(`Payment ${payment.id} failed with status code: ${statusCode}`);
   }

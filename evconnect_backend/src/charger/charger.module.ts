@@ -5,6 +5,7 @@ import { ChargerController } from './charger.controller';
 import { Charger } from './entities/charger.entity';
 import { AuthModule } from '../auth/auth.module';
 import { ChargerIntegrationModule } from '../charger-integration/charger-integration.module';
+import { ChargersGateway } from './chargers.gateway';
 
 @Module({
   imports: [
@@ -13,7 +14,7 @@ import { ChargerIntegrationModule } from '../charger-integration/charger-integra
     forwardRef(() => ChargerIntegrationModule),
   ],
   controllers: [ChargerController],
-  providers: [ChargerService],
-  exports: [ChargerService],
+  providers: [ChargerService, ChargersGateway],
+  exports: [ChargerService, ChargersGateway],
 })
 export class ChargerModule {}

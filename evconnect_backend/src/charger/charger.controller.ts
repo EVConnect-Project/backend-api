@@ -19,6 +19,31 @@ export class ChargerController {
     return this.chargerService.findAll();
   }
 
+  @Get('filter')
+  filterChargers(@Query() filters: any) {
+    // Convert string query params to proper types
+    const filterDto = {
+      lat: filters.lat ? parseFloat(filters.lat) : undefined,
+      lng: filters.lng ? parseFloat(filters.lng) : undefined,
+      radius: filters.radius ? parseFloat(filters.radius) : undefined,
+      minPowerKw: filters.minPowerKw ? parseFloat(filters.minPowerKw) : undefined,
+      maxPowerKw: filters.maxPowerKw ? parseFloat(filters.maxPowerKw) : undefined,
+      speedTypes: filters.speedTypes ? (Array.isArray(filters.speedTypes) ? filters.speedTypes : [filters.speedTypes]) : undefined,
+      connectorTypes: filters.connectorTypes ? (Array.isArray(filters.connectorTypes) ? filters.connectorTypes : [filters.connectorTypes]) : undefined,
+      minPrice: filters.minPrice ? parseFloat(filters.minPrice) : undefined,
+      maxPrice: filters.maxPrice ? parseFloat(filters.maxPrice) : undefined,
+      availableNow: filters.availableNow === 'true',
+      accessTypes: filters.accessTypes ? (Array.isArray(filters.accessTypes) ? filters.accessTypes : [filters.accessTypes]) : undefined,
+      amenities: filters.amenities ? (Array.isArray(filters.amenities) ? filters.amenities : [filters.amenities]) : undefined,
+      sortBy: filters.sortBy || 'distance',
+      sortOrder: filters.sortOrder || 'asc',
+      limit: filters.limit ? parseInt(filters.limit) : 50,
+      offset: filters.offset ? parseInt(filters.offset) : 0,
+    };
+
+    return this.chargerService.filterChargers(filterDto);
+  }
+
   @Get('nearby')
   findNearby(
     @Query('lat') lat: string,

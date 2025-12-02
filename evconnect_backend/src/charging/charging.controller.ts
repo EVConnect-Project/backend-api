@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { ChargingService } from './charging.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { WebhookAuthGuard } from './guards/webhook-auth.guard';
 
 @Controller('charging')
 @UseGuards(JwtAuthGuard)
@@ -117,5 +118,27 @@ export class ChargingController {
     @Body('type') type: 'Operative' | 'Inoperative',
   ) {
     return this.chargingService.setAvailability(chargerId, connectorId, type);
+  }
+
+  // OCPP Webhooks - API key authenticated endpoints for ev-charging-service callbacks
+  @Post('webhooks/session-started')
+  @UseGuards(WebhookAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async handleSessionStarted(@Body() payload: any) {
+    return this.chargingService.handleSessionStartedWebhook(payload);
+  }
+
+  @Post('webhooks/meter-values')
+  @UseGuards(WebhookAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async handleMeterValues(@Body() payload: any) {
+    return this.chargingService.handleMeterValuesWebhook(payload);
+  }
+
+  @Post('webhooks/session-completed')
+  @UseGuards(WebhookAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async handleSessionCompleted(@Body() payload: any) {
+    return this.chargingService.handleSessionCompletedWebhook(payload);
   }
 }
