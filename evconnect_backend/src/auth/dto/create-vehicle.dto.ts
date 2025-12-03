@@ -1,4 +1,13 @@
-import { IsString, IsNumber, IsNotEmpty, Min, Max } from 'class-validator';
+import { IsString, IsNumber, IsNotEmpty, Min, Max, IsOptional, IsIn, IsArray, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+
+class ChargingCurvePoint {
+  @IsNumber()
+  soc: number; // State of charge percentage
+
+  @IsNumber()
+  power: number; // Charging power in kW
+}
 
 export class CreateVehicleDto {
   @IsString()
@@ -25,4 +34,26 @@ export class CreateVehicleDto {
   @IsNumber()
   @Min(1)
   rangeKm: number;
+
+  // Trip Planning Fields
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  averageConsumption?: number; // Wh/km
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  efficiency?: number; // km/kWh
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ChargingCurvePoint)
+  chargingCurve?: ChargingCurvePoint[];
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['eco', 'normal', 'sport'])
+  drivingMode?: 'eco' | 'normal' | 'sport';
 }
