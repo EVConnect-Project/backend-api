@@ -7,6 +7,9 @@ import joblib
 import os
 from datetime import datetime
 
+# Import trip planning module
+from trip_planner import TripPlanRequest, TripPlan, trip_planner
+
 app = FastAPI(
     title="EVConnect AI Services",
     description="ML-powered route optimization and charging stop prediction",
@@ -287,7 +290,7 @@ async def root():
         "status": "running",
         "version": "1.0.0",
         "model_loaded": ml_model is not None,
-        "endpoints": ["/predict/route", "/health", "/docs"]
+        "endpoints": ["/predict/route", "/trip/plan", "/health", "/docs"]
     }
 
 @app.get("/health")
@@ -299,6 +302,31 @@ async def health_check():
         "scaler_status": "loaded" if scaler is not None else "mock",
         "timestamp": datetime.utcnow().isoformat()
     }
+
+@app.post("/trip/plan", response_model=TripPlan)
+async def plan_trip(request: TripPlanRequest):
+    """
+    Create an AI-powered trip plan with optimal charging stops
+    
+    This endpoint analyzes your trip requirements and provides:
+    - Optimal route with detailed segments
+    - Smart charging stop recommendations
+    - Battery consumption predictions
+    - Weather-adjusted energy estimates
+    - Safety alerts and recommendations
+    
+    Features:
+    - Multi-stop route optimization
+    - Real-time weather integration
+    - Elevation-aware consumption calculation
+    - Driving mode adjustment (eco/normal/sport)
+    - Connector-type matching for chargers
+    """
+    try:
+        trip_plan = await trip_planner.create_trip_plan(request)
+        return trip_plan
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error creating trip plan: {str(e)}")
 
 @app.post("/predict/route", response_model=RouteResponse)
 async def predict_route(request: RouteRequest):
