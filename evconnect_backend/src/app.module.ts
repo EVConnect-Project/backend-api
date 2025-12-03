@@ -25,6 +25,7 @@ import { ReviewsModule } from './reviews/reviews.module';
 import { FavoritesModule } from './favorites/favorites.module';
 import { TripPlannerModule } from './trip-planner/trip-planner.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { TripModule } from './trip/trip.module';
 
 @Module({
   imports: [
@@ -69,6 +70,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     FavoritesModule,
     TripPlannerModule,
     NotificationsModule,
+    TripModule,
   ],
   controllers: [AppController],
   providers: [AppService],
