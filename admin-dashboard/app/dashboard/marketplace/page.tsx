@@ -16,7 +16,8 @@ import {
   FileText,
   ShoppingBag,
   Eye,
-  DollarSign
+  DollarSign,
+  Trash2
 } from 'lucide-react';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import { useToast } from '@/components/ToastProvider';
@@ -132,6 +133,24 @@ export default function MarketplaceAdminDashboard() {
     } catch (err: any) {
       console.error('Failed to reject listing:', err);
       toast.error(err.response?.data?.message || 'Failed to reject listing');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Delete listing
+  const handleDelete = async (listingId: string, listingTitle: string) => {
+    if (!confirm(`Are you sure you want to permanently delete "${listingTitle}"? This action cannot be undone.`)) return;
+
+    setActionLoading(listingId);
+    try {
+      await api.delete(`/admin/marketplace/listings/${listingId}`);
+      toast.success('Listing deleted successfully');
+      setDetailsOpen(false);
+      await fetchListings();
+    } catch (err: any) {
+      console.error('Failed to delete listing:', err);
+      toast.error(err.response?.data?.message || 'Failed to delete listing');
     } finally {
       setActionLoading(null);
     }
@@ -364,6 +383,16 @@ export default function MarketplaceAdminDashboard() {
                                 </button>
                               </>
                             )}
+
+                            {/* Delete Button - Available for all listings */}
+                            <button
+                              onClick={() => handleDelete(listing.id, listing.title)}
+                              className="inline-flex items-center px-3 py-1.5 text-xs font-semibold text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/50 transition-all"
+                              title="Delete Listing"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                              Delete
+                            </button>
                           </div>
                         )}
                       </td>
@@ -520,6 +549,14 @@ export default function MarketplaceAdminDashboard() {
               </div>
 
               <div className="flex gap-3 mt-6 pt-6 border-t border-slate-200 dark:border-slate-700">
+                <Button
+                  onClick={() => handleDelete(selectedListing.id, selectedListing.title)}
+                  disabled={actionLoading === selectedListing.id}
+                  className="flex-1 bg-red-600 hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-700"
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  {actionLoading === selectedListing.id ? 'Deleting...' : 'Delete Listing'}
+                </Button>
                 <Button
                   onClick={() => setDetailsOpen(false)}
                   variant="outline"

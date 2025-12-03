@@ -34,6 +34,9 @@ export class MarketplaceListing {
   @Column({ type: 'float', nullable: true })
   long: number;
 
+  @Column({ name: 'sellerId' })
+  sellerId: string;
+
   @ManyToOne(() => UserEntity)
   @JoinColumn({ name: 'sellerId' })
   seller: UserEntity;

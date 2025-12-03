@@ -20,6 +20,8 @@ export class MarketplaceService {
   ) {}
 
   async createListing(dto: CreateListingDto, sellerId: string): Promise<MarketplaceListing> {
+    console.log('📝 Creating listing for seller:', sellerId);
+    
     const listing = this.listingRepository.create({
       title: dto.title,
       description: dto.description,
@@ -29,11 +31,17 @@ export class MarketplaceService {
       city: dto.city,
       lat: dto.lat,
       long: dto.long,
-      seller: { id: sellerId } as any,
+      sellerId: sellerId,
       status: 'pending',
     });
 
     const savedListing = await this.listingRepository.save(listing);
+    console.log('✅ Listing created:', { 
+      id: savedListing.id, 
+      sellerId: savedListing.sellerId,
+      status: savedListing.status,
+      title: savedListing.title 
+    });
 
     // Create images if provided
     if (dto.images && dto.images.length > 0) {
@@ -75,7 +83,7 @@ export class MarketplaceService {
 
     // If listing is not approved, only seller can view it
     if (listing.status !== 'approved') {
-      if (!requestingUserId || listing.seller.id !== requestingUserId) {
+      if (!requestingUserId || listing.sellerId !== requestingUserId) {
         throw new NotFoundException(`Listing with ID ${id} not found`);
       }
     }
@@ -86,15 +94,28 @@ export class MarketplaceService {
   async getUserListings(userId: string): Promise<MarketplaceListing[]> {
     console.log('🔍 Getting listings for userId:', userId);
     
-    const listings = await this.listingRepository.find({
-      where: { seller: { id: userId } },
-      relations: ['images', 'seller'],
-      order: { createdAt: 'DESC' },
-    });
+    // Use QueryBuilder with sellerId column for more reliable querying
+    const listings = await this.listingRepository
+      .createQueryBuilder('listing')
+      .leftJoinAndSelect('listing.seller', 'seller')
+      .leftJoinAndSelect('listing.images', 'images')
+      .where('listing.sellerId = :userId', { userId })
+      .orderBy('listing.createdAt', 'DESC')
+      .getMany();
     
     console.log(`📋 Found ${listings.length} listings for user ${userId}`);
     if (listings.length > 0) {
-      console.log('   First listing:', { id: listings[0].id, title: listings[0].title, sellerId: listings[0].seller?.id });
+      const statusCounts = listings.reduce((acc, l) => {
+        acc[l.status] = (acc[l.status] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+      console.log('   Status breakdown:', statusCounts);
+      console.log('   First listing:', { 
+        id: listings[0].id, 
+        title: listings[0].title, 
+        status: listings[0].status,
+        sellerId: listings[0].sellerId 
+      });
     }
     
     return listings;
@@ -107,8 +128,6 @@ export class MarketplaceService {
   ): Promise<MarketplaceListing> {
     const listing = await this.listingRepository
       .createQueryBuilder('listing')
-      .leftJoin('listing.seller', 'seller')
-      .addSelect(['seller.id', 'seller.name', 'seller.email'])
       .leftJoinAndSelect('listing.images', 'images')
       .where('listing.id = :id', { id })
       .getOne();
@@ -118,7 +137,7 @@ export class MarketplaceService {
     }
 
     // Only seller can update their own listing
-    if (listing.seller.id !== userId) {
+    if (listing.sellerId !== userId) {
       throw new ForbiddenException('You can only update your own listings');
     }
 
@@ -150,7 +169,6 @@ export class MarketplaceService {
     
     const listing = await this.listingRepository.findOne({
       where: { id },
-      relations: ['seller'],
     });
 
     if (!listing) {
@@ -158,40 +176,44 @@ export class MarketplaceService {
       throw new NotFoundException(`Listing with ID ${id} not found`);
     }
 
-    console.log(`📋 Listing found: ${listing.title}, status: ${listing.status}, seller: ${listing.seller.id}`);
+    console.log(`📋 Listing found: ${listing.title}, status: ${listing.status}, sellerId: ${listing.sellerId}`);
 
     // Only seller can delete their own listing
-    if (listing.seller.id !== userId) {
-      console.log(`❌ Permission denied: seller ${listing.seller.id} !== user ${userId}`);
+    if (listing.sellerId !== userId) {
+      console.log(`❌ Permission denied: seller ${listing.sellerId} !== user ${userId}`);
       throw new ForbiddenException('You can only delete your own listings');
     }
 
-    console.log(`✅ Deleting listing ${id}...`);
+    console.log(`✅ Permanently deleting listing ${id} (${listing.title})...`);
     await this.listingRepository.remove(listing);
     // Images will be cascade deleted due to onDelete: 'CASCADE'
 
-    console.log(`✅ Listing ${id} deleted successfully`);
+    console.log(`✅ Listing ${id} permanently deleted from database`);
     return { message: 'Listing deleted successfully' };
   }
 
   async adminDeleteListing(id: string): Promise<{ message: string }> {
+    console.log(`🛡️ Admin deleting listing: ${id}`);
+    
     const listing = await this.listingRepository.findOne({
       where: { id },
     });
 
     if (!listing) {
+      console.log(`❌ Listing ${id} not found for admin deletion`);
       throw new NotFoundException(`Listing with ID ${id} not found`);
     }
 
+    console.log(`✅ Admin permanently deleting listing: ${listing.title} (status: ${listing.status})`);
     await this.listingRepository.remove(listing);
+    console.log(`✅ Listing ${id} permanently removed from database by admin`);
+    
     return { message: 'Listing deleted by admin' };
   }
 
   async markListingAsSold(id: string, userId: string): Promise<MarketplaceListing> {
     const listing = await this.listingRepository
       .createQueryBuilder('listing')
-      .leftJoin('listing.seller', 'seller')
-      .addSelect(['seller.id', 'seller.name', 'seller.email'])
       .leftJoinAndSelect('listing.images', 'images')
       .where('listing.id = :id', { id })
       .getOne();
@@ -200,7 +222,7 @@ export class MarketplaceService {
       throw new NotFoundException(`Listing with ID ${id} not found`);
     }
 
-    if (listing.seller.id !== userId) {
+    if (listing.sellerId !== userId) {
       throw new ForbiddenException('Only the seller can mark their listing as sold');
     }
 
@@ -213,6 +235,8 @@ export class MarketplaceService {
   }
 
   async adminApproveListing(id: string): Promise<MarketplaceListing> {
+    console.log(`✅ Admin approving listing: ${id}`);
+    
     const listing = await this.listingRepository
       .createQueryBuilder('listing')
       .leftJoin('listing.seller', 'seller')
@@ -229,8 +253,10 @@ export class MarketplaceService {
       throw new NotFoundException('Seller information not found');
     }
     
+    console.log(`📋 Current status: ${listing.status} → Changing to: approved`);
     listing.status = 'approved';
     const savedListing = await this.listingRepository.save(listing);
+    console.log(`✅ Listing ${id} saved with status: ${savedListing.status}`);
     
     // Notify seller about approval
     await this.notificationService.notifyListingApproved(savedListing);

@@ -11,7 +11,8 @@ import {
   Menu,
   LayoutDashboard,
   Wrench,
-  ShoppingBag
+  ShoppingBag,
+  MessageCircle
 } from 'lucide-react';
 import { verifyAdminToken } from '@/lib/api';
 import { ToastProvider } from '@/components/ToastProvider';
@@ -153,6 +154,13 @@ function DashboardContent({
             active={pathname === '/dashboard/analytics'}
             collapsed={!sidebarOpen}
             onClick={() => router.push('/dashboard/analytics')}
+          />
+          <NavItem
+            icon={MessageCircle}
+            label="Support"
+            active={pathname?.startsWith('/dashboard/support')}
+            collapsed={!sidebarOpen}
+            onClick={() => router.push('/dashboard/support')}
           />
         </nav>
 

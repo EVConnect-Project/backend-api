@@ -49,12 +49,21 @@ export class VehicleProfileService {
     const isPrimary = existingVehicles === 0;
 
     const vehicle = this.vehicleProfileRepository.create({
-      ...createVehicleDto,
       userId,
       isPrimary,
+      make: createVehicleDto.make,
+      model: createVehicleDto.model,
+      year: createVehicleDto.year,
+      batteryCapacity: createVehicleDto.batteryCapacity,
+      connectorType: createVehicleDto.connectorType,
+      rangeKm: createVehicleDto.rangeKm,
+      averageConsumption: createVehicleDto.averageConsumption,
+      efficiency: createVehicleDto.efficiency,
+      chargingCurve: createVehicleDto.chargingCurve as any,
+      drivingMode: createVehicleDto.drivingMode,
     });
 
-    return this.vehicleProfileRepository.save(vehicle);
+    return await this.vehicleProfileRepository.save(vehicle);
   }
 
   async update(id: string, userId: string, updateVehicleDto: UpdateVehicleDto): Promise<VehicleProfile> {

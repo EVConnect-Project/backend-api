@@ -1,81 +1,90 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { MarketplaceListing } from './entities/marketplace-listing.entity';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class NotificationService {
+  private readonly logger = new Logger(NotificationService.name);
+
+  constructor(
+    private readonly notificationsService: NotificationsService,
+  ) {}
+
   /**
    * Notify seller when their listing is approved
-   * TODO: Integrate with email service or push notification service
    */
   async notifyListingApproved(listing: MarketplaceListing): Promise<void> {
-    console.log('='.repeat(60));
-    console.log('📧 NOTIFICATION: Listing Approved');
-    console.log('='.repeat(60));
-    console.log(`Listing ID: ${listing.id}`);
-    console.log(`Title: ${listing.title}`);
-    console.log(`Seller: ${listing.seller?.name || listing.seller?.email || 'Unknown'}`);
-    console.log(`Seller Email: ${listing.seller?.email || 'N/A'}`);
-    console.log(`Status: ${listing.status}`);
-    console.log(`Message: Congratulations! Your listing "${listing.title}" has been approved and is now visible in the marketplace.`);
-    console.log('='.repeat(60));
+    this.logger.log('='.repeat(60));
+    this.logger.log('📧 NOTIFICATION: Listing Approved');
+    this.logger.log('='.repeat(60));
+    this.logger.log(`Listing ID: ${listing.id}`);
+    this.logger.log(`Title: ${listing.title}`);
+    this.logger.log(`Seller: ${listing.seller?.name || listing.seller?.email || 'Unknown'}`);
+    this.logger.log(`Seller Email: ${listing.seller?.email || 'N/A'}`);
+    this.logger.log(`Status: ${listing.status}`);
+    this.logger.log(`Message: Congratulations! Your listing "${listing.title}" has been approved and is now visible in the marketplace.`);
+    this.logger.log('='.repeat(60));
     
-    // TODO: Send actual email notification
-    // await this.emailService.send({
-    //   to: listing.seller.email,
-    //   subject: 'Your Listing Has Been Approved',
-    //   template: 'listing-approved',
-    //   context: {
-    //     sellerName: listing.seller.name,
-    //     listingTitle: listing.title,
-    //     listingUrl: `${process.env.FRONTEND_URL}/marketplace/details/${listing.id}`,
-    //   },
-    // });
-    
-    // TODO: Send push notification
-    // await this.pushNotificationService.send({
-    //   userId: listing.seller.id,
-    //   title: 'Listing Approved',
-    //   body: `Your listing "${listing.title}" is now live!`,
-    //   data: { listingId: listing.id, type: 'listing_approved' },
-    // });
+    // Send push notification to seller
+    if (listing.seller?.id) {
+      try {
+        await this.notificationsService.sendToUser(
+          listing.seller.id,
+          'marketplace',
+          {
+            title: '✅ Listing Approved',
+            body: `Your listing "${listing.title}" has been approved and is now live in the marketplace!`,
+            data: {
+              listingId: listing.id,
+              type: 'listing_approved',
+              action: 'view_listing',
+            },
+          },
+        );
+        this.logger.log(`✅ Push notification sent to seller ${listing.seller.id}`);
+      } catch (error) {
+        this.logger.error('Failed to send push notification:', error);
+      }
+    }
   }
 
   /**
    * Notify seller when their listing is rejected
-   * TODO: Integrate with email service or push notification service
    */
   async notifyListingRejected(listing: MarketplaceListing, reason: string): Promise<void> {
-    console.log('='.repeat(60));
-    console.log('📧 NOTIFICATION: Listing Rejected');
-    console.log('='.repeat(60));
-    console.log(`Listing ID: ${listing.id}`);
-    console.log(`Title: ${listing.title}`);
-    console.log(`Seller: ${listing.seller?.name || listing.seller?.email || 'Unknown'}`);
-    console.log(`Seller Email: ${listing.seller?.email || 'N/A'}`);
-    console.log(`Status: ${listing.status}`);
-    console.log(`Reason: ${reason}`);
-    console.log(`Message: Your listing "${listing.title}" was not approved. Please review the feedback and resubmit.`);
-    console.log('='.repeat(60));
+    this.logger.log('='.repeat(60));
+    this.logger.log('📧 NOTIFICATION: Listing Rejected');
+    this.logger.log('='.repeat(60));
+    this.logger.log(`Listing ID: ${listing.id}`);
+    this.logger.log(`Title: ${listing.title}`);
+    this.logger.log(`Seller: ${listing.seller?.name || listing.seller?.email || 'Unknown'}`);
+    this.logger.log(`Seller Email: ${listing.seller?.email || 'N/A'}`);
+    this.logger.log(`Status: ${listing.status}`);
+    this.logger.log(`Reason: ${reason}`);
+    this.logger.log(`Message: Your listing "${listing.title}" was not approved. Please review the feedback and resubmit.`);
+    this.logger.log('='.repeat(60));
     
-    // TODO: Send actual email notification
-    // await this.emailService.send({
-    //   to: listing.seller.email,
-    //   subject: 'Listing Review Update',
-    //   template: 'listing-rejected',
-    //   context: {
-    //     sellerName: listing.seller.name,
-    //     listingTitle: listing.title,
-    //     reason: reason,
-    //     editListingUrl: `${process.env.FRONTEND_URL}/marketplace/my-listings`,
-    //   },
-    // });
-    
-    // TODO: Send push notification
-    // await this.pushNotificationService.send({
-    //   userId: listing.seller.id,
-    //   title: 'Listing Needs Review',
-    //   body: `Your listing "${listing.title}" requires changes.`,
-    //   data: { listingId: listing.id, type: 'listing_rejected', reason },
-    // });
+    // Send push notification to seller
+    if (listing.seller?.id) {
+      try {
+        await this.notificationsService.sendToUser(
+          listing.seller.id,
+          'marketplace',
+          {
+            title: '❌ Listing Not Approved',
+            body: `Your listing "${listing.title}" was not approved. Reason: ${reason}`,
+            data: {
+              listingId: listing.id,
+              type: 'listing_rejected',
+              reason,
+              action: 'view_my_listings',
+            },
+          },
+        );
+        this.logger.log(`✅ Push notification sent to seller ${listing.seller.id}`);
+      } catch (error) {
+        this.logger.error('Failed to send push notification:', error);
+      }
+    }
   }
 }

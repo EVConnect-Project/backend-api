@@ -26,6 +26,7 @@ import { FavoritesModule } from './favorites/favorites.module';
 import { TripPlannerModule } from './trip-planner/trip-planner.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { TripModule } from './trip/trip.module';
+import { SupportModule } from './support/support.module';
 
 @Module({
   imports: [
@@ -71,6 +72,7 @@ import { TripModule } from './trip/trip.module';
     TripPlannerModule,
     NotificationsModule,
     TripModule,
+    SupportModule,
   ],
   controllers: [AppController],
   providers: [AppService],
@@ -97,11 +99,21 @@ export class AppModule implements OnModuleInit {
           "batteryCapacity" DECIMAL(10, 2) NOT NULL CHECK ("batteryCapacity" > 0),
           "connectorType" VARCHAR(50) NOT NULL,
           "rangeKm" DECIMAL(10, 2) NOT NULL CHECK ("rangeKm" > 0),
+          "averageConsumption" DECIMAL(10, 2),
+          "efficiency" DECIMAL(10, 2),
+          "chargingCurve" JSONB,
+          "drivingMode" VARCHAR(20) DEFAULT 'normal',
           "isPrimary" BOOLEAN DEFAULT FALSE,
           "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
       `);
+      
+      // Add missing columns to existing table if they don't exist
+      await queryRunner.query(`ALTER TABLE vehicle_profiles ADD COLUMN IF NOT EXISTS "averageConsumption" DECIMAL(10, 2)`);
+      await queryRunner.query(`ALTER TABLE vehicle_profiles ADD COLUMN IF NOT EXISTS "efficiency" DECIMAL(10, 2)`);
+      await queryRunner.query(`ALTER TABLE vehicle_profiles ADD COLUMN IF NOT EXISTS "chargingCurve" JSONB`);
+      await queryRunner.query(`ALTER TABLE vehicle_profiles ADD COLUMN IF NOT EXISTS "drivingMode" VARCHAR(20) DEFAULT 'normal'`);
       
       await queryRunner.query(`CREATE INDEX IF NOT EXISTS idx_vehicle_profiles_user_id ON vehicle_profiles("userId")`);
       await queryRunner.query(`CREATE INDEX IF NOT EXISTS idx_vehicle_profiles_is_primary ON vehicle_profiles("isPrimary")`);

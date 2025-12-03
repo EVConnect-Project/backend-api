@@ -1,5 +1,5 @@
 import { Controller, Post, Body, UseGuards, Get, Param } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { TripService } from './trip.service';
 import { CreateTripPlanDto } from './dto/create-trip-plan.dto';
 import { TripPlanResponseDto } from './dto/trip-plan-response.dto';
