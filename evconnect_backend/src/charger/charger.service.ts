@@ -63,6 +63,7 @@ export class ChargerService {
 
   async findAll(): Promise<Charger[]> {
     return this.chargerRepository.find({
+      where: { verified: true },
       relations: ['owner'],
       order: { createdAt: 'DESC' },
     });
@@ -95,6 +96,7 @@ export class ChargerService {
             sin( radians(lat) ) 
           ) ) AS distance 
         FROM chargers
+        WHERE verified = true
       ) AS chargers_with_distance
       WHERE distance < $3 
       ORDER BY distance
@@ -182,7 +184,8 @@ export class ChargerService {
    */
   async filterChargers(filters: FilterChargersDto): Promise<any> {
     const query = this.chargerRepository.createQueryBuilder('charger')
-      .leftJoinAndSelect('charger.owner', 'owner');
+      .leftJoinAndSelect('charger.owner', 'owner')
+      .where('charger.verified = :verified', { verified: true });
 
     // Location filters (if provided)
     if (filters.lat && filters.lng) {
