@@ -290,4 +290,46 @@ export class PaymentsService {
 
     return this.findOne(paymentId);
   }
+
+  async findUserTransactions(userId: string, filters?: {
+    status?: string;
+    startDate?: Date;
+    endDate?: Date;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ transactions: PaymentEntity[]; total: number }> {
+    const query = this.paymentRepository
+      .createQueryBuilder('payment')
+      .leftJoinAndSelect('payment.booking', 'booking')
+      .leftJoinAndSelect('booking.charger', 'charger')
+      .where('booking.userId = :userId', { userId });
+
+    if (filters?.status) {
+      query.andWhere('payment.status = :status', { status: filters.status });
+    }
+
+    if (filters?.startDate) {
+      query.andWhere('payment.createdAt >= :startDate', { startDate: filters.startDate });
+    }
+
+    if (filters?.endDate) {
+      query.andWhere('payment.createdAt <= :endDate', { endDate: filters.endDate });
+    }
+
+    query.orderBy('payment.createdAt', 'DESC');
+
+    const total = await query.getCount();
+
+    if (filters?.limit) {
+      query.take(filters.limit);
+    }
+
+    if (filters?.offset) {
+      query.skip(filters.offset);
+    }
+
+    const transactions = await query.getMany();
+
+    return { transactions, total };
+  }
 }

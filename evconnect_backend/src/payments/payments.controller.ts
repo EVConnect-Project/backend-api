@@ -4,6 +4,7 @@ import {
   Post,
   Body,
   Param,
+  Query,
   UseGuards,
   Request,
   ValidationPipe,
@@ -63,6 +64,26 @@ export class PaymentsController {
   @UseGuards(JwtAuthGuard)
   findByBooking(@Param('bookingId') bookingId: string) {
     return this.paymentsService.findByBooking(bookingId);
+  }
+
+  @Get('user/transactions')
+  @UseGuards(JwtAuthGuard)
+  getUserTransactions(
+    @Request() req,
+    @Query('status') status?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    const filters = {
+      status,
+      startDate: startDate ? new Date(startDate) : undefined,
+      endDate: endDate ? new Date(endDate) : undefined,
+      limit: limit ? parseInt(limit) : 50,
+      offset: offset ? parseInt(offset) : 0,
+    };
+    return this.paymentsService.findUserTransactions(req.user.userId, filters);
   }
 
   @Post(':id/refund')
