@@ -48,57 +48,7 @@ export class PaymentsController {
     return this.paymentsService.handleWebhook(payload);
   }
 
-  @Get()
-  @UseGuards(JwtAuthGuard)
-  findAll() {
-    return this.paymentsService.findAll();
-  }
-
-  @Get(':id')
-  @UseGuards(JwtAuthGuard)
-  findOne(@Param('id') id: string) {
-    return this.paymentsService.findOne(id);
-  }
-
-  @Get('booking/:bookingId')
-  @UseGuards(JwtAuthGuard)
-  findByBooking(@Param('bookingId') bookingId: string) {
-    return this.paymentsService.findByBooking(bookingId);
-  }
-
-  @Get('user/transactions')
-  @UseGuards(JwtAuthGuard)
-  getUserTransactions(
-    @Request() req,
-    @Query('status') status?: string,
-    @Query('startDate') startDate?: string,
-    @Query('endDate') endDate?: string,
-    @Query('limit') limit?: string,
-    @Query('offset') offset?: string,
-  ) {
-    const filters = {
-      status,
-      startDate: startDate ? new Date(startDate) : undefined,
-      endDate: endDate ? new Date(endDate) : undefined,
-      limit: limit ? parseInt(limit) : 50,
-      offset: offset ? parseInt(offset) : 0,
-    };
-    return this.paymentsService.findUserTransactions(req.user.userId, filters);
-  }
-
-  @Post(':id/refund')
-  @UseGuards(JwtAuthGuard)
-  refundPayment(@Param('id') id: string) {
-    return this.paymentsService.refundPayment(id);
-  }
-
-  @Post(':id/confirm')
-  @UseGuards(JwtAuthGuard)
-  confirmPayment(@Param('id') id: string) {
-    return this.paymentsService.confirmPayment(id);
-  }
-
-  // Payment Methods endpoints
+  // Payment Methods endpoints - MUST come before :id routes to avoid route conflicts
   @Post('methods')
   @UseGuards(JwtAuthGuard)
   createPaymentMethod(
@@ -181,4 +131,58 @@ export class PaymentsController {
   removePaymentPin(@Request() req) {
     return this.paymentSettingsService.removePaymentPin(req.user.userId);
   }
+
+  // Specific payment transaction routes - MUST come before generic :id route
+  @Get('booking/:bookingId')
+  @UseGuards(JwtAuthGuard)
+  findByBooking(@Param('bookingId') bookingId: string) {
+    return this.paymentsService.findByBooking(bookingId);
+  }
+
+  @Get('user/transactions')
+  @UseGuards(JwtAuthGuard)
+  getUserTransactions(
+    @Request() req,
+    @Query('status') status?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    const filters = {
+      status,
+      startDate: startDate ? new Date(startDate) : undefined,
+      endDate: endDate ? new Date(endDate) : undefined,
+      limit: limit ? parseInt(limit) : 50,
+      offset: offset ? parseInt(offset) : 0,
+    };
+    return this.paymentsService.findUserTransactions(req.user.userId, filters);
+  }
+
+  @Post(':id/refund')
+  @UseGuards(JwtAuthGuard)
+  refundPayment(@Param('id') id: string) {
+    return this.paymentsService.refundPayment(id);
+  }
+
+  @Post(':id/confirm')
+  @UseGuards(JwtAuthGuard)
+  confirmPayment(@Param('id') id: string) {
+    return this.paymentsService.confirmPayment(id);
+  }
+
+  // Generic payment routes - MUST come LAST to avoid catching specific routes
+  @Get()
+  @UseGuards(JwtAuthGuard)
+  findAll() {
+    return this.paymentsService.findAll();
+  }
+
+  @Get(':id')
+  @UseGuards(JwtAuthGuard)
+  findOne(@Param('id') id: string) {
+    return this.paymentsService.findOne(id);
+  }
+
+  // Duplicate Payment Methods endpoints removed - already defined above
 }
