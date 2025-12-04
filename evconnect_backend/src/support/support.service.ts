@@ -16,13 +16,29 @@ export class SupportService {
     createReportDto: CreateReportDto,
     userId?: string,
   ): Promise<SupportReport> {
-    const report = this.supportReportRepository.create({
-      ...createReportDto,
+    console.log('🔧 Support Service - Creating report:', {
+      dto: createReportDto,
       userId,
-      status: ReportStatus.PENDING,
     });
 
-    return await this.supportReportRepository.save(report);
+    try {
+      const report = this.supportReportRepository.create({
+        category: createReportDto.category,
+        title: createReportDto.title,
+        description: createReportDto.description,
+        userId,
+        status: ReportStatus.PENDING,
+      });
+
+      console.log('💾 Saving support report...');
+      const savedReport = await this.supportReportRepository.save(report);
+      console.log('✅ Support report saved:', savedReport.id);
+      
+      return savedReport;
+    } catch (error) {
+      console.error('❌ Error creating support report:', error);
+      throw error;
+    }
   }
 
   async findAll(): Promise<SupportReport[]> {

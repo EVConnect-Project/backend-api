@@ -3,6 +3,9 @@ import { ChargerService } from './charger.service';
 import { CreateChargerDto } from './dto/create-charger.dto';
 import { UpdateChargerDto } from './dto/update-charger.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { UpdateBookingModeDto } from './dto/update-booking-mode.dto';
+import { UpdateChargerStatusDto } from './dto/update-charger-status.dto';
+import { BookingMode } from './enums/booking-mode.enum';
 
 @Controller('chargers')
 export class ChargerController {
@@ -34,6 +37,7 @@ export class ChargerController {
       maxPrice: filters.maxPrice ? parseFloat(filters.maxPrice) : undefined,
       availableNow: filters.availableNow === 'true',
       accessTypes: filters.accessTypes ? (Array.isArray(filters.accessTypes) ? filters.accessTypes : [filters.accessTypes]) : undefined,
+      bookingModes: filters.bookingModes ? (Array.isArray(filters.bookingModes) ? filters.bookingModes : filters.bookingModes.split(',')) : undefined,
       amenities: filters.amenities ? (Array.isArray(filters.amenities) ? filters.amenities : [filters.amenities]) : undefined,
       sortBy: filters.sortBy || 'distance',
       sortOrder: filters.sortOrder || 'asc',
@@ -82,5 +86,44 @@ export class ChargerController {
   @UseGuards(JwtAuthGuard)
   remove(@Param('id') id: string, @Request() req) {
     return this.chargerService.remove(id, req.user.userId);
+  }
+
+  @Patch(':id/booking-mode')
+  @UseGuards(JwtAuthGuard)
+  updateBookingMode(
+    @Param('id') id: string,
+    @Body(ValidationPipe) updateDto: UpdateBookingModeDto,
+    @Request() req,
+  ) {
+    return this.chargerService.updateBookingMode(id, updateDto, req.user.userId);
+  }
+
+  @Patch(':id/status')
+  @UseGuards(JwtAuthGuard)
+  updateChargerStatus(
+    @Param('id') id: string,
+    @Body(ValidationPipe) updateDto: UpdateChargerStatusDto,
+    @Request() req,
+  ) {
+    return this.chargerService.updateChargerStatus(id, updateDto, req.user.userId);
+  }
+
+  @Get('available/by-mode')
+  getAvailableChargers(
+    @Query('bookingMode') bookingMode?: BookingMode,
+    @Query('lat') lat?: string,
+    @Query('lng') lng?: string,
+    @Query('radius') radius?: string,
+  ) {
+    const latNum = lat ? parseFloat(lat) : undefined;
+    const lngNum = lng ? parseFloat(lng) : undefined;
+    const radiusNum = radius ? parseFloat(radius) : 10;
+    
+    return this.chargerService.getAvailableChargers(
+      bookingMode, 
+      latNum, 
+      lngNum, 
+      radiusNum
+    );
   }
 }

@@ -7,6 +7,7 @@ import { MarketplaceListing } from './entities/marketplace-listing.entity';
 import { MarketplaceImage } from './entities/marketplace-image.entity';
 import { AuthModule } from '../auth/auth.module';
 import { CloudinaryModule } from '../cloudinary/cloudinary.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { UserEntity } from '../users/entities/user.entity';
 
 @Module({
@@ -14,6 +15,7 @@ import { UserEntity } from '../users/entities/user.entity';
     TypeOrmModule.forFeature([MarketplaceListing, MarketplaceImage, UserEntity]),
     AuthModule,
     CloudinaryModule,
+    NotificationsModule,
   ],
   controllers: [MarketplaceController, AdminMarketplaceController],
   providers: [MarketplaceService, NotificationService],

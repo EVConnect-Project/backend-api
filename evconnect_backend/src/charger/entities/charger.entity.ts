@@ -1,5 +1,8 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
 import { UserEntity } from '../../users/entities/user.entity';
+import { BookingMode } from '../enums/booking-mode.enum';
+import { ChargerStatus } from '../enums/charger-status.enum';
+import type { BookingSettings } from '../interfaces/booking-settings.interface';
 
 @Entity('chargers')
 export class Charger {
@@ -87,6 +90,43 @@ export class Charger {
 
   @Column({ type: 'timestamp', nullable: true })
   lastHeartbeat: Date | null;
+
+  // Booking Mode Fields
+  @Column({ 
+    name: 'booking_mode',
+    type: 'varchar', 
+    length: 30, 
+    default: BookingMode.WALK_IN_ONLY 
+  })
+  bookingMode: BookingMode;
+
+  @Column({ 
+    name: 'booking_settings',
+    type: 'jsonb',
+    default: {
+      minBookingMinutes: 30,
+      maxBookingMinutes: 180,
+      advanceBookingDays: 7,
+      gracePeriodMinutes: 10,
+      allowSameDayBooking: true
+    }
+  })
+  bookingSettings: BookingSettings;
+
+  @Column({ 
+    name: 'current_status',
+    type: 'varchar', 
+    length: 20, 
+    default: ChargerStatus.AVAILABLE 
+  })
+  currentStatus: ChargerStatus;
+
+  @Column({ 
+    name: 'last_status_update',
+    type: 'timestamp', 
+    default: () => 'CURRENT_TIMESTAMP' 
+  })
+  lastStatusUpdate: Date;
 
   @CreateDateColumn()
   createdAt: Date;

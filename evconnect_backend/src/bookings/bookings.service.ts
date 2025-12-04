@@ -6,6 +6,10 @@ import { CreateBookingDto } from './dto/create-booking.dto';
 import { Charger } from '../charger/entities/charger.entity';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { NotificationsService } from '../notifications/notifications.service';
+import { BookingMode } from '../charger/enums/booking-mode.enum';
+import { BookingType } from '../charger/enums/booking-type.enum';
+import { ChargerStatus } from '../charger/enums/charger-status.enum';
+import { CreateWalkInBookingDto, CreatePreBookingDto, CheckInBookingDto } from './dto/booking-type.dto';
 
 export interface BookingWarning {
   type: 'public_charger' | 'semi_public_charger' | 'no_occupancy_sensor' | 'requires_verification';
@@ -61,6 +65,11 @@ export class BookingsService {
     
     if (!charger) {
       throw new NotFoundException(`Charger with ID ${chargerId} not found`);
+    }
+
+    // Check if charger is verified by admin
+    if (!charger.verified) {
+      throw new BadRequestException('This charger is not yet verified by admin and cannot accept bookings');
     }
 
     // Initialize warnings array
@@ -464,5 +473,424 @@ export class BookingsService {
     });
 
     return alternativeChargers.slice(0, 5); // Return top 5 alternatives
+  }
+
+  /**
+   * Get upcoming bookings for a charger to show occupied time slots
+   * @param chargerId Charger ID
+   * @returns List of active and upcoming bookings
+   */
+  async getUpcomingBookingsForCharger(chargerId: string): Promise<any[]> {
+    const now = new Date();
+    const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    const bookings = await this.bookingRepository
+      .createQueryBuilder('booking')
+      .where('booking.chargerId = :chargerId', { chargerId })
+      .andWhere('booking.status IN (:...statuses)', { 
+        statuses: ['confirmed', 'active', 'pending'] 
+      })
+      .andWhere('booking.endTime > :now', { now })
+      .andWhere('booking.startTime < :sevenDaysFromNow', { sevenDaysFromNow })
+      .orderBy('booking.startTime', 'ASC')
+      .getMany();
+
+    // Return sanitized booking data (no personal info)
+    return bookings.map(booking => ({
+      id: booking.id,
+      startTime: booking.startTime,
+      endTime: booking.endTime,
+      status: booking.status,
+      bookingType: booking.bookingType,
+      isActive: booking.status === 'active',
+    }));
+  }
+
+  /**
+   * Create a walk-in booking (instant charging without pre-booking)
+   * @param dto Walk-in booking data
+   * @param userId User creating the booking
+   * @returns Created booking
+   */
+  async createWalkInBooking(
+    dto: CreateWalkInBookingDto, 
+    userId: string
+  ): Promise<BookingResponse> {
+    const charger = await this.chargerRepository.findOne({ 
+      where: { id: dto.chargerId },
+      relations: ['owner']
+    });
+    
+    if (!charger) {
+      throw new NotFoundException(`Charger with ID ${dto.chargerId} not found`);
+    }
+
+    // Check if charger is verified by admin
+    if (!charger.verified) {
+      throw new BadRequestException('This charger is not yet verified by admin and cannot accept bookings');
+    }
+
+    // Validate booking mode allows walk-ins
+    if (!this.validateBookingType(charger, BookingType.WALK_IN)) {
+      throw new BadRequestException(
+        'This charger only accepts pre-bookings. Please make a reservation in advance.'
+      );
+    }
+
+    // Check charger status
+    if (charger.currentStatus !== ChargerStatus.AVAILABLE) {
+      throw new BadRequestException(
+        `Charger is currently ${charger.currentStatus}. Please try again later.`
+      );
+    }
+
+    // Check for active pre-bookings (they have priority)
+    const now = new Date();
+    const endTime = new Date(dto.endTime);
+
+    const activePreBooking = await this.bookingRepository
+      .createQueryBuilder('booking')
+      .where('booking.chargerId = :chargerId', { chargerId: dto.chargerId })
+      .andWhere('booking.bookingType = :bookingType', { bookingType: BookingType.PRE_BOOKING })
+      .andWhere('booking.status IN (:...statuses)', { statuses: ['confirmed', 'pending'] })
+      .andWhere('booking.startTime <= :endTime', { endTime })
+      .andWhere('booking.endTime > :now', { now })
+      .getOne();
+
+    if (activePreBooking) {
+      throw new BadRequestException(
+        'This charger has a pre-booking that conflicts with your requested time. ' +
+        'Pre-bookings have priority. Please select a different charger or time.'
+      );
+    }
+
+    // Calculate price
+    const durationMs = endTime.getTime() - now.getTime();
+    const durationHours = durationMs / (1000 * 60 * 60);
+    const price = Number((charger.powerKw * charger.pricePerKwh * durationHours).toFixed(2));
+
+    // Create walk-in booking
+    const booking = this.bookingRepository.create({
+      userId,
+      chargerId: dto.chargerId,
+      startTime: now,
+      endTime,
+      price,
+      status: 'active', // Walk-ins start immediately
+      bookingType: BookingType.WALK_IN,
+      checkInTime: now,
+    });
+
+    const savedBooking = await this.bookingRepository.save(booking);
+
+    // Update charger status to occupied
+    charger.currentStatus = ChargerStatus.OCCUPIED;
+    charger.lastStatusUpdate = now;
+    await this.chargerRepository.save(charger);
+
+    this.logger.log(`Walk-in booking created: ${savedBooking.id} for charger ${dto.chargerId}`);
+
+    // Send notification
+    await this.notificationsService.sendBookingConfirmed(
+      userId,
+      savedBooking.id,
+      charger.name || 'charging station',
+      now,
+    );
+
+    return {
+      booking: savedBooking,
+      warnings: [],
+      accessType: charger.accessType,
+      requiresPhysicalVerification: false,
+      gracePeriodMinutes: 0,
+      autoCancelAfterMinutes: 0,
+    };
+  }
+
+  /**
+   * Create a pre-booking (reservation for future charging)
+   * @param dto Pre-booking data
+   * @param userId User creating the booking
+   * @returns Created booking with grace period info
+   */
+  async createPreBooking(
+    dto: CreatePreBookingDto, 
+    userId: string
+  ): Promise<BookingResponse> {
+    const charger = await this.chargerRepository.findOne({ 
+      where: { id: dto.chargerId },
+      relations: ['owner']
+    });
+    
+    if (!charger) {
+      throw new NotFoundException(`Charger with ID ${dto.chargerId} not found`);
+    }
+
+    // Check if charger is verified by admin
+    if (!charger.verified) {
+      throw new BadRequestException('This charger is not yet verified by admin and cannot accept bookings');
+    }
+
+    // Validate booking mode allows pre-bookings
+    if (!this.validateBookingType(charger, BookingType.PRE_BOOKING)) {
+      throw new BadRequestException(
+        'This charger does not accept pre-bookings. Please use walk-in mode when you arrive.'
+      );
+    }
+
+    const startTime = new Date(dto.startTime);
+    const endTime = new Date(dto.endTime);
+    const now = new Date();
+
+    // Validate times
+    if (startTime < now) {
+      throw new BadRequestException('Start time cannot be in the past');
+    }
+
+    if (endTime <= startTime) {
+      throw new BadRequestException('End time must be after start time');
+    }
+
+    // Validate booking duration
+    const durationMinutes = (endTime.getTime() - startTime.getTime()) / 60000;
+    const settings = charger.bookingSettings;
+
+    if (durationMinutes < settings.minBookingMinutes) {
+      throw new BadRequestException(
+        `Minimum booking duration is ${settings.minBookingMinutes} minutes`
+      );
+    }
+
+    if (durationMinutes > settings.maxBookingMinutes) {
+      throw new BadRequestException(
+        `Maximum booking duration is ${settings.maxBookingMinutes} minutes`
+      );
+    }
+
+    // Validate advance booking window
+    const daysInAdvance = (startTime.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
+    if (daysInAdvance > settings.advanceBookingDays) {
+      throw new BadRequestException(
+        `You can only book up to ${settings.advanceBookingDays} days in advance`
+      );
+    }
+
+    // Check for overlapping bookings
+    const overlapping = await this.bookingRepository
+      .createQueryBuilder('booking')
+      .where('booking.chargerId = :chargerId', { chargerId: dto.chargerId })
+      .andWhere('booking.status NOT IN (:...statuses)', { statuses: ['cancelled', 'completed', 'no_show'] })
+      .andWhere('booking.startTime < :endTime', { endTime })
+      .andWhere('booking.endTime > :startTime', { startTime })
+      .getOne();
+
+    if (overlapping) {
+      throw new BadRequestException(
+        'This time slot is already booked. Please select a different time.'
+      );
+    }
+
+    // Calculate price
+    const durationHours = durationMinutes / 60;
+    const price = Number((charger.powerKw * charger.pricePerKwh * durationHours).toFixed(2));
+
+    // Calculate grace period expiration
+    const gracePeriodExpiresAt = new Date(
+      startTime.getTime() + settings.gracePeriodMinutes * 60000
+    );
+
+    // Create pre-booking
+    const booking = this.bookingRepository.create({
+      userId,
+      chargerId: dto.chargerId,
+      startTime,
+      endTime,
+      price,
+      status: 'confirmed',
+      bookingType: BookingType.PRE_BOOKING,
+      gracePeriodExpiresAt,
+    });
+
+    const savedBooking = await this.bookingRepository.save(booking);
+
+    // Update charger status to reserved
+    charger.currentStatus = ChargerStatus.RESERVED;
+    charger.lastStatusUpdate = now;
+    await this.chargerRepository.save(charger);
+
+    this.logger.log(`Pre-booking created: ${savedBooking.id} for charger ${dto.chargerId}`);
+
+    // Send notification
+    await this.notificationsService.sendBookingConfirmed(
+      userId,
+      savedBooking.id,
+      charger.name || 'charging station',
+      startTime,
+    );
+
+    const warnings: BookingWarning[] = [{
+      type: 'requires_verification',
+      severity: 'high',
+      message: `You must check in within ${settings.gracePeriodMinutes} minutes of your start time`,
+      recommendedAction: 'Arrive on time and tap "Check In" in the app when you reach the charger'
+    }];
+
+    return {
+      booking: savedBooking,
+      warnings,
+      accessType: charger.accessType,
+      requiresPhysicalVerification: true,
+      gracePeriodMinutes: settings.gracePeriodMinutes,
+      autoCancelAfterMinutes: settings.gracePeriodMinutes,
+    };
+  }
+
+  /**
+   * Check in to a pre-booking (mark arrival and activate charging)
+   * @param dto Check-in data
+   * @param userId User checking in
+   * @returns Updated booking
+   */
+  async checkInBooking(
+    dto: CheckInBookingDto, 
+    userId: string
+  ): Promise<BookingEntity> {
+    const booking = await this.bookingRepository.findOne({
+      where: { id: dto.bookingId },
+      relations: ['charger']
+    });
+
+    if (!booking) {
+      throw new NotFoundException('Booking not found');
+    }
+
+    if (booking.userId !== userId) {
+      throw new ForbiddenException('You can only check in to your own bookings');
+    }
+
+    if (booking.bookingType !== BookingType.PRE_BOOKING) {
+      throw new BadRequestException('Only pre-bookings require check-in');
+    }
+
+    if (booking.status !== 'confirmed') {
+      throw new BadRequestException('Booking must be confirmed to check in');
+    }
+
+    const now = new Date();
+
+    // Check if within grace period
+    if (booking.gracePeriodExpiresAt && now > booking.gracePeriodExpiresAt) {
+      booking.status = 'no_show';
+      booking.noShow = true;
+      await this.bookingRepository.save(booking);
+
+      throw new BadRequestException(
+        'Check-in window has expired. Your booking has been marked as a no-show.'
+      );
+    }
+
+    // Check if too early
+    const earliestCheckIn = new Date(booking.startTime.getTime() - 10 * 60000); // 10 min before
+    if (now < earliestCheckIn) {
+      throw new BadRequestException(
+        'You can only check in up to 10 minutes before your booking start time'
+      );
+    }
+
+    // Update booking
+    booking.checkInTime = now;
+    booking.status = 'active';
+    const updatedBooking = await this.bookingRepository.save(booking);
+
+    // Update charger status
+    const charger = booking.charger;
+    charger.currentStatus = ChargerStatus.OCCUPIED;
+    charger.lastStatusUpdate = now;
+    await this.chargerRepository.save(charger);
+
+    this.logger.log(`User ${userId} checked in to booking ${dto.bookingId}`);
+
+    return updatedBooking;
+  }
+
+  /**
+   * Handle no-show for pre-booking (called by cron job)
+   * @param bookingId Booking ID
+   */
+  async handleNoShow(bookingId: string): Promise<void> {
+    const booking = await this.bookingRepository.findOne({
+      where: { id: bookingId },
+      relations: ['charger', 'user']
+    });
+
+    if (!booking) {
+      this.logger.warn(`Booking ${bookingId} not found for no-show processing`);
+      return;
+    }
+
+    booking.noShow = true;
+    booking.status = 'no_show';
+    await this.bookingRepository.save(booking);
+
+    // Release charger
+    const charger = booking.charger;
+    charger.currentStatus = ChargerStatus.AVAILABLE;
+    charger.lastStatusUpdate = new Date();
+    await this.chargerRepository.save(charger);
+
+    this.logger.log(`Booking ${bookingId} marked as no-show`);
+
+    // Send notification
+    await this.notificationsService.sendBookingAutoCancelled(
+      booking.userId,
+      bookingId,
+      charger.name || 'charging station',
+    );
+  }
+
+  /**
+   * Validate if charger allows the specified booking type
+   * @param charger Charger entity
+   * @param bookingType Requested booking type
+   * @returns True if allowed
+   */
+  private validateBookingType(charger: Charger, bookingType: BookingType): boolean {
+    switch (charger.bookingMode) {
+      case BookingMode.PRE_BOOKING_REQUIRED:
+        return bookingType === BookingType.PRE_BOOKING;
+      
+      case BookingMode.WALK_IN_ONLY:
+        return bookingType === BookingType.WALK_IN;
+      
+      case BookingMode.HYBRID:
+        return true; // Both types allowed
+      
+      default:
+        return false;
+    }
+  }
+
+  /**
+   * Cron job to handle expired grace periods for pre-bookings
+   * Runs every 2 minutes
+   */
+  @Cron('*/2 * * * *')
+  async handleExpiredGracePeriods() {
+    const now = new Date();
+
+    const expiredBookings = await this.bookingRepository
+      .createQueryBuilder('booking')
+      .where('booking.bookingType = :bookingType', { bookingType: BookingType.PRE_BOOKING })
+      .andWhere('booking.status = :status', { status: 'confirmed' })
+      .andWhere('booking.gracePeriodExpiresAt < :now', { now })
+      .andWhere('booking.checkInTime IS NULL')
+      .getMany();
+
+    this.logger.log(`Processing ${expiredBookings.length} expired grace periods`);
+
+    for (const booking of expiredBookings) {
+      await this.handleNoShow(booking.id);
+    }
   }
 }

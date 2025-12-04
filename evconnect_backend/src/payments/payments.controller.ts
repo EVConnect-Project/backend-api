@@ -9,15 +9,26 @@ import {
   ValidationPipe,
   Headers,
   Req,
+  Patch,
+  Delete,
 } from '@nestjs/common';
 import type { Request as ExpressRequest } from 'express';
 import { PaymentsService } from './payments.service';
+import { PaymentMethodsService } from './payment-methods.service';
+import { PaymentSettingsService } from './payment-settings.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import { CreatePaymentMethodDto } from './dto/create-payment-method.dto';
+import { UpdatePaymentMethodDto } from './dto/update-payment-method.dto';
+import { UpdatePaymentSettingsDto } from './dto/update-payment-settings.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('payments')
 export class PaymentsController {
-  constructor(private readonly paymentsService: PaymentsService) {}
+  constructor(
+    private readonly paymentsService: PaymentsService,
+    private readonly paymentMethodsService: PaymentMethodsService,
+    private readonly paymentSettingsService: PaymentSettingsService,
+  ) {}
 
   @Post()
   @UseGuards(JwtAuthGuard)
@@ -64,5 +75,89 @@ export class PaymentsController {
   @UseGuards(JwtAuthGuard)
   confirmPayment(@Param('id') id: string) {
     return this.paymentsService.confirmPayment(id);
+  }
+
+  // Payment Methods endpoints
+  @Post('methods')
+  @UseGuards(JwtAuthGuard)
+  createPaymentMethod(
+    @Body(ValidationPipe) createDto: CreatePaymentMethodDto,
+    @Request() req,
+  ) {
+    return this.paymentMethodsService.create(createDto, req.user.userId);
+  }
+
+  @Get('methods')
+  @UseGuards(JwtAuthGuard)
+  findAllPaymentMethods(@Request() req) {
+    return this.paymentMethodsService.findAll(req.user.userId);
+  }
+
+  @Get('methods/default')
+  @UseGuards(JwtAuthGuard)
+  findDefaultPaymentMethod(@Request() req) {
+    return this.paymentMethodsService.findDefault(req.user.userId);
+  }
+
+  @Get('methods/:id')
+  @UseGuards(JwtAuthGuard)
+  findOnePaymentMethod(@Param('id') id: string, @Request() req) {
+    return this.paymentMethodsService.findOne(id, req.user.userId);
+  }
+
+  @Patch('methods/:id')
+  @UseGuards(JwtAuthGuard)
+  updatePaymentMethod(
+    @Param('id') id: string,
+    @Body(ValidationPipe) updateDto: UpdatePaymentMethodDto,
+    @Request() req,
+  ) {
+    return this.paymentMethodsService.update(id, updateDto, req.user.userId);
+  }
+
+  @Post('methods/:id/default')
+  @UseGuards(JwtAuthGuard)
+  setDefaultPaymentMethod(@Param('id') id: string, @Request() req) {
+    return this.paymentMethodsService.setDefault(id, req.user.userId);
+  }
+
+  @Delete('methods/:id')
+  @UseGuards(JwtAuthGuard)
+  removePaymentMethod(@Param('id') id: string, @Request() req) {
+    return this.paymentMethodsService.remove(id, req.user.userId);
+  }
+
+  // Payment Settings endpoints
+  @Get('settings')
+  @UseGuards(JwtAuthGuard)
+  getPaymentSettings(@Request() req) {
+    return this.paymentSettingsService.findOrCreate(req.user.userId);
+  }
+
+  @Patch('settings')
+  @UseGuards(JwtAuthGuard)
+  updatePaymentSettings(
+    @Body(ValidationPipe) updateDto: UpdatePaymentSettingsDto,
+    @Request() req,
+  ) {
+    return this.paymentSettingsService.update(req.user.userId, updateDto);
+  }
+
+  @Post('settings/pin')
+  @UseGuards(JwtAuthGuard)
+  setPaymentPin(@Body('pin') pin: string, @Request() req) {
+    return this.paymentSettingsService.setPaymentPin(req.user.userId, pin);
+  }
+
+  @Post('settings/pin/verify')
+  @UseGuards(JwtAuthGuard)
+  verifyPaymentPin(@Body('pin') pin: string, @Request() req) {
+    return this.paymentSettingsService.verifyPaymentPin(req.user.userId, pin);
+  }
+
+  @Delete('settings/pin')
+  @UseGuards(JwtAuthGuard)
+  removePaymentPin(@Request() req) {
+    return this.paymentSettingsService.removePaymentPin(req.user.userId);
   }
 }

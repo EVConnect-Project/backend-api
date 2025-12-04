@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { MarketplaceListing } from './entities/marketplace-listing.entity';
 import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../notifications/types/notification-types';
 
 @Injectable()
 export class NotificationService {
@@ -30,7 +31,7 @@ export class NotificationService {
       try {
         await this.notificationsService.sendToUser(
           listing.seller.id,
-          'marketplace',
+          NotificationType.LISTING_APPROVED,
           {
             title: '✅ Listing Approved',
             body: `Your listing "${listing.title}" has been approved and is now live in the marketplace!`,
@@ -69,7 +70,7 @@ export class NotificationService {
       try {
         await this.notificationsService.sendToUser(
           listing.seller.id,
-          'marketplace',
+          NotificationType.LISTING_REJECTED,
           {
             title: '❌ Listing Not Approved',
             body: `Your listing "${listing.title}" was not approved. Reason: ${reason}`,

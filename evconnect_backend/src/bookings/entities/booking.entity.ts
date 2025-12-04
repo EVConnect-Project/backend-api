@@ -1,6 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
 import { UserEntity } from '../../users/entities/user.entity';
 import { Charger } from '../../charger/entities/charger.entity';
+import { BookingType } from '../../charger/enums/booking-type.enum';
 
 @Entity('bookings')
 export class BookingEntity {
@@ -39,6 +40,23 @@ export class BookingEntity {
 
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
   energyConsumed: number;
+
+  // Booking Type Fields
+  @Column({ 
+    type: 'varchar', 
+    length: 20, 
+    default: BookingType.PRE_BOOKING 
+  })
+  bookingType: BookingType;
+
+  @Column({ type: 'timestamp', nullable: true })
+  checkInTime: Date | null;
+
+  @Column({ default: false })
+  noShow: boolean;
+
+  @Column({ type: 'timestamp', nullable: true })
+  gracePeriodExpiresAt: Date | null;
 
   @CreateDateColumn()
   createdAt: Date;

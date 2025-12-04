@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, Inject, forwardRef, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Charger } from './entities/charger.entity';
@@ -7,6 +7,11 @@ import { UpdateChargerDto } from './dto/update-charger.dto';
 import { FilterChargersDto } from './dto/filter-chargers.dto';
 import { ChargerIntegrationService } from '../charger-integration/charger-integration.service';
 import { ChargersGateway } from './chargers.gateway';
+import { BookingMode } from './enums/booking-mode.enum';
+import { ChargerStatus } from './enums/charger-status.enum';
+import { UpdateBookingModeDto } from './dto/update-booking-mode.dto';
+import { UpdateChargerStatusDto } from './dto/update-charger-status.dto';
+import { DEFAULT_BOOKING_SETTINGS } from './interfaces/booking-settings.interface';
 
 @Injectable()
 export class ChargerService {
@@ -239,6 +244,11 @@ export class ChargerService {
       query.andWhere('charger.accessType IN (:...accessTypes)', { accessTypes: filters.accessTypes });
     }
 
+    // Booking mode filters
+    if (filters.bookingModes && filters.bookingModes.length > 0) {
+      query.andWhere('charger.bookingMode IN (:...bookingModes)', { bookingModes: filters.bookingModes });
+    }
+
     // Sorting
     if (filters.sortBy) {
       switch (filters.sortBy) {
@@ -274,5 +284,165 @@ export class ChargerService {
       offset,
       hasMore: offset + chargers.length < total,
     };
+  }
+
+  /**
+   * Update booking mode for a charger
+   * @param id Charger ID
+   * @param updateDto Booking mode update data
+   * @param userId Owner user ID for authorization
+   * @returns Updated charger
+   */
+  async updateBookingMode(
+    id: string, 
+    updateDto: UpdateBookingModeDto, 
+    userId: string
+  ): Promise<Charger> {
+    const charger = await this.findOne(id);
+
+    // Check if user is the owner
+    if (charger.ownerId !== userId) {
+      throw new ForbiddenException('You can only update your own chargers');
+    }
+
+    // Validate booking mode settings
+    this.validateBookingMode(updateDto);
+
+    // Update booking mode
+    charger.bookingMode = updateDto.bookingMode;
+    
+    // Update settings if provided, otherwise use defaults
+    if (updateDto.bookingSettings) {
+      charger.bookingSettings = updateDto.bookingSettings;
+    } else if (!charger.bookingSettings) {
+      charger.bookingSettings = DEFAULT_BOOKING_SETTINGS;
+    }
+
+    const updatedCharger = await this.chargerRepository.save(charger);
+    
+    // Broadcast update via WebSocket
+    try {
+      this.chargersGateway.broadcastChargerUpdate(updatedCharger, 'updated');
+    } catch (error) {
+      console.error('Failed to broadcast booking mode update:', error);
+    }
+    
+    return updatedCharger;
+  }
+
+  /**
+   * Validate booking mode and settings
+   */
+  private validateBookingMode(updateDto: UpdateBookingModeDto): void {
+    if (!updateDto.bookingSettings) {
+      return; // Will use defaults
+    }
+
+    const settings = updateDto.bookingSettings;
+
+    // Validate min/max booking duration
+    if (settings.minBookingMinutes >= settings.maxBookingMinutes) {
+      throw new BadRequestException(
+        'Minimum booking duration must be less than maximum duration'
+      );
+    }
+
+    // Validate pre-booking requirements
+    if (updateDto.bookingMode === BookingMode.PRE_BOOKING_REQUIRED && 
+        settings.advanceBookingDays === 0) {
+      throw new BadRequestException(
+        'Pre-booking required mode must allow advance bookings'
+      );
+    }
+  }
+
+  /**
+   * Update charger status (available, occupied, reserved, maintenance, offline)
+   * @param id Charger ID
+   * @param updateDto Status update data
+   * @param userId Owner user ID for authorization
+   * @returns Updated charger
+   */
+  async updateChargerStatus(
+    id: string, 
+    updateDto: UpdateChargerStatusDto, 
+    userId: string
+  ): Promise<Charger> {
+    const charger = await this.findOne(id);
+
+    // Check if user is the owner
+    if (charger.ownerId !== userId) {
+      throw new ForbiddenException('You can only update your own chargers');
+    }
+
+    // Check if charger is verified
+    if (!charger.verified) {
+      throw new ForbiddenException('Cannot change status of unverified charger. Please wait for admin approval.');
+    }
+
+    const oldStatus = charger.currentStatus;
+    charger.currentStatus = updateDto.status;
+    charger.lastStatusUpdate = new Date();
+
+    const updatedCharger = await this.chargerRepository.save(charger);
+    
+    // Broadcast status change via WebSocket
+    try {
+      this.chargersGateway.broadcastChargerUpdate(updatedCharger, 'updated');
+      this.chargersGateway.broadcastAvailabilityChange(
+        updatedCharger.id, 
+        updateDto.status === ChargerStatus.AVAILABLE,
+        { lat: updatedCharger.lat, lng: updatedCharger.lng }
+      );
+    } catch (error) {
+      console.error('Failed to broadcast status change:', error);
+    }
+    
+    return updatedCharger;
+  }
+
+  /**
+   * Get available chargers filtered by booking mode
+   * @param bookingMode Optional filter by booking mode
+   * @param lat Optional latitude for distance calculation
+   * @param lng Optional longitude for distance calculation
+   * @param radiusKm Optional radius in kilometers
+   * @returns Available chargers
+   */
+  async getAvailableChargers(
+    bookingMode?: BookingMode,
+    lat?: number,
+    lng?: number,
+    radiusKm: number = 10
+  ): Promise<Charger[]> {
+    const queryBuilder = this.chargerRepository.createQueryBuilder('charger')
+      .leftJoinAndSelect('charger.owner', 'owner')
+      .where('charger.verified = :verified', { verified: true })
+      .andWhere('charger.currentStatus = :status', { status: ChargerStatus.AVAILABLE });
+
+    // Filter by booking mode if specified
+    if (bookingMode) {
+      queryBuilder.andWhere('charger.bookingMode = :bookingMode', { bookingMode });
+    }
+
+    // Location filter if coordinates provided
+    if (lat && lng) {
+      queryBuilder.addSelect(
+        `( 6371 * acos( 
+          cos( radians(${lat}) ) * 
+          cos( radians(charger.lat) ) * 
+          cos( radians(charger.lng) - radians(${lng}) ) + 
+          sin( radians(${lat}) ) * 
+          sin( radians(charger.lat) ) 
+        ) )`,
+        'distance'
+      );
+      queryBuilder.having('distance < :radius', { radius: radiusKm });
+      queryBuilder.orderBy('distance', 'ASC');
+    } else {
+      queryBuilder.orderBy('charger.createdAt', 'DESC');
+    }
+
+    return queryBuilder.getMany();
   }
 }

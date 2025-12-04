@@ -12,6 +12,7 @@ import {
 import { BookingsService } from './bookings.service';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { CreateWalkInBookingDto, CreatePreBookingDto, CheckInBookingDto } from './dto/booking-type.dto';
 
 @Controller('bookings')
 @UseGuards(JwtAuthGuard)
@@ -82,5 +83,36 @@ export class BookingsController {
       new Date(endTime),
       radiusKm
     );
+  }
+
+  @Post('walk-in')
+  createWalkInBooking(
+    @Body(ValidationPipe) dto: CreateWalkInBookingDto,
+    @Request() req,
+  ) {
+    return this.bookingsService.createWalkInBooking(dto, req.user.userId);
+  }
+
+  @Post('pre-booking')
+  createPreBooking(
+    @Body(ValidationPipe) dto: CreatePreBookingDto,
+    @Request() req,
+  ) {
+    return this.bookingsService.createPreBooking(dto, req.user.userId);
+  }
+
+  @Post(':id/check-in')
+  checkInBooking(
+    @Param('id') id: string,
+    @Request() req,
+  ) {
+    return this.bookingsService.checkInBooking({ bookingId: id }, req.user.userId);
+  }
+
+  @Get('charger/:chargerId/upcoming')
+  getUpcomingBookings(
+    @Param('chargerId') chargerId: string,
+  ) {
+    return this.bookingsService.getUpcomingBookingsForCharger(chargerId);
   }
 }

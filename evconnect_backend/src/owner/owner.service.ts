@@ -156,6 +156,10 @@ export class OwnerService {
       throw new ForbiddenException('You can only update your own chargers');
     }
 
+    if (!charger.verified) {
+      throw new ForbiddenException('Cannot update unverified charger. Please wait for admin approval.');
+    }
+
     Object.assign(charger, updateChargerDto);
     return this.chargerRepository.save(charger);
   }
@@ -176,6 +180,10 @@ export class OwnerService {
 
     if (charger.ownerId !== ownerId) {
       throw new ForbiddenException('You can only update your own chargers');
+    }
+
+    if (!charger.verified) {
+      throw new ForbiddenException('Cannot change status of unverified charger. Please wait for admin approval.');
     }
 
     charger.status = status;

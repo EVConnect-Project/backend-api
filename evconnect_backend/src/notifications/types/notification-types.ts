@@ -23,6 +23,8 @@ export enum NotificationType {
   NEW_MESSAGE = 'new_message',
   ITEM_SOLD = 'item_sold',
   PRICE_DROP = 'price_drop',
+  LISTING_APPROVED = 'listing_approved',
+  LISTING_REJECTED = 'listing_rejected',
 
   // Mechanic
   MECHANIC_ASSIGNED = 'mechanic_assigned',

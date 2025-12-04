@@ -23,6 +23,12 @@ export class SupportController {
   @Post('reports')
   @UseGuards(JwtAuthGuard)
   async create(@Request() req, @Body() createReportDto: CreateReportDto) {
+    console.log('📝 Creating support report:', {
+      user: req.user,
+      userId: req.user?.userId,
+      category: createReportDto.category,
+      title: createReportDto.title,
+    });
     return await this.supportService.create(createReportDto, req.user?.userId);
   }
 
