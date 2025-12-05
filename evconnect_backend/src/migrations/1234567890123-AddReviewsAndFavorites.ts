@@ -20,13 +20,13 @@ export class AddReviewsAndFavorites1234567890123 implements MigrationInterface {
 
     // Create indexes for charger_reviews
     await queryRunner.query(`
-      CREATE INDEX idx_charger_reviews_charger_id ON charger_reviews("chargerId")
+      CREATE INDEX IF NOT EXISTS idx_charger_reviews_charger_id ON charger_reviews("chargerId")
     `);
     await queryRunner.query(`
-      CREATE INDEX idx_charger_reviews_user_id ON charger_reviews("userId")
+      CREATE INDEX IF NOT EXISTS idx_charger_reviews_user_id ON charger_reviews("userId")
     `);
     await queryRunner.query(`
-      CREATE INDEX idx_charger_reviews_rating ON charger_reviews(rating)
+      CREATE INDEX IF NOT EXISTS idx_charger_reviews_rating ON charger_reviews(rating)
     `);
 
     // Create favorite_chargers table
@@ -42,10 +42,10 @@ export class AddReviewsAndFavorites1234567890123 implements MigrationInterface {
 
     // Create indexes for favorite_chargers
     await queryRunner.query(`
-      CREATE INDEX idx_favorite_chargers_user_id ON favorite_chargers("userId")
+      CREATE INDEX IF NOT EXISTS idx_favorite_chargers_user_id ON favorite_chargers("userId")
     `);
     await queryRunner.query(`
-      CREATE INDEX idx_favorite_chargers_charger_id ON favorite_chargers("chargerId")
+      CREATE INDEX IF NOT EXISTS idx_favorite_chargers_charger_id ON favorite_chargers("chargerId")
     `);
 
     // Create trigger function for charger_reviews updated_at
@@ -57,6 +57,10 @@ export class AddReviewsAndFavorites1234567890123 implements MigrationInterface {
         RETURN NEW;
       END;
       $$ LANGUAGE plpgsql
+    `);
+
+    await queryRunner.query(`
+      DROP TRIGGER IF EXISTS trigger_update_charger_reviews_updated_at ON charger_reviews
     `);
 
     await queryRunner.query(`

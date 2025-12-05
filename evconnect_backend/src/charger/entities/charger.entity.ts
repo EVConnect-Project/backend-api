@@ -128,6 +128,10 @@ export class Charger {
   })
   lastStatusUpdate: Date;
 
+  // Payment Account Field
+  @Column({ type: 'uuid', nullable: true })
+  paymentAccountId: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

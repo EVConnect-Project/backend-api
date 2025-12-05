@@ -33,6 +33,16 @@ export class OwnerService {
       throw new NotFoundException('User not found');
     }
 
+    // Validate payment account requirement for pre-booking/hybrid modes
+    const bookingMode = createChargerDto.bookingMode || 'walk_in_only';
+    if (bookingMode === 'pre_booking_required' || bookingMode === 'hybrid') {
+      if (!createChargerDto.paymentAccountId) {
+        throw new BadRequestException(
+          'Payment account is required for pre-booking and hybrid booking modes. Please set up your bank account first.'
+        );
+      }
+    }
+
     // Upgrade role to 'owner' only if user is a regular 'user' (not mechanic or admin)
     // Mechanics and admins can own chargers without changing their role
     if (user.role === 'user') {

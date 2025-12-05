@@ -64,9 +64,15 @@ export class PaymentsService {
       throw new NotFoundException('Booking not found');
     }
 
+    // Calculate commission: 6% system fee, 94% owner revenue
+    const systemCommission = Number((amount * 0.06).toFixed(2));
+    const ownerRevenue = Number((amount * 0.94).toFixed(2));
+
     const payment = this.paymentRepository.create({
       bookingId,
       amount,
+      systemCommission,
+      ownerRevenue,
       status: 'pending',
       paymentMethod: paymentMethod || 'payhere',
     });

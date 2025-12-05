@@ -1,4 +1,5 @@
-import { IsNotEmpty, IsNumber, IsOptional, IsString, Min, Max } from 'class-validator';
+import { IsNotEmpty, IsNumber, IsOptional, IsString, Min, Max, IsUUID, ValidateIf, IsEnum } from 'class-validator';
+import { BookingMode } from '../enums/booking-mode.enum';
 
 export class CreateChargerDto {
   @IsNumber()
@@ -42,4 +43,13 @@ export class CreateChargerDto {
   @IsString()
   @IsOptional()
   connectorType?: 'type2' | 'type1_j1772' | 'ccs2' | 'chademo' | 'tesla_nacs';
+
+  @IsEnum(BookingMode)
+  @IsOptional()
+  bookingMode?: BookingMode;
+
+  @ValidateIf(o => o.bookingMode === BookingMode.PRE_BOOKING_REQUIRED || o.bookingMode === BookingMode.HYBRID)
+  @IsUUID()
+  @IsNotEmpty({ message: 'Payment account is required for pre-booking and hybrid booking modes' })
+  paymentAccountId?: string;
 }

@@ -16,6 +16,12 @@ export class PaymentEntity {
   @Column({ type: 'decimal', precision: 10, scale: 2 })
   amount: number;
 
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  systemCommission: number | null;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  ownerRevenue: number | null;
+
   @Column({
     type: 'enum',
     enum: ['pending', 'processing', 'succeeded', 'failed', 'refunded'],
