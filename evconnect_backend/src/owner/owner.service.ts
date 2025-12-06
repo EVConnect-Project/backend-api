@@ -33,12 +33,13 @@ export class OwnerService {
       throw new NotFoundException('User not found');
     }
 
-    // Validate payment account requirement for pre-booking/hybrid modes
+    // Validate payment account requirement for pre-booking mode only
+    // Hybrid mode allows walk-ins (no payment account) and bookings (payment account optional but recommended)
     const bookingMode = createChargerDto.bookingMode || 'walk_in_only';
-    if (bookingMode === 'pre_booking_required' || bookingMode === 'hybrid') {
+    if (bookingMode === 'pre_booking_required') {
       if (!createChargerDto.paymentAccountId) {
         throw new BadRequestException(
-          'Payment account is required for pre-booking and hybrid booking modes. Please set up your bank account first.'
+          'Payment account is required for pre-booking mode. Please set up your bank account first.'
         );
       }
     }

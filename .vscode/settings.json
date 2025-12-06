@@ -1,3 +1,4 @@
 {
-    "cmake.sourceDirectory": "/Users/akilanishan/Documents/EVConnect-Project/evconnect_app/linux"
+    "cmake.sourceDirectory": "/Users/akilanishan/Documents/EVConnect-Project/evconnect_app/linux",
+    "java.configuration.updateBuildConfiguration": "interactive"
 }
