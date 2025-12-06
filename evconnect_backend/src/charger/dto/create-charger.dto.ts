@@ -44,6 +44,20 @@ export class CreateChargerDto {
   @IsOptional()
   connectorType?: 'type2' | 'type1_j1772' | 'ccs2' | 'chademo' | 'tesla_nacs';
 
+  @IsNumber()
+  @IsOptional()
+  @Min(1)
+  @Max(20)
+  numberOfPlugs?: number;
+
+  @IsOptional()
+  openingHours?: {
+    is24Hours: boolean;
+    schedule?: {
+      [key: string]: { open: string; close: string; closed?: boolean };
+    };
+  };
+
   @IsEnum(BookingMode)
   @IsOptional()
   bookingMode?: BookingMode;

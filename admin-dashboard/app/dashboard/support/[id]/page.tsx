@@ -260,6 +260,7 @@ export default function ReportDetailPage() {
                   <select
                     value={status}
                     onChange={(e) => setStatus(e.target.value)}
+                    aria-label="Report status"
                     className="w-full px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="pending">Pending</option>

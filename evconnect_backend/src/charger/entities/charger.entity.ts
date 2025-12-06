@@ -50,6 +50,21 @@ export class Charger {
   @Column({ type: 'varchar', length: 50, nullable: true })
   connectorType: 'type2' | 'type1_j1772' | 'ccs2' | 'chademo' | 'tesla_nacs' | null;
 
+  @Column({ type: 'int', default: 1 })
+  numberOfPlugs: number;
+
+  @Column({ 
+    type: 'jsonb',
+    nullable: true,
+    default: { is24Hours: true, schedule: {} }
+  })
+  openingHours: {
+    is24Hours: boolean;
+    schedule?: {
+      [key: string]: { open: string; close: string; closed?: boolean };
+    };
+  };
+
   // Access Management Fields
   @Column({ type: 'varchar', length: 20, default: 'private' })
   accessType: 'private' | 'public' | 'semi-public';

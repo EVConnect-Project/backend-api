@@ -1,7 +1,8 @@
-import { Controller, Post, Body, ValidationPipe, Get, UseGuards, Request, Inject, Patch } from '@nestjs/common';
+import { Controller, Post, Body, ValidationPipe, Get, UseGuards, Request, Inject, Patch, Delete } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -118,5 +119,21 @@ export class AuthController {
         isAdmin: user.role === 'admin',
       },
     };
+  }
+
+  @Post('change-password')
+  @UseGuards(JwtAuthGuard)
+  async changePassword(@Request() req, @Body(ValidationPipe) changePasswordDto: ChangePasswordDto) {
+    return this.authService.changePassword(
+      req.user.userId,
+      changePasswordDto.currentPassword,
+      changePasswordDto.newPassword,
+    );
+  }
+
+  @Delete('delete-account')
+  @UseGuards(JwtAuthGuard)
+  async deleteAccount(@Request() req) {
+    return this.authService.deleteAccount(req.user.userId);
   }
 }
