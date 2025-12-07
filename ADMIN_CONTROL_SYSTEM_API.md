@@ -3,6 +3,13 @@
 ## Overview
 Complete API documentation for the Admin Control System that enables admins to manage users, chargers, sellers, and mechanics through a centralized dashboard.
 
+**Key Features:**
+- Direct chat with any user (owners, sellers, mechanics, drivers)
+- Charger control (suspend, hold/release, status override, price override)
+- Marketplace management (approve, reject, edit, hold/release)
+- Mechanic management (verify, suspend, hold/release)
+- Complete audit trail with IP tracking and reasons
+
 ---
 
 ## Authentication
@@ -225,6 +232,63 @@ Initiate chat with charger owner directly.
 
 ---
 
+### Hold Charger
+**PUT** `/api/admin/chargers/:id/hold`
+
+Temporarily hold an approved charger (disables while keeping verified status).
+
+**Request Body:**
+```json
+{
+  "reason": "Under investigation for reported issues"
+}
+```
+
+**Response:**
+```json
+{
+  "id": "charger-uuid",
+  "status": "offline",
+  "verified": true,
+  "metadata": {
+    "adminHeld": true,
+    "holdReason": "Under investigation...",
+    "heldAt": "2024-12-07T10:30:00Z",
+    "previousStatus": "available"
+  }
+}
+```
+
+---
+
+### Release Charger
+**PUT** `/api/admin/chargers/:id/release`
+
+Release a held charger and restore previous status.
+
+**Request Body:**
+```json
+{
+  "notes": "Investigation completed, no issues found" // optional
+}
+```
+
+**Response:**
+```json
+{
+  "id": "charger-uuid",
+  "status": "available",
+  "verified": true,
+  "metadata": {
+    "adminHeld": false,
+    "releasedAt": "2024-12-07T14:30:00Z",
+    "releaseNotes": "Investigation completed..."
+  }
+}
+```
+
+---
+
 ## 3. MARKETPLACE MANAGEMENT APIS
 
 ### Get Marketplace Listings
@@ -312,6 +376,52 @@ Suspend or resume a seller account.
 
 ---
 
+### Hold Listing
+**PUT** `/api/admin/marketplace/listings/:id/hold`
+
+Temporarily hold an approved listing (removes from marketplace while keeping approved status).
+
+**Request Body:**
+```json
+{
+  "reason": "Verifying listing authenticity"
+}
+```
+
+**Response:**
+```json
+{
+  "id": "listing-uuid",
+  "status": "pending",
+  "adminNotes": "HELD by admin: Verifying listing authenticity\n\nPrevious notes: None"
+}
+```
+
+---
+
+### Release Listing
+**PUT** `/api/admin/marketplace/listings/:id/release`
+
+Release a held listing and restore to marketplace.
+
+**Request Body:**
+```json
+{
+  "notes": "Verification complete" // optional
+}
+```
+
+**Response:**
+```json
+{
+  "id": "listing-uuid",
+  "status": "approved",
+  "adminNotes": "RELEASED by admin: Verification complete"
+}
+```
+
+---
+
 ## 4. MECHANIC MANAGEMENT APIS
 
 ### Verify Mechanic
@@ -370,6 +480,52 @@ View mechanic job history.
   "total": 120,
   "page": 1,
   "pages": 6
+}
+```
+
+---
+
+### Hold Mechanic
+**PUT** `/api/admin/mechanics/:id/hold`
+
+Temporarily hold a mechanic account (disables while keeping verified status).
+
+**Request Body:**
+```json
+{
+  "reason": "Reviewing customer complaints"
+}
+```
+
+**Response:**
+```json
+{
+  "id": "mechanic-uuid",
+  "available": false,
+  "description": "[HELD BY ADMIN] Reviewing customer complaints\n\nExperienced mechanic..."
+}
+```
+
+---
+
+### Release Mechanic
+**PUT** `/api/admin/mechanics/:id/release`
+
+Release a held mechanic and restore availability.
+
+**Request Body:**
+```json
+{
+  "notes": "Review completed, cleared to work" // optional
+}
+```
+
+**Response:**
+```json
+{
+  "id": "mechanic-uuid",
+  "available": true,
+  "description": "[RELEASED] Review completed, cleared to work\n\nExperienced mechanic..."
 }
 ```
 

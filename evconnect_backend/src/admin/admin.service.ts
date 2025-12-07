@@ -1194,4 +1194,144 @@ export class AdminService {
       pages: 0,
     };
   }
+
+  // ==================== HOLD/RELEASE FUNCTIONALITY ====================
+
+  /**
+   * Hold an approved charger (temporarily disable while keeping approved status)
+   */
+  async holdCharger(id: string, reason: string) {
+    const charger = await this.chargerRepository.findOne({ where: { id } });
+    if (!charger) {
+      throw new NotFoundException('Charger not found');
+    }
+
+    if (!charger.verified) {
+      throw new BadRequestException('Can only hold approved/verified chargers');
+    }
+
+    const previousStatus = charger.status;
+    charger.status = 'offline';
+    charger.metadata = {
+      ...charger.metadata,
+      adminHeld: true,
+      holdReason: reason,
+      heldAt: new Date(),
+      previousStatus: previousStatus,
+    };
+
+    return this.chargerRepository.save(charger);
+  }
+
+  /**
+   * Release a held charger (restore to previous status)
+   */
+  async releaseCharger(id: string, notes?: string) {
+    const charger = await this.chargerRepository.findOne({ where: { id } });
+    if (!charger) {
+      throw new NotFoundException('Charger not found');
+    }
+
+    if (!charger.metadata?.adminHeld) {
+      throw new BadRequestException('Charger is not currently held');
+    }
+
+    const previousStatus = charger.metadata?.previousStatus || 'available';
+    charger.status = previousStatus as any;
+    charger.metadata = {
+      ...charger.metadata,
+      adminHeld: false,
+      holdReason: null,
+      heldAt: null,
+      releasedAt: new Date(),
+      releaseNotes: notes,
+      previousStatus: null,
+    };
+
+    return this.chargerRepository.save(charger);
+  }
+
+  /**
+   * Hold an approved marketplace listing
+   */
+  async holdListing(id: string, reason: string) {
+    const listing = await this.marketplaceRepository.findOne({ where: { id } });
+    if (!listing) {
+      throw new NotFoundException('Listing not found');
+    }
+
+    if (listing.status !== 'approved') {
+      throw new BadRequestException('Can only hold approved listings');
+    }
+
+    listing.status = 'pending'; // Move to pending to hide from marketplace
+    listing.adminNotes = `HELD by admin: ${reason}\n\nPrevious notes: ${listing.adminNotes || 'None'}`;
+
+    return this.marketplaceRepository.save(listing);
+  }
+
+  /**
+   * Release a held marketplace listing
+   */
+  async releaseListing(id: string, notes?: string) {
+    const listing = await this.marketplaceRepository.findOne({ where: { id } });
+    if (!listing) {
+      throw new NotFoundException('Listing not found');
+    }
+
+    if (!listing.adminNotes?.includes('HELD by admin')) {
+      throw new BadRequestException('Listing is not currently held');
+    }
+
+    listing.status = 'approved';
+    listing.adminNotes = notes 
+      ? `RELEASED by admin: ${notes}\n\n${listing.adminNotes}`
+      : listing.adminNotes.replace(/HELD by admin:.*?\n\n/s, '');
+
+    return this.marketplaceRepository.save(listing);
+  }
+
+  /**
+   * Hold an approved mechanic
+   */
+  async holdMechanic(id: string, reason: string) {
+    const mechanic = await this.mechanicRepository.findOne({ where: { id } });
+    if (!mechanic) {
+      throw new NotFoundException('Mechanic not found');
+    }
+
+    if (!mechanic.available) {
+      throw new BadRequestException('Mechanic is not currently active');
+    }
+
+    mechanic.available = false;
+    mechanic.description = `[HELD BY ADMIN] ${reason}\n\n${mechanic.description || ''}`.trim();
+
+    return this.mechanicRepository.save(mechanic);
+  }
+
+  /**
+   * Release a held mechanic
+   */
+  async releaseMechanic(id: string, notes?: string) {
+    const mechanic = await this.mechanicRepository.findOne({ where: { id } });
+    if (!mechanic) {
+      throw new NotFoundException('Mechanic not found');
+    }
+
+    if (!mechanic.description?.includes('[HELD BY ADMIN]')) {
+      throw new BadRequestException('Mechanic is not currently held');
+    }
+
+    mechanic.available = true;
+    mechanic.description = mechanic.description
+      .replace(/\[HELD BY ADMIN\].*?\n\n/s, '')
+      .trim();
+
+    if (notes) {
+      mechanic.description = `[RELEASED] ${notes}\n\n${mechanic.description}`.trim();
+    }
+
+    return this.mechanicRepository.save(mechanic);
+  }
 }

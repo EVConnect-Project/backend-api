@@ -777,6 +777,158 @@ export class AdminController {
     );
   }
 
+  // ==================== HOLD/RELEASE CONTROLS ====================
+
+  /**
+   * Hold approved charger (temporarily disable)
+   */
+  @Put('chargers/:id/hold')
+  async holdCharger(
+    @Request() req,
+    @Param('id') id: string,
+    @Body('reason') reason: string,
+    @Ip() ip?: string,
+  ) {
+    const charger = await this.adminService.holdCharger(id, reason);
+
+    await this.adminAuditService.logAction(
+      req.user.userId,
+      'hold_charger',
+      'charger',
+      id,
+      { reason, previousStatus: charger.metadata?.previousStatus },
+      reason,
+      ip,
+    );
+
+    return { success: true, charger, message: 'Charger held successfully' };
+  }
+
+  /**
+   * Release held charger (restore to active)
+   */
+  @Put('chargers/:id/release')
+  async releaseCharger(
+    @Request() req,
+    @Param('id') id: string,
+    @Body('notes') notes?: string,
+    @Ip() ip?: string,
+  ) {
+    const charger = await this.adminService.releaseCharger(id, notes);
+
+    await this.adminAuditService.logAction(
+      req.user.userId,
+      'release_charger',
+      'charger',
+      id,
+      { notes },
+      notes,
+      ip,
+    );
+
+    return { success: true, charger, message: 'Charger released successfully' };
+  }
+
+  /**
+   * Hold approved marketplace listing
+   */
+  @Put('marketplace/listings/:id/hold')
+  async holdListing(
+    @Request() req,
+    @Param('id') id: string,
+    @Body('reason') reason: string,
+    @Ip() ip?: string,
+  ) {
+    const listing = await this.adminService.holdListing(id, reason);
+
+    await this.adminAuditService.logAction(
+      req.user.userId,
+      'hold_listing',
+      'marketplace_listing',
+      id,
+      { reason },
+      reason,
+      ip,
+    );
+
+    return { success: true, listing, message: 'Listing held successfully' };
+  }
+
+  /**
+   * Release held marketplace listing
+   */
+  @Put('marketplace/listings/:id/release')
+  async releaseListing(
+    @Request() req,
+    @Param('id') id: string,
+    @Body('notes') notes?: string,
+    @Ip() ip?: string,
+  ) {
+    const listing = await this.adminService.releaseListing(id, notes);
+
+    await this.adminAuditService.logAction(
+      req.user.userId,
+      'release_listing',
+      'marketplace_listing',
+      id,
+      { notes },
+      notes,
+      ip,
+    );
+
+    return { success: true, listing, message: 'Listing released successfully' };
+  }
+
+  /**
+   * Hold approved mechanic (temporarily disable)
+   */
+  @Put('mechanics/:id/hold')
+  async holdMechanic(
+    @Request() req,
+    @Param('id') id: string,
+    @Body('reason') reason: string,
+    @Ip() ip?: string,
+  ) {
+    const mechanic = await this.adminService.holdMechanic(id, reason);
+
+    await this.adminAuditService.logAction(
+      req.user.userId,
+      'hold_mechanic',
+      'mechanic',
+      id,
+      { reason },
+      reason,
+      ip,
+    );
+
+    return { success: true, mechanic, message: 'Mechanic held successfully' };
+  }
+
+  /**
+   * Release held mechanic (restore to active)
+   */
+  @Put('mechanics/:id/release')
+  async releaseMechanic(
+    @Request() req,
+    @Param('id') id: string,
+    @Body('notes') notes?: string,
+    @Ip() ip?: string,
+  ) {
+    const mechanic = await this.adminService.releaseMechanic(id, notes);
+
+    await this.adminAuditService.logAction(
+      req.user.userId,
+      'release_mechanic',
+      'mechanic',
+      id,
+      { notes },
+      notes,
+      ip,
+    );
+
+    return { success: true, mechanic, message: 'Mechanic released successfully' };
+  }
+
   // ==================== AUDIT LOG ====================
 
   /**
