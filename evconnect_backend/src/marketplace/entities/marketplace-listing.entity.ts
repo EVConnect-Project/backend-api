@@ -51,6 +51,9 @@ export class MarketplaceListing {
   @Column({ type: 'text', nullable: true })
   adminNotes: string | null;
 
+  @Column({ default: false })
+  isBanned: boolean;
+
   @OneToMany(() => MarketplaceImage, (image) => image.listing)
   images: MarketplaceImage[];
 

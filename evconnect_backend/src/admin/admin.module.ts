@@ -13,6 +13,8 @@ import { MarketplaceListing } from '../marketplace/entities/marketplace-listing.
 import { Conversation } from '../chat/entities/conversation.entity';
 import { Message } from '../chat/entities/message.entity';
 import { AdminAction } from './entities/admin-action.entity';
+import { OwnerPaymentAccount } from '../owner/entities/owner-payment-account.entity';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -26,7 +28,9 @@ import { AdminAction } from './entities/admin-action.entity';
       Conversation,
       Message,
       AdminAction,
+      OwnerPaymentAccount,
     ]),
+    NotificationsModule,
   ],
   controllers: [AdminController],
   providers: [AdminService, AdminChatService, AdminAuditService],

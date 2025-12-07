@@ -116,4 +116,25 @@ export class MechanicsController {
     console.log('🚨 Emergency request from:', req.user.email, 'at location:', emergencyRequest.lat, emergencyRequest.lng);
     return this.mechanicsService.getAIRecommendations(emergencyRequest, req.user.userId);
   }
+
+  @Post('emergency/alert')
+  @UseGuards(JwtAuthGuard)
+  async sendEmergencyAlert(
+    @Request() req,
+    @Body() body: { 
+      mechanicIds: string[]; 
+      userLocation: { lat: number; lng: number };
+      problemDescription?: string;
+      vehicleDetails?: any;
+    },
+  ) {
+    console.log('🚨 Sending emergency alerts to mechanics:', body.mechanicIds, 'from user:', req.user.email);
+    return this.mechanicsService.sendEmergencyAlerts(
+      req.user.userId,
+      body.mechanicIds,
+      body.userLocation,
+      body.problemDescription,
+      body.vehicleDetails,
+    );
+  }
 }

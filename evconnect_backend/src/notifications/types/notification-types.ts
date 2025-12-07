@@ -36,6 +36,10 @@ export enum NotificationType {
   
   // Pricing (NEW)
   PRICE_DROP_ALERT = 'price_drop_alert',
+  
+  // Charger Management
+  CHARGER_APPROVED = 'charger_approved',
+  CHARGER_REJECTED = 'charger_rejected',
 }
 
 export interface NotificationPayload {

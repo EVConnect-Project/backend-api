@@ -31,6 +31,9 @@ export class Charger {
   @Column({ default: false })
   verified: boolean;
 
+  @Column({ default: false })
+  isBanned: boolean;
+
   @Column({ nullable: true })
   name: string;
 

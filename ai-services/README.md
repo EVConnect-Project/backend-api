@@ -40,12 +40,12 @@ Predict optimal charging stops for a given route.
       "power_kw": 250.0,
       "estimated_charge_duration_minutes": 25,
       "distance_from_start_km": 279.56,
-      "cost_estimate_usd": 12.50,
+      "cost_estimate_lkr": 12.50,
       "confidence_score": 0.875
     }
   ],
   "total_charging_time_minutes": 25,
-  "total_cost_estimate_usd": 12.50,
+  "total_cost_estimate_lkr": 12.50,
   "battery_status_at_destination": 68.5,
   "model_version": "1.0.0-trained",
   "timestamp": "2025-11-13T10:30:00.000000"
@@ -104,7 +104,7 @@ Once the server is running, visit:
 ### ML Model
 - **Algorithm**: Random Forest Regressor (Scikit-learn)
 - **Features**: latitude, longitude, distance_from_start, battery_capacity, total_distance, stop_number
-- **Predictions**: power_kw, duration_minutes, cost_usd, confidence_score
+- **Predictions**: power_kw, duration_minutes, cost_lkr, confidence_score
 - **Training Data**: 10,000 synthetic samples (replace with real data in production)
 
 ### Energy Calculation

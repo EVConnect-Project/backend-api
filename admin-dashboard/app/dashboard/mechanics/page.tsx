@@ -8,6 +8,8 @@ import {
   rejectMechanicApplication,
   updateMechanic,
   deleteMechanic,
+  banMechanic,
+  unbanMechanic,
   type MechanicApplication,
   type Mechanic
 } from '@/lib/api';
@@ -164,6 +166,28 @@ export default function MechanicsPage() {
     } catch (error) {
       console.error('Error updating mechanic:', error);
       toast.error('Failed to update mechanic');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleBanMechanic = async (mechanicId: string, isBanned: boolean) => {
+    const action = isBanned ? 'unban' : 'ban';
+    if (!confirm(`Are you sure you want to ${action} this mechanic?`)) return;
+
+    setActionLoading(mechanicId);
+    try {
+      if (isBanned) {
+        await unbanMechanic(mechanicId);
+        toast.success('Mechanic unbanned successfully');
+      } else {
+        await banMechanic(mechanicId);
+        toast.success('Mechanic banned successfully');
+      }
+      await fetchMechanics();
+    } catch (error) {
+      console.error(`Error ${action}ning mechanic:`, error);
+      toast.error(`Failed to ${action} mechanic`);
     } finally {
       setActionLoading(null);
     }
@@ -518,15 +542,22 @@ export default function MechanicsPage() {
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          {mechanic.available ? (
-                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700">
-                              Available
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 dark:bg-slate-700/50 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-600">
-                              Unavailable
-                            </span>
-                          )}
+                          <div className="flex flex-col gap-1.5">
+                            {mechanic.available ? (
+                              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700">
+                                Available
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 dark:bg-slate-700/50 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-600">
+                                Unavailable
+                              </span>
+                            )}
+                            {mechanic.isBanned && (
+                              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-700">
+                                Banned
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-6 py-4 text-right">
                           {actionLoading === mechanic.id ? (
@@ -540,6 +571,18 @@ export default function MechanicsPage() {
                               >
                                 <Edit className="w-3.5 h-3.5 mr-1.5" />
                                 Edit
+                              </button>
+                              <button
+                                onClick={() => handleBanMechanic(mechanic.id, mechanic.isBanned)}
+                                className={`inline-flex items-center px-3 py-1.5 text-xs font-semibold ${
+                                  mechanic.isBanned
+                                    ? 'text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-700 hover:bg-emerald-100 dark:hover:bg-emerald-900/50'
+                                    : 'text-orange-700 dark:text-orange-300 bg-orange-50 dark:bg-orange-900/30 border-orange-200 dark:border-orange-700 hover:bg-orange-100 dark:hover:bg-orange-900/50'
+                                } border rounded-lg transition-all`}
+                                title={mechanic.isBanned ? 'Unban Mechanic' : 'Ban Mechanic'}
+                              >
+                                <XCircle className="w-3.5 h-3.5 mr-1.5" />
+                                {mechanic.isBanned ? 'Unban' : 'Ban'}
                               </button>
                               <button
                                 onClick={() => handleDeleteMechanic(mechanic.id)}

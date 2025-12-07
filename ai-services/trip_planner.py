@@ -281,7 +281,7 @@ class TripPlanner:
                     departure_battery=target_percent,
                     charging_time=charging_time,
                     charging_power=charging_power,
-                    cost_estimate=charging_needed * 0.30  # Assume $0.30 per kWh
+                    cost_estimate=charging_needed * 35  # Assume LKR 35 per kWh
                 )
                 
                 charging_stops.append(stop)

@@ -8,6 +8,7 @@ import { UpdateListingDto } from './dto/update-listing.dto';
 import { GetMarketplaceFeedDto } from './dto/get-marketplace-feed.dto';
 import { GetAdminListingsDto } from './dto/get-admin-listings.dto';
 import { NotificationService } from './notification.service';
+import { UserEntity } from '../users/entities/user.entity';
 
 @Injectable()
 export class MarketplaceService {
@@ -16,11 +17,19 @@ export class MarketplaceService {
     private listingRepository: Repository<MarketplaceListing>,
     @InjectRepository(MarketplaceImage)
     private imageRepository: Repository<MarketplaceImage>,
+    @InjectRepository(UserEntity)
+    private userRepository: Repository<UserEntity>,
     private notificationService: NotificationService,
   ) {}
 
   async createListing(dto: CreateListingDto, sellerId: string): Promise<MarketplaceListing> {
     console.log('📝 Creating listing for seller:', sellerId);
+    
+    // Check if seller is banned
+    const seller = await this.userRepository.findOne({ where: { id: sellerId } });
+    if (seller && seller.isBanned) {
+      throw new ForbiddenException('Your account has been suspended. You cannot create new listings.');
+    }
     
     const listing = this.listingRepository.create({
       title: dto.title,
@@ -64,6 +73,8 @@ export class MarketplaceService {
       .addSelect(['seller.id', 'seller.name', 'seller.email'])
       .leftJoinAndSelect('listing.images', 'images')
       .where('listing.status = :status', { status: 'approved' })
+      .andWhere('listing.isBanned = :isBanned', { isBanned: false })
+      .andWhere('seller.isBanned = :sellerBanned', { sellerBanned: false })
       .orderBy('listing.createdAt', 'DESC')
       .getMany();
   }

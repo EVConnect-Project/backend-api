@@ -540,4 +540,42 @@ export class NotificationsService implements OnModuleInit {
     // Default to enabled if no preference is set
     return preference ? preference.enabled : true;
   }
+
+  /**
+   * Send charger approved notification
+   */
+  async sendChargerApproved(
+    userId: string,
+    chargerName: string,
+    chargerId: string,
+  ): Promise<void> {
+    await this.sendToUser(userId, NotificationType.CHARGER_APPROVED, {
+      title: '✅ Charger Approved',
+      body: `Your charger "${chargerName}" has been approved and is now live!`,
+      data: {
+        chargerId,
+        chargerName,
+        screen: 'OwnerDashboard',
+      },
+    });
+  }
+
+  /**
+   * Send charger rejected notification
+   */
+  async sendChargerRejected(
+    userId: string,
+    chargerName: string,
+    reason: string,
+  ): Promise<void> {
+    await this.sendToUser(userId, NotificationType.CHARGER_REJECTED, {
+      title: '❌ Charger Rejected',
+      body: `Your charger "${chargerName}" was rejected. Reason: ${reason}`,
+      data: {
+        chargerName,
+        reason,
+        screen: 'ConnectWithEV',
+      },
+    });
+  }
 }

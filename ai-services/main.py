@@ -57,7 +57,7 @@ class ChargingStop(BaseModel):
     power_kw: float
     estimated_charge_duration_minutes: int
     distance_from_start_km: float
-    cost_estimate_usd: float
+    cost_estimate_lkr: float
     confidence_score: float
 
 class RouteResponse(BaseModel):
@@ -66,7 +66,7 @@ class RouteResponse(BaseModel):
     estimated_duration_hours: float
     charging_stops: List[ChargingStop]
     total_charging_time_minutes: int
-    total_cost_estimate_usd: float
+    total_cost_estimate_lkr: float
     battery_status_at_destination: float
     model_version: str
     timestamp: str
@@ -251,14 +251,14 @@ def predict_optimal_stops(
                 prediction = ml_model.predict(features)[0]
                 power_kw = prediction[0]
                 duration_minutes = prediction[1]
-                cost_usd = prediction[2]
+                cost_lkr = prediction[2]
                 confidence = prediction[3] if len(prediction) > 3 else 0.85
             else:
                 # Mock predictions based on heuristics
                 power_kw = np.random.choice([50, 150, 250, 350])  # Different charger types
                 charge_needed_kwh = battery_kwh * 0.6  # Charge to 80%
                 duration_minutes = int((charge_needed_kwh / power_kw) * 60)
-                cost_usd = charge_needed_kwh * np.random.uniform(0.35, 0.55)  # $0.35-0.55 per kWh
+                cost_lkr = charge_needed_kwh * np.random.uniform(25, 50)  # LKR 25-50 per kWh
                 confidence = 0.75
             
             charging_stops.append({
@@ -269,7 +269,7 @@ def predict_optimal_stops(
                 "power_kw": round(power_kw, 1),
                 "estimated_charge_duration_minutes": duration_minutes,
                 "distance_from_start_km": round(distance_from_start, 2),
-                "cost_estimate_usd": round(cost_usd, 2),
+                "cost_estimate_lkr": round(cost_lkr, 2),
                 "confidence_score": round(confidence, 3)
             })
     
@@ -363,7 +363,7 @@ async def predict_route(request: RouteRequest):
         
         # Calculate totals
         total_charging_time = sum(stop["estimated_charge_duration_minutes"] for stop in charging_stops)
-        total_cost = sum(stop["cost_estimate_usd"] for stop in charging_stops)
+        total_cost = sum(stop["cost_estimate_lkr"] for stop in charging_stops)
         
         # Estimate driving duration (assuming 80 km/h average speed)
         driving_hours = total_distance / 80
@@ -384,7 +384,7 @@ async def predict_route(request: RouteRequest):
             estimated_duration_hours=round(estimated_duration, 2),
             charging_stops=charging_stops,
             total_charging_time_minutes=total_charging_time,
-            total_cost_estimate_usd=round(total_cost, 2),
+            total_cost_estimate_lkr=round(total_cost, 2),
             battery_status_at_destination=round(battery_at_destination, 2),
             model_version="1.0.0" if ml_model is None else "1.0.0-trained",
             timestamp=datetime.utcnow().isoformat()
@@ -582,7 +582,7 @@ async def predict_charger_ranking(request: ChargerRankingRequest):
                 reasons.append("Highly rated")
             
             # Price (5% weight) - inverse relationship
-            # Assume average price is $0.40/kWh
+            # Assume average price is LKR 35/kWh
             price_factor = max(0, 5 - (charger.price_per_kwh - 0.40) * 10)
             score += price_factor
             if charger.price_per_kwh < 0.35:

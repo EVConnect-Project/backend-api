@@ -27,6 +27,7 @@ import { TripPlannerModule } from './trip-planner/trip-planner.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { TripModule } from './trip/trip.module';
 import { SupportModule } from './support/support.module';
+import { EmergencyModule } from './emergency/emergency.module';
 
 @Module({
   imports: [
@@ -73,6 +74,7 @@ import { SupportModule } from './support/support.module';
     NotificationsModule,
     TripModule,
     SupportModule,
+    EmergencyModule,
   ],
   controllers: [AppController],
   providers: [AppService],

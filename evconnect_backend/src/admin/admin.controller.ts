@@ -83,6 +83,11 @@ export class AdminController {
     return this.adminService.getUserById(id);
   }
 
+  @Get('users/:id/payment-accounts')
+  async getUserPaymentAccounts(@Param('id') id: string) {
+    return this.adminService.getUserPaymentAccounts(id);
+  }
+
   @Post('users/:id/ban')
   async banUser(@Param('id') id: string) {
     const user = await this.adminService.banUser(id);
@@ -183,6 +188,16 @@ export class AdminController {
     // WebSocket broadcasting removed - implement REST-based notifications if needed
     
     return charger;
+  }
+
+  @Post('chargers/:id/ban')
+  async banCharger(@Param('id') id: string) {
+    return this.adminService.banCharger(id);
+  }
+
+  @Post('chargers/:id/unban')
+  async unbanCharger(@Param('id') id: string) {
+    return this.adminService.unbanCharger(id);
   }
 
   // Booking Management
@@ -321,6 +336,16 @@ export class AdminController {
     // WebSocket broadcasting removed - implement REST-based notifications if needed
     
     return mechanic;
+  }
+
+  @Post('mechanics/:id/ban')
+  async banMechanic(@Param('id') id: string) {
+    return this.adminService.banMechanic(id);
+  }
+
+  @Post('mechanics/:id/unban')
+  async unbanMechanic(@Param('id') id: string) {
+    return this.adminService.unbanMechanic(id);
   }
 
   // ==================== ADMIN CHAT ENDPOINTS ====================
@@ -692,6 +717,38 @@ export class AdminController {
     );
 
     return result;
+  }
+
+  /**
+   * Ban marketplace listing
+   */
+  @Post('marketplace/listings/:id/ban')
+  async banMarketplaceListing(@Param('id') id: string) {
+    return this.adminService.banMarketplaceListing(id);
+  }
+
+  /**
+   * Unban marketplace listing
+   */
+  @Post('marketplace/listings/:id/unban')
+  async unbanMarketplaceListing(@Param('id') id: string) {
+    return this.adminService.unbanMarketplaceListing(id);
+  }
+
+  /**
+   * Ban seller (prevents new listings)
+   */
+  @Post('marketplace/sellers/:id/ban')
+  async banSeller(@Param('id') sellerId: string) {
+    return this.adminService.banSeller(sellerId);
+  }
+
+  /**
+   * Unban seller
+   */
+  @Post('marketplace/sellers/:id/unban')
+  async unbanSeller(@Param('id') sellerId: string) {
+    return this.adminService.unbanSeller(sellerId);
   }
 
   // ==================== ENHANCED MECHANIC MANAGEMENT ====================

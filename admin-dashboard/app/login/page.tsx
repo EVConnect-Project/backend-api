@@ -152,7 +152,7 @@ export default function LoginPage() {
           <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-700 text-center">
             <p className="text-sm text-slate-600 dark:text-slate-400 mb-2">Demo credentials:</p>
             <p className="font-mono text-sm bg-slate-100 dark:bg-slate-800 px-3 py-2 rounded-lg inline-block">
-              admin@evconnect.com / admin123
+              admin@evconnect.com / password123
             </p>
           </div>
         </CardContent>

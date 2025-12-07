@@ -76,6 +76,7 @@ export interface Charger {
   powerKw: number;
   pricePerKwh: number;
   verified: boolean;
+  isBanned: boolean;
   description?: string;
   owner: {
     id: string;
@@ -143,6 +144,7 @@ export interface Mechanic {
   rating: number;
   completedJobs: number;
   available: boolean;
+  isBanned: boolean;
   services: string[];
   lat?: number;
   lng?: number;
@@ -333,6 +335,26 @@ export const getUserById = async (id: string): Promise<User> => {
   return response.data;
 };
 
+export interface PaymentAccount {
+  id: string;
+  accountHolderName: string;
+  bankName: string;
+  accountNumber: string;
+  accountType: 'savings' | 'checking' | 'business';
+  branchCode: string | null;
+  verificationStatus: 'pending' | 'verified' | 'rejected';
+  verificationNotes: string | null;
+  isPrimary: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const getUserPaymentAccounts = async (userId: string): Promise<PaymentAccount[]> => {
+  const response = await api.get(`/admin/users/${userId}/payment-accounts`);
+  return response.data;
+};
+
 export const banUser = async (id: string): Promise<void> => {
   await api.post(`/admin/users/${id}/ban`);
 };
@@ -386,6 +408,14 @@ export const updateCharger = async (
 
 export const deleteCharger = async (id: string): Promise<void> => {
   await api.delete(`/admin/chargers/${id}`);
+};
+
+export const banCharger = async (id: string): Promise<void> => {
+  await api.post(`/admin/chargers/${id}/ban`);
+};
+
+export const unbanCharger = async (id: string): Promise<void> => {
+  await api.post(`/admin/chargers/${id}/unban`);
 };
 
 // Booking APIs
@@ -600,4 +630,30 @@ export const updateMechanic = async (
 export const deleteMechanic = async (id: string): Promise<void> => {
   await api.delete(`/admin/mechanics/${id}`);
 };
+
+export const banMechanic = async (id: string): Promise<void> => {
+  await api.post(`/admin/mechanics/${id}/ban`);
+};
+
+export const unbanMechanic = async (id: string): Promise<void> => {
+  await api.post(`/admin/mechanics/${id}/unban`);
+};
+
+// Marketplace APIs
+export const banMarketplaceListing = async (id: string): Promise<void> => {
+  await api.post(`/admin/marketplace/listings/${id}/ban`);
+};
+
+export const unbanMarketplaceListing = async (id: string): Promise<void> => {
+  await api.post(`/admin/marketplace/listings/${id}/unban`);
+};
+
+export const banSeller = async (id: string): Promise<void> => {
+  await api.post(`/admin/marketplace/sellers/${id}/ban`);
+};
+
+export const unbanSeller = async (id: string): Promise<void> => {
+  await api.post(`/admin/marketplace/sellers/${id}/unban`);
+};
+
 

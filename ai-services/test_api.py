@@ -123,7 +123,7 @@ def test_predict_route_response_structure():
     required_fields = [
         "success", "total_distance_km", "estimated_duration_hours",
         "charging_stops", "total_charging_time_minutes", 
-        "total_cost_estimate_usd", "battery_status_at_destination",
+        "total_cost_estimate_lkr", "battery_status_at_destination",
         "model_version", "timestamp"
     ]
     
@@ -136,7 +136,7 @@ def test_predict_route_response_structure():
         stop_fields = [
             "latitude", "longitude", "charger_id", "station_name",
             "power_kw", "estimated_charge_duration_minutes",
-            "distance_from_start_km", "cost_estimate_usd", "confidence_score"
+            "distance_from_start_km", "cost_estimate_lkr", "confidence_score"
         ]
         for field in stop_fields:
             assert field in stop, f"Missing stop field: {field}"

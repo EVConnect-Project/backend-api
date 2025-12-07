@@ -5,7 +5,9 @@ import {
   getChargers, 
   approveCharger, 
   rejectCharger, 
-  updateCharger 
+  updateCharger,
+  banCharger,
+  unbanCharger
 } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -40,6 +42,7 @@ interface Charger {
   powerKw: number;
   pricePerKwh: number;
   verified: boolean;
+  isBanned: boolean;
   description?: string;
   owner: {
     id: string;
@@ -153,6 +156,28 @@ export default function ChargersPage() {
     } catch (error) {
       console.error('Error rejecting charger:', error);
       toast.error('Failed to reject charger');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleBanCharger = async (chargerId: string, isBanned: boolean) => {
+    const action = isBanned ? 'unban' : 'ban';
+    if (!confirm(`Are you sure you want to ${action} this charger?`)) return;
+
+    setActionLoading(chargerId);
+    try {
+      if (isBanned) {
+        await unbanCharger(chargerId);
+        toast.success('Charger unbanned successfully');
+      } else {
+        await banCharger(chargerId);
+        toast.success('Charger banned successfully');
+      }
+      await fetchChargers();
+    } catch (error) {
+      console.error(`Error ${action}ning charger:`, error);
+      toast.error(`Failed to ${action} charger`);
     } finally {
       setActionLoading(null);
     }
@@ -360,15 +385,22 @@ export default function ChargersPage() {
                         <div className="text-slate-600 dark:text-slate-400">{formatCurrency(charger.pricePerKwh)}/kWh</div>
                       </td>
                       <td className="px-6 py-4">
-                        {charger.verified ? (
-                          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-700">
-                            Verified
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
-                            Pending
-                          </span>
-                        )}
+                        <div className="flex flex-col gap-1.5">
+                          {charger.verified ? (
+                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-700">
+                              Verified
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
+                              Pending
+                            </span>
+                          )}
+                          {charger.isBanned && (
+                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-700">
+                              Banned
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-4 text-right">
                         {actionLoading === charger.id ? (
@@ -415,6 +447,22 @@ export default function ChargersPage() {
                                   Reject
                                 </button>
                               </>
+                            )}
+
+                            {/* Ban/Unban Button */}
+                            {charger.verified && (
+                              <button
+                                onClick={() => handleBanCharger(charger.id, charger.isBanned)}
+                                className={`inline-flex items-center px-3 py-1.5 text-xs font-semibold ${
+                                  charger.isBanned
+                                    ? 'text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-700 hover:bg-emerald-100 dark:hover:bg-emerald-900/50'
+                                    : 'text-orange-700 dark:text-orange-300 bg-orange-50 dark:bg-orange-900/30 border-orange-200 dark:border-orange-700 hover:bg-orange-100 dark:hover:bg-orange-900/50'
+                                } border rounded-lg transition-all`}
+                                title={charger.isBanned ? 'Unban Charger' : 'Ban Charger'}
+                              >
+                                <XCircle className="w-3.5 h-3.5 mr-1.5" />
+                                {charger.isBanned ? 'Unban' : 'Ban'}
+                              </button>
                             )}
                           </div>
                         )}

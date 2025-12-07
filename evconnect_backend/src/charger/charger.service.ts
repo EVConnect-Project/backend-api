@@ -68,7 +68,7 @@ export class ChargerService {
 
   async findAll(): Promise<Charger[]> {
     return this.chargerRepository.find({
-      where: { verified: true },
+      where: { verified: true, isBanned: false },
       relations: ['owner'],
       order: { createdAt: 'DESC' },
     });
@@ -101,7 +101,7 @@ export class ChargerService {
             sin( radians(lat) ) 
           ) ) AS distance 
         FROM chargers
-        WHERE verified = true
+        WHERE verified = true AND "isBanned" = false
       ) AS chargers_with_distance
       WHERE distance < $3 
       ORDER BY distance

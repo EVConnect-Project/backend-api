@@ -7,6 +7,9 @@ import { BookingEntity } from '../bookings/entities/booking.entity';
 import { MechanicApplication, ApplicationStatus } from '../mechanic/entities/mechanic-application.entity';
 import { MechanicEntity } from '../mechanics/entities/mechanic.entity';
 import { MarketplaceListing } from '../marketplace/entities/marketplace-listing.entity';
+import { OwnerPaymentAccount } from '../owner/entities/owner-payment-account.entity';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../notifications/types/notification-types';
 
 @Injectable()
 export class AdminService {
@@ -23,6 +26,9 @@ export class AdminService {
     private mechanicRepository: Repository<MechanicEntity>,
     @InjectRepository(MarketplaceListing)
     private marketplaceRepository: Repository<MarketplaceListing>,
+    @InjectRepository(OwnerPaymentAccount)
+    private paymentAccountRepository: Repository<OwnerPaymentAccount>,
+    private notificationsService: NotificationsService,
   ) {}
 
   // Dashboard Stats
@@ -247,6 +253,33 @@ export class AdminService {
     };
   }
 
+  async getUserPaymentAccounts(userId: string) {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const paymentAccounts = await this.paymentAccountRepository.find({
+      where: { userId },
+      order: { isPrimary: 'DESC', createdAt: 'DESC' },
+    });
+
+    return paymentAccounts.map(account => ({
+      id: account.id,
+      accountHolderName: account.accountHolderName,
+      bankName: account.bankName,
+      accountNumber: account.accountNumber,
+      accountType: account.accountType,
+      branchCode: account.branchCode,
+      verificationStatus: account.verificationStatus,
+      verificationNotes: account.verificationNotes,
+      isPrimary: account.isPrimary,
+      isActive: account.isActive,
+      createdAt: account.createdAt,
+      updatedAt: account.updatedAt,
+    }));
+  }
+
   async banUser(id: string) {
     const user = await this.userRepository.findOne({ where: { id } });
     if (!user) {
@@ -391,23 +424,63 @@ export class AdminService {
   }
 
   async approveCharger(id: string) {
-    const charger = await this.chargerRepository.findOne({ where: { id } });
+    const charger = await this.chargerRepository.findOne({ 
+      where: { id },
+      relations: ['owner']
+    });
     if (!charger) {
       throw new NotFoundException('Charger not found');
     }
     charger.verified = true;
+    charger.status = 'available'; // Make charger available when approved
     await this.chargerRepository.save(charger);
+    
+    // Send approval notification to owner
+    try {
+      await this.notificationsService.sendChargerApproved(
+        charger.ownerId,
+        charger.name || 'Your Charger',
+        charger.id,
+      );
+    } catch (error) {
+      console.error('Failed to send charger approval notification:', error);
+    }
+    
     return { message: 'Charger approved successfully' };
   }
 
   async rejectCharger(id: string, reason: string) {
-    const charger = await this.chargerRepository.findOne({ where: { id } });
+    const charger = await this.chargerRepository.findOne({ 
+      where: { id },
+      relations: ['owner']
+    });
     if (!charger) {
       throw new NotFoundException('Charger not found');
     }
-    charger.verified = false;
-    await this.chargerRepository.save(charger);
-    return { message: 'Charger rejected successfully', reason };
+    
+    // Store charger info before deletion
+    const ownerId = charger.ownerId;
+    const chargerName = charger.name || 'Your Charger';
+    
+    // Delete the rejected charger completely
+    await this.chargerRepository.remove(charger);
+    
+    // Send rejection notification to owner with reason
+    try {
+      await this.notificationsService.sendChargerRejected(
+        ownerId,
+        chargerName,
+        reason,
+      );
+    } catch (error) {
+      console.error('Failed to send charger rejection notification:', error);
+    }
+    
+    return { 
+      message: 'Charger rejected and removed successfully', 
+      reason,
+      ownerId 
+    };
   }
 
   async updateCharger(id: string, data: Partial<Charger>) {
@@ -427,6 +500,66 @@ export class AdminService {
     }
     await this.chargerRepository.remove(charger);
     return { message: 'Charger deleted successfully' };
+  }
+
+  async banCharger(id: string) {
+    const charger = await this.chargerRepository.findOne({ 
+      where: { id },
+      relations: ['owner']
+    });
+    if (!charger) {
+      throw new NotFoundException('Charger not found');
+    }
+    charger.isBanned = true;
+    charger.status = 'offline'; // Set to offline when banned
+    await this.chargerRepository.save(charger);
+    
+    // Send notification to owner
+    try {
+      await this.notificationsService.sendToUser(
+        charger.ownerId,
+        NotificationType.CHARGER_REJECTED,
+        {
+          title: 'Charger Suspended',
+          body: `Your charger "${charger.name || 'Unnamed'}" has been suspended by admin. It is no longer available for bookings.`,
+          data: { chargerId: charger.id }
+        }
+      );
+    } catch (error) {
+      console.error('Failed to send charger ban notification:', error);
+    }
+    
+    return { message: 'Charger banned successfully' };
+  }
+
+  async unbanCharger(id: string) {
+    const charger = await this.chargerRepository.findOne({ 
+      where: { id },
+      relations: ['owner']
+    });
+    if (!charger) {
+      throw new NotFoundException('Charger not found');
+    }
+    charger.isBanned = false;
+    charger.status = 'available'; // Set back to available when unbanned
+    await this.chargerRepository.save(charger);
+    
+    // Send notification to owner
+    try {
+      await this.notificationsService.sendToUser(
+        charger.ownerId,
+        NotificationType.CHARGER_APPROVED,
+        {
+          title: 'Charger Reinstated',
+          body: `Your charger "${charger.name || 'Unnamed'}" has been reinstated by admin. It is now available for bookings again.`,
+          data: { chargerId: charger.id }
+        }
+      );
+    } catch (error) {
+      console.error('Failed to send charger unban notification:', error);
+    }
+    
+    return { message: 'Charger unbanned successfully' };
   }
 
   // Booking Management
@@ -862,6 +995,66 @@ export class AdminService {
     return { message: 'Mechanic deleted successfully' };
   }
 
+  async banMechanic(id: string) {
+    const mechanic = await this.mechanicRepository.findOne({ 
+      where: { id },
+      relations: ['user']
+    });
+    if (!mechanic) {
+      throw new NotFoundException('Mechanic not found');
+    }
+    mechanic.isBanned = true;
+    mechanic.available = false; // Set to unavailable when banned
+    await this.mechanicRepository.save(mechanic);
+    
+    // Send notification to mechanic
+    try {
+      await this.notificationsService.sendToUser(
+        mechanic.userId,
+        NotificationType.SERVICE_COMPLETED,
+        {
+          title: 'Mechanic Account Suspended',
+          body: 'Your mechanic account has been suspended by admin. You cannot accept new breakdown requests until reinstated.',
+          data: { mechanicId: mechanic.id }
+        }
+      );
+    } catch (error) {
+      console.error('Failed to send mechanic ban notification:', error);
+    }
+    
+    return { message: 'Mechanic banned successfully' };
+  }
+
+  async unbanMechanic(id: string) {
+    const mechanic = await this.mechanicRepository.findOne({ 
+      where: { id },
+      relations: ['user']
+    });
+    if (!mechanic) {
+      throw new NotFoundException('Mechanic not found');
+    }
+    mechanic.isBanned = false;
+    mechanic.available = true; // Set back to available when unbanned
+    await this.mechanicRepository.save(mechanic);
+    
+    // Send notification to mechanic
+    try {
+      await this.notificationsService.sendToUser(
+        mechanic.userId,
+        NotificationType.SERVICE_COMPLETED,
+        {
+          title: 'Mechanic Account Reinstated',
+          body: 'Your mechanic account has been reinstated by admin. You can now accept breakdown requests again.',
+          data: { mechanicId: mechanic.id }
+        }
+      );
+    } catch (error) {
+      console.error('Failed to send mechanic unban notification:', error);
+    }
+    
+    return { message: 'Mechanic unbanned successfully' };
+  }
+
   // Helper methods
   private generateDailyData(items: any[], start: Date, end: Date, type: string): any[] {
     const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
@@ -1125,6 +1318,154 @@ export class AdminService {
     Object.assign(listing, updates);
 
     return this.marketplaceRepository.save(listing);
+  }
+
+  /**
+   * Ban marketplace listing
+   */
+  async banMarketplaceListing(id: string) {
+    const listing = await this.marketplaceRepository.findOne({ 
+      where: { id },
+      relations: ['seller']
+    });
+    if (!listing) {
+      throw new NotFoundException('Listing not found');
+    }
+    
+    listing.isBanned = true;
+    listing.status = 'rejected'; // Set to rejected when banned
+    await this.marketplaceRepository.save(listing);
+    
+    // Send notification to seller
+    try {
+      await this.notificationsService.sendToUser(
+        listing.sellerId,
+        NotificationType.LISTING_REJECTED,
+        {
+          title: 'Listing Suspended',
+          body: `Your marketplace listing "${listing.title}" has been suspended by admin and is no longer visible.`,
+          data: { listingId: listing.id }
+        }
+      );
+    } catch (error) {
+      console.error('Failed to send listing ban notification:', error);
+    }
+    
+    return { message: 'Listing banned successfully' };
+  }
+
+  /**
+   * Unban marketplace listing
+   */
+  async unbanMarketplaceListing(id: string) {
+    const listing = await this.marketplaceRepository.findOne({ 
+      where: { id },
+      relations: ['seller']
+    });
+    if (!listing) {
+      throw new NotFoundException('Listing not found');
+    }
+    
+    listing.isBanned = false;
+    listing.status = 'approved'; // Set back to approved when unbanned
+    await this.marketplaceRepository.save(listing);
+    
+    // Send notification to seller
+    try {
+      await this.notificationsService.sendToUser(
+        listing.sellerId,
+        NotificationType.LISTING_APPROVED,
+        {
+          title: 'Listing Reinstated',
+          body: `Your marketplace listing "${listing.title}" has been reinstated by admin and is now visible again.`,
+          data: { listingId: listing.id }
+        }
+      );
+    } catch (error) {
+      console.error('Failed to send listing unban notification:', error);
+    }
+    
+    return { message: 'Listing unbanned successfully' };
+  }
+
+  /**
+   * Ban seller (prevents new listings)
+   */
+  async banSeller(sellerId: string) {
+    const user = await this.userRepository.findOne({ where: { id: sellerId } });
+    if (!user) {
+      throw new NotFoundException('Seller not found');
+    }
+    
+    user.isBanned = true;
+    await this.userRepository.save(user);
+    
+    // Ban all active listings by this seller
+    const activeListings = await this.marketplaceRepository.find({
+      where: { 
+        sellerId,
+        isBanned: false
+      }
+    });
+    
+    for (const listing of activeListings) {
+      listing.isBanned = true;
+      listing.status = 'rejected';
+    }
+    
+    if (activeListings.length > 0) {
+      await this.marketplaceRepository.save(activeListings);
+    }
+    
+    // Send notification
+    try {
+      await this.notificationsService.sendToUser(
+        sellerId,
+        NotificationType.LISTING_REJECTED,
+        {
+          title: 'Seller Account Suspended',
+          body: 'Your seller account has been suspended by admin. You cannot create new listings until reinstated.',
+          data: { bannedListingsCount: activeListings.length.toString() }
+        }
+      );
+    } catch (error) {
+      console.error('Failed to send seller ban notification:', error);
+    }
+    
+    return { 
+      message: 'Seller banned successfully',
+      bannedListingsCount: activeListings.length
+    };
+  }
+
+  /**
+   * Unban seller
+   */
+  async unbanSeller(sellerId: string) {
+    const user = await this.userRepository.findOne({ where: { id: sellerId } });
+    if (!user) {
+      throw new NotFoundException('Seller not found');
+    }
+    
+    user.isBanned = false;
+    await this.userRepository.save(user);
+    
+    // Send notification
+    try {
+      await this.notificationsService.sendToUser(
+        sellerId,
+        NotificationType.LISTING_APPROVED,
+        {
+          title: 'Seller Account Reinstated',
+          body: 'Your seller account has been reinstated by admin. You can now create listings again.',
+          data: {}
+        }
+      );
+    } catch (error) {
+      console.error('Failed to send seller unban notification:', error);
+    }
+    
+    return { message: 'Seller unbanned successfully' };
   }
 
   /**

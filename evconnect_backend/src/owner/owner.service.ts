@@ -306,6 +306,35 @@ export class OwnerService {
   }
 
   /**
+   * Delete a pending booking (ownership verification)
+   */
+  async deletePendingBooking(id: string, ownerId: string) {
+    const booking = await this.bookingRepository.findOne({
+      where: { id },
+      relations: ['charger'],
+    });
+
+    if (!booking) {
+      throw new NotFoundException('Booking not found');
+    }
+
+    // Verify the charger is owned by this user
+    if (booking.charger.ownerId !== ownerId) {
+      throw new ForbiddenException('You can only delete bookings for your own chargers');
+    }
+
+    // Only allow deleting pending bookings
+    if (booking.status !== 'pending') {
+      throw new BadRequestException('Only pending bookings can be deleted. This booking is ' + booking.status);
+    }
+
+    // Delete the booking
+    await this.bookingRepository.remove(booking);
+
+    return { message: 'Booking deleted successfully' };
+  }
+
+  /**
    * Get booking statistics for owned chargers
    */
   async getBookingStats(ownerId: string) {

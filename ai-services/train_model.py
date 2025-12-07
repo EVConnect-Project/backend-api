@@ -44,10 +44,10 @@ def generate_synthetic_training_data(n_samples=10000):
     df['duration_minutes'] = (charge_needed / df['power_kw']) * 60
     df['duration_minutes'] = df['duration_minutes'].clip(15, 120)  # 15-120 minutes
     
-    # cost_usd: Cost based on energy and market rates
+    # cost_lkr: Cost based on energy and market rates
     energy_charged = (df['duration_minutes'] / 60) * df['power_kw']
-    price_per_kwh = np.random.uniform(0.35, 0.55, n_samples)
-    df['cost_usd'] = energy_charged * price_per_kwh
+    price_per_kwh = np.random.uniform(25, 50, n_samples)
+    df['cost_lkr'] = energy_charged * price_per_kwh
     
     # confidence: Model confidence (higher for common scenarios)
     df['confidence'] = np.random.uniform(0.7, 0.95, n_samples)
@@ -72,7 +72,7 @@ def train_model():
             'battery_capacity', 'total_distance', 'stop_number']]
     
     # Targets (output) - multi-output prediction
-    y = df[['power_kw', 'duration_minutes', 'cost_usd', 'confidence']]
+    y = df[['power_kw', 'duration_minutes', 'cost_lkr', 'confidence']]
     
     # Split data
     X_train, X_test, y_train, y_test = train_test_split(

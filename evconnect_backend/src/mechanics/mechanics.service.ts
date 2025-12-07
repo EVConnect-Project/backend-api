@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { MechanicEntity } from './entities/mechanic.entity';
@@ -8,6 +8,9 @@ import { Charger } from '../charger/entities/charger.entity';
 import { CreateMechanicDto } from './dto/create-mechanic.dto';
 import { UpdateMechanicDto } from './dto/update-mechanic.dto';
 import { EmergencyRequestDto } from './dto/emergency-request.dto';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../notifications/types/notification-types';
+import { EmergencyService } from '../emergency/emergency.service';
 import axios from 'axios';
 
 @Injectable()
@@ -21,6 +24,9 @@ export class MechanicsService {
     private applicationRepository: Repository<MechanicApplication>,
     @InjectRepository(Charger)
     private chargerRepository: Repository<Charger>,
+    private notificationsService: NotificationsService,
+    @Inject(forwardRef(() => EmergencyService))
+    private emergencyService: EmergencyService,
   ) {}
 
   async register(createMechanicDto: CreateMechanicDto): Promise<MechanicEntity> {
@@ -30,7 +36,7 @@ export class MechanicsService {
 
   async findAll(): Promise<MechanicEntity[]> {
     return this.mechanicRepository.find({
-      where: { available: true },
+      where: { available: true, isBanned: false },
       order: { rating: 'DESC' },
     });
   }
@@ -404,6 +410,100 @@ export class MechanicsService {
     }
 
     return reasons;
+  }
+
+  /**
+   * Send emergency alerts to multiple mechanics
+   */
+  async sendEmergencyAlerts(
+    userId: string,
+    mechanicIds: string[],
+    userLocation: { lat: number; lng: number },
+    problemDescription?: string,
+    vehicleDetails?: any,
+    urgencyLevel: string = 'high',
+  ) {
+    try {
+      // Get user details
+      const user = await this.userRepository.findOne({ where: { id: userId } });
+      if (!user) {
+        throw new NotFoundException('User not found');
+      }
+
+      // Create emergency request in database
+      const emergencyRequest = await this.emergencyService.createEmergencyRequest(
+        userId,
+        userLocation.lat,
+        userLocation.lng,
+        problemDescription || 'Emergency breakdown assistance needed',
+        vehicleDetails,
+        urgencyLevel,
+        mechanicIds,
+      );
+
+      // Get mechanics
+      const mechanics = await this.mechanicRepository.findByIds(mechanicIds);
+      
+      // Prepare location string
+      const locationText = `${userLocation.lat.toFixed(6)}, ${userLocation.lng.toFixed(6)}`;
+      
+      // Send alerts to each mechanic
+      const results = await Promise.allSettled(
+        mechanics.map(async (mechanic) => {
+          const mechanicUser = await this.userRepository.findOne({ 
+            where: { id: mechanic.userId } 
+          });
+          
+          if (!mechanicUser) {
+            console.warn(`⚠️ User not found for mechanic ${mechanic.id}`);
+            return { mechanicId: mechanic.id, success: false, error: 'User not found' };
+          }
+
+          // Send push notification
+          await this.notificationsService.sendToUser(
+            mechanicUser.id,
+            NotificationType.MECHANIC_ASSIGNED,
+            {
+              title: '🚨 Emergency Breakdown Request',
+              body: `${user.name || user.email} needs urgent assistance at ${locationText}`,
+              data: {
+                type: 'emergency_request',
+                requestId: emergencyRequest.id,
+                userId,
+                userName: user.name || user.email,
+                userEmail: user.email,
+                userPhone: user.phoneNumber,
+                location: locationText,
+                lat: userLocation.lat.toString(),
+                lng: userLocation.lng.toString(),
+                problem: problemDescription || 'Breakdown assistance needed',
+                vehicleDetails: vehicleDetails ? JSON.stringify(vehicleDetails) : null,
+              },
+            },
+          );
+
+          console.log(`✅ Emergency alert sent to mechanic: ${mechanic.name}`);
+          return { mechanicId: mechanic.id, success: true };
+        }),
+      );
+
+      const successful = results.filter(r => r.status === 'fulfilled').length;
+      const failed = results.filter(r => r.status === 'rejected').length;
+
+      console.log(`🚨 Emergency alerts sent: ${successful} successful, ${failed} failed`);
+
+      return {
+        success: true,
+        requestId: emergencyRequest.id,
+        alertsSent: successful,
+        alertsFailed: failed,
+        totalMechanics: mechanicIds.length,
+        message: `Emergency alerts sent to ${successful} mechanics`,
+      };
+    } catch (error) {
+      console.error('❌ Error sending emergency alerts:', error);
+      throw error;
+    }
   }
 }
 

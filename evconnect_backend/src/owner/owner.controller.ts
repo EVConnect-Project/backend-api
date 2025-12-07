@@ -132,6 +132,15 @@ export class OwnerController {
   }
 
   /**
+   * Delete a pending booking (must be for owned charger)
+   */
+  @Delete('bookings/:id')
+  @UseGuards(IsChargerOwnerGuard)
+  async deletePendingBooking(@Param('id') id: string, @Request() req) {
+    return this.ownerService.deletePendingBooking(id, req.user.userId);
+  }
+
+  /**
    * Get booking statistics for owned chargers
    */
   @Get('stats/bookings')

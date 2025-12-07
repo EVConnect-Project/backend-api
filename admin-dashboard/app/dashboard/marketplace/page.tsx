@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import api from '@/lib/api';
+import api, { banMarketplaceListing, unbanMarketplaceListing } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { 
@@ -40,6 +40,7 @@ interface Listing {
   status: 'pending' | 'approved' | 'rejected';
   rejectionReason?: string;
   adminNotes?: string;
+  isBanned: boolean;
 }
 
 export default function MarketplaceAdminDashboard() {
@@ -151,6 +152,29 @@ export default function MarketplaceAdminDashboard() {
     } catch (err: any) {
       console.error('Failed to delete listing:', err);
       toast.error(err.response?.data?.message || 'Failed to delete listing');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Ban/Unban listing
+  const handleBanListing = async (listingId: string, isBanned: boolean) => {
+    const action = isBanned ? 'unban' : 'ban';
+    if (!confirm(`Are you sure you want to ${action} this listing?`)) return;
+
+    setActionLoading(listingId);
+    try {
+      if (isBanned) {
+        await unbanMarketplaceListing(listingId);
+        toast.success('Listing unbanned successfully');
+      } else {
+        await banMarketplaceListing(listingId);
+        toast.success('Listing banned successfully');
+      }
+      await fetchListings();
+    } catch (err: any) {
+      console.error(`Failed to ${action} listing:`, err);
+      toast.error(err.response?.data?.message || `Failed to ${action} listing`);
     } finally {
       setActionLoading(null);
     }
@@ -329,13 +353,20 @@ export default function MarketplaceAdminDashboard() {
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <span
-                          className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${getStatusBadgeColor(
-                            listing.status
-                          )}`}
-                        >
-                          {listing.status.charAt(0).toUpperCase() + listing.status.slice(1)}
-                        </span>
+                        <div className="flex flex-col gap-1">
+                          <span
+                            className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${getStatusBadgeColor(
+                              listing.status
+                            )}`}
+                          >
+                            {listing.status.charAt(0).toUpperCase() + listing.status.slice(1)}
+                          </span>
+                          {listing.isBanned && (
+                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-700">
+                              Banned
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">
                         {formatDate(listing.createdAt)}
@@ -382,6 +413,29 @@ export default function MarketplaceAdminDashboard() {
                                   Reject
                                 </button>
                               </>
+                            )}
+
+                            {/* Ban/Unban Button - Available for approved listings */}
+                            {listing.status === 'approved' && (
+                              listing.isBanned ? (
+                                <button
+                                  onClick={() => handleBanListing(listing.id, listing.isBanned)}
+                                  className="inline-flex items-center px-3 py-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-700 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-all"
+                                  title="Unban Listing"
+                                >
+                                  <CheckCircle className="w-3.5 h-3.5 mr-1.5" />
+                                  Unban
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => handleBanListing(listing.id, listing.isBanned)}
+                                  className="inline-flex items-center px-3 py-1.5 text-xs font-semibold text-orange-700 dark:text-orange-300 bg-orange-50 dark:bg-orange-900/30 border border-orange-200 dark:border-orange-700 rounded-lg hover:bg-orange-100 dark:hover:bg-orange-900/50 transition-all"
+                                  title="Ban Listing"
+                                >
+                                  <XCircle className="w-3.5 h-3.5 mr-1.5" />
+                                  Ban
+                                </button>
+                              )
                             )}
 
                             {/* Delete Button - Available for all listings */}

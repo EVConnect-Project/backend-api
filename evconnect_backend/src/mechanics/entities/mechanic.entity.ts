@@ -46,6 +46,9 @@ export class MechanicEntity {
   @Column({ default: true })
   available: boolean;
 
+  @Column({ default: false })
+  isBanned: boolean;
+
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
   pricePerHour: number;
 
