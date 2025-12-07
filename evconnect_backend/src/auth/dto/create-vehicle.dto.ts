@@ -31,6 +31,10 @@ export class CreateVehicleDto {
   @IsNotEmpty()
   connectorType: string;
 
+  @IsOptional()
+  @IsString()
+  vehicleType?: string;
+
   @IsNumber()
   @Min(1)
   rangeKm: number;
