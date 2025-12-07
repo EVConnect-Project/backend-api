@@ -155,9 +155,11 @@ export class AdminChatService {
    * Mark conversation as priority
    */
   async setPriority(conversationId: string, priority: 'normal' | 'high' | 'urgent') {
-    await this.conversationRepo.update(conversationId, {
-      metadata: { priority },
-    });
+    const conversation = await this.conversationRepo.findOne({ where: { id: conversationId } });
+    if (conversation) {
+      conversation.metadata = { ...conversation.metadata, priority };
+      await this.conversationRepo.save(conversation);
+    }
   }
 
   /**

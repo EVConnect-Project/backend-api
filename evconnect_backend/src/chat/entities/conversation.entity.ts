@@ -12,6 +12,7 @@ import { UserEntity } from '../../users/entities/user.entity';
 import { Message } from './message.entity';
 
 export enum ConversationType {
+  DIRECT = 'direct',
   MECHANIC = 'mechanic',
   MARKETPLACE = 'marketplace',
 }
@@ -61,6 +62,9 @@ export class Conversation {
 
   @Column({ name: 'unread_count_participant', default: 0 })
   unreadCountParticipant: number;
+
+  @Column({ type: 'jsonb', nullable: true })
+  metadata: any;
 
   @OneToMany(() => Message, (message) => message.conversation)
   messages: Message[];

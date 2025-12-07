@@ -97,6 +97,9 @@ export class Charger {
   @Column({ type: 'varchar', length: 100, nullable: true, unique: true })
   chargeBoxIdentity: string;
 
+  @Column({ type: 'jsonb', nullable: true })
+  metadata: any;
+
   @Column({ type: 'varchar', default: 'not_configured' })
   ocppStatus: 'not_configured' | 'pending' | 'configured' | 'connected';
 
