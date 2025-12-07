@@ -60,6 +60,12 @@ export class Message {
   @Column({ name: 'read_at', type: 'timestamp', nullable: true })
   readAt: Date;
 
+  @Column({ name: 'is_admin_message', default: false })
+  isAdminMessage: boolean;
+
+  @Column({ name: 'priority_level', type: 'varchar', length: 20, default: 'normal' })
+  priorityLevel: string;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 }

@@ -2,18 +2,34 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
+import { AdminChatService } from './admin-chat.service';
+import { AdminAuditService } from './admin-audit.service';
 import { UserEntity } from '../users/entities/user.entity';
 import { Charger } from '../charger/entities/charger.entity';
 import { BookingEntity } from '../bookings/entities/booking.entity';
 import { MechanicApplication } from '../mechanic/entities/mechanic-application.entity';
 import { MechanicEntity } from '../mechanics/entities/mechanic.entity';
+import { MarketplaceListing } from '../marketplace/entities/marketplace-listing.entity';
+import { Conversation } from '../chat/entities/conversation.entity';
+import { Message } from '../chat/entities/message.entity';
+import { AdminAction } from './entities/admin-action.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([UserEntity, Charger, BookingEntity, MechanicApplication, MechanicEntity]),
+    TypeOrmModule.forFeature([
+      UserEntity,
+      Charger,
+      BookingEntity,
+      MechanicApplication,
+      MechanicEntity,
+      MarketplaceListing,
+      Conversation,
+      Message,
+      AdminAction,
+    ]),
   ],
   controllers: [AdminController],
-  providers: [AdminService],
-  exports: [AdminService],
+  providers: [AdminService, AdminChatService, AdminAuditService],
+  exports: [AdminService, AdminChatService, AdminAuditService],
 })
 export class AdminModule {}

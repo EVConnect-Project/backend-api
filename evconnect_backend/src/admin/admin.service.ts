@@ -1,11 +1,12 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository, In, Like } from 'typeorm';
 import { UserEntity } from '../users/entities/user.entity';
 import { Charger } from '../charger/entities/charger.entity';
 import { BookingEntity } from '../bookings/entities/booking.entity';
 import { MechanicApplication, ApplicationStatus } from '../mechanic/entities/mechanic-application.entity';
 import { MechanicEntity } from '../mechanics/entities/mechanic.entity';
+import { MarketplaceListing } from '../marketplace/entities/marketplace-listing.entity';
 
 @Injectable()
 export class AdminService {
@@ -20,6 +21,8 @@ export class AdminService {
     private mechanicApplicationRepository: Repository<MechanicApplication>,
     @InjectRepository(MechanicEntity)
     private mechanicRepository: Repository<MechanicEntity>,
+    @InjectRepository(MarketplaceListing)
+    private marketplaceRepository: Repository<MarketplaceListing>,
   ) {}
 
   // Dashboard Stats
@@ -948,5 +951,247 @@ export class AdminService {
         };
       }),
     );
+  }
+
+  // ==================== NEW ADMIN CONTROL METHODS ====================
+
+  /**
+   * Suspend or resume a charger (admin override)
+   */
+  async suspendCharger(id: string, suspend: boolean, reason?: string) {
+    const charger = await this.chargerRepository.findOne({ where: { id } });
+    if (!charger) {
+      throw new NotFoundException('Charger not found');
+    }
+
+    charger.status = suspend ? 'offline' : 'available';
+    charger.metadata = {
+      ...charger.metadata,
+      adminSuspended: suspend,
+      adminSuspendedReason: reason,
+      adminSuspendedAt: suspend ? new Date() : null,
+    };
+
+    return this.chargerRepository.save(charger);
+  }
+
+  /**
+   * Override charger status
+   */
+  async setChargerStatus(id: string, status: 'available' | 'in-use' | 'offline', reason?: string) {
+    const charger = await this.chargerRepository.findOne({ where: { id } });
+    if (!charger) {
+      throw new NotFoundException('Charger not found');
+    }
+
+    charger.status = status;
+    charger.metadata = {
+      ...charger.metadata,
+      adminStatusOverride: true,
+      adminStatusReason: reason,
+      adminStatusChangedAt: new Date(),
+    };
+
+    return this.chargerRepository.save(charger);
+  }
+
+  /**
+   * Set price override for a charger
+   */
+  async setChargerPriceOverride(id: string, pricePerKwh: number, reason?: string) {
+    const charger = await this.chargerRepository.findOne({ where: { id } });
+    if (!charger) {
+      throw new NotFoundException('Charger not found');
+    }
+
+    charger.metadata = {
+      ...charger.metadata,
+      originalPrice: charger.pricePerKwh,
+      adminPriceOverride: pricePerKwh,
+      adminPriceReason: reason,
+      adminPriceChangedAt: new Date(),
+    };
+    charger.pricePerKwh = pricePerKwh;
+
+    return this.chargerRepository.save(charger);
+  }
+
+  /**
+   * Get charger owner details
+   */
+  async getChargerOwnerDetails(chargerId: string) {
+    const charger = await this.chargerRepository.findOne({
+      where: { id: chargerId },
+      relations: ['owner'],
+    });
+
+    if (!charger) {
+      throw new NotFoundException('Charger not found');
+    }
+
+    if (!charger.owner) {
+      throw new NotFoundException('Charger owner not found');
+    }
+
+    return {
+      id: charger.owner.id,
+      name: charger.owner.name,
+      email: charger.owner.email,
+      phone: charger.owner.phone,
+      role: charger.owner.role,
+      createdAt: charger.owner.createdAt,
+    };
+  }
+
+  /**
+   * Get marketplace listings with admin view
+   */
+  async getMarketplaceListings(filters: {
+    page: number;
+    limit: number;
+    status?: string;
+    search?: string;
+  }) {
+    const query = this.marketplaceRepository
+      .createQueryBuilder('listing')
+      .leftJoinAndSelect('listing.seller', 'seller')
+      .leftJoinAndSelect('listing.images', 'images');
+
+    if (filters.status) {
+      query.andWhere('listing.status = :status', { status: filters.status });
+    }
+
+    if (filters.search) {
+      query.andWhere(
+        '(listing.title ILIKE :search OR listing.description ILIKE :search)',
+        { search: `%${filters.search}%` },
+      );
+    }
+
+    query.orderBy('listing.createdAt', 'DESC');
+
+    const [listings, total] = await query
+      .skip((filters.page - 1) * filters.limit)
+      .take(filters.limit)
+      .getManyAndCount();
+
+    return {
+      listings,
+      total,
+      page: filters.page,
+      pages: Math.ceil(total / filters.limit),
+    };
+  }
+
+  /**
+   * Approve marketplace listing
+   */
+  async approveMarketplaceListing(id: string, adminNotes?: string) {
+    const listing = await this.marketplaceRepository.findOne({ where: { id } });
+    if (!listing) {
+      throw new NotFoundException('Listing not found');
+    }
+
+    listing.status = 'approved';
+    listing.adminNotes = adminNotes || null;
+
+    return this.marketplaceRepository.save(listing);
+  }
+
+  /**
+   * Reject marketplace listing
+   */
+  async rejectMarketplaceListing(id: string, reason: string) {
+    const listing = await this.marketplaceRepository.findOne({ where: { id } });
+    if (!listing) {
+      throw new NotFoundException('Listing not found');
+    }
+
+    listing.status = 'rejected';
+    listing.adminNotes = reason;
+
+    return this.marketplaceRepository.save(listing);
+  }
+
+  /**
+   * Edit marketplace listing
+   */
+  async editMarketplaceListing(id: string, updates: any) {
+    const listing = await this.marketplaceRepository.findOne({ where: { id } });
+    if (!listing) {
+      throw new NotFoundException('Listing not found');
+    }
+
+    Object.assign(listing, updates);
+
+    return this.marketplaceRepository.save(listing);
+  }
+
+  /**
+   * Suspend seller
+   */
+  async suspendSeller(sellerId: string, suspend: boolean, reason: string) {
+    const user = await this.userRepository.findOne({ where: { id: sellerId } });
+    if (!user) {
+      throw new NotFoundException('Seller not found');
+    }
+
+    user.isBanned = suspend;
+    await this.userRepository.save(user);
+
+    return {
+      success: true,
+      sellerId,
+      suspended: suspend,
+      reason,
+    };
+  }
+
+  /**
+   * Verify mechanic
+   */
+  async verifyMechanic(id: string, verified: boolean, notes?: string) {
+    const mechanic = await this.mechanicRepository.findOne({ where: { id } });
+    if (!mechanic) {
+      throw new NotFoundException('Mechanic not found');
+    }
+
+    // Add admin verification status
+    mechanic.available = verified;
+    mechanic.description = notes
+      ? `${mechanic.description || ''}\n\nAdmin Notes: ${notes}`.trim()
+      : mechanic.description;
+
+    return this.mechanicRepository.save(mechanic);
+  }
+
+  /**
+   * Suspend mechanic
+   */
+  async suspendMechanic(id: string, suspend: boolean, reason: string) {
+    const mechanic = await this.mechanicRepository.findOne({ where: { id } });
+    if (!mechanic) {
+      throw new NotFoundException('Mechanic not found');
+    }
+
+    mechanic.available = !suspend;
+    mechanic.description = suspend
+      ? `${mechanic.description || ''}\n\nSuspended by admin: ${reason}`.trim()
+      : mechanic.description?.replace(/\n\nSuspended by admin:.*$/m, '').trim();
+
+    return this.mechanicRepository.save(mechanic);
+  }
+
+  /**
+   * Get mechanic job history
+   */
+  async getMechanicJobs(mechanicId: string, page: number, limit: number) {
+    // Stub - requires mechanic jobs tracking
+    return {
+      jobs: [],
+      total: 0,
+      page,
+      pages: 0,
+    };
   }
 }

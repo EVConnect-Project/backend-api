@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Patch,
   Delete,
   Body,
@@ -9,8 +10,11 @@ import {
   Query,
   UseGuards,
   Request,
+  Ip,
 } from '@nestjs/common';
 import { AdminService } from './admin.service';
+import { AdminChatService } from './admin-chat.service';
+import { AdminAuditService } from './admin-audit.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -21,6 +25,8 @@ import { Roles } from '../auth/decorators/roles.decorator';
 export class AdminController {
   constructor(
     private readonly adminService: AdminService,
+    private readonly adminChatService: AdminChatService,
+    private readonly adminAuditService: AdminAuditService,
   ) {}
 
   // Dashboard Stats
@@ -315,5 +321,489 @@ export class AdminController {
     // WebSocket broadcasting removed - implement REST-based notifications if needed
     
     return mechanic;
+  }
+
+  // ==================== ADMIN CHAT ENDPOINTS ====================
+
+  /**
+   * Initiate a chat with any user (owner/seller/mechanic/driver)
+   */
+  @Post('chat/initiate')
+  async initiateChat(
+    @Request() req,
+    @Body('targetUserId') targetUserId: string,
+    @Body('initialMessage') initialMessage?: string,
+    @Ip() ip?: string,
+  ) {
+    const result = await this.adminChatService.initiateAdminChat(
+      req.user.userId,
+      targetUserId,
+      initialMessage,
+    );
+
+    await this.adminAuditService.logAction(
+      req.user.userId,
+      'initiate_chat',
+      'user',
+      targetUserId,
+      { hasInitialMessage: !!initialMessage },
+      undefined,
+      ip,
+    );
+
+    return result;
+  }
+
+  /**
+   * Get all admin conversations
+   */
+  @Get('chat/conversations')
+  async getConversations(
+    @Request() req,
+    @Query('page') page: string,
+    @Query('limit') limit: string,
+  ) {
+    return this.adminChatService.getAdminConversations(
+      req.user.userId,
+      page ? parseInt(page) : 1,
+      limit ? parseInt(limit) : 20,
+    );
+  }
+
+  /**
+   * Get messages for a conversation
+   */
+  @Get('chat/conversations/:id/messages')
+  async getMessages(
+    @Param('id') conversationId: string,
+    @Query('page') page: string,
+    @Query('limit') limit: string,
+  ) {
+    return this.adminChatService.getConversationMessages(
+      conversationId,
+      page ? parseInt(page) : 1,
+      limit ? parseInt(limit) : 50,
+    );
+  }
+
+  /**
+   * Send a message in admin chat
+   */
+  @Post('chat/conversations/:id/send')
+  async sendMessage(
+    @Request() req,
+    @Param('id') conversationId: string,
+    @Body('content') content: string,
+    @Body('type') type?: string,
+    @Body('priority') priority?: 'normal' | 'high' | 'urgent',
+  ) {
+    return this.adminChatService.sendAdminMessage(
+      conversationId,
+      req.user.userId,
+      content,
+      type as any,
+      priority,
+    );
+  }
+
+  /**
+   * Broadcast message to multiple users
+   */
+  @Post('chat/broadcast')
+  async broadcastMessage(
+    @Request() req,
+    @Body('userIds') userIds: string[],
+    @Body('message') message: string,
+    @Body('priority') priority?: 'normal' | 'high' | 'urgent',
+    @Ip() ip?: string,
+  ) {
+    const messages = await this.adminChatService.broadcastMessage(
+      req.user.userId,
+      userIds,
+      message,
+      priority,
+    );
+
+    await this.adminAuditService.logAction(
+      req.user.userId,
+      'broadcast_message',
+      'multiple_users',
+      'broadcast',
+      { recipientCount: userIds.length, priority },
+      undefined,
+      ip,
+    );
+
+    return {
+      sent: messages.length,
+      messages,
+    };
+  }
+
+  /**
+   * Set conversation priority
+   */
+  @Put('chat/conversations/:id/priority')
+  async setPriority(
+    @Param('id') conversationId: string,
+    @Body('priority') priority: 'normal' | 'high' | 'urgent',
+  ) {
+    await this.adminChatService.setPriority(conversationId, priority);
+    return { success: true };
+  }
+
+  /**
+   * Get user context for chat
+   */
+  @Get('chat/users/:id/context')
+  async getUserContext(@Param('id') userId: string) {
+    return this.adminChatService.getUserContext(userId);
+  }
+
+  // ==================== ENHANCED CHARGER CONTROL ====================
+
+  /**
+   * Suspend/Resume charger (admin override)
+   */
+  @Put('chargers/:id/suspend')
+  async suspendCharger(
+    @Request() req,
+    @Param('id') id: string,
+    @Body('suspend') suspend: boolean,
+    @Body('reason') reason?: string,
+    @Ip() ip?: string,
+  ) {
+    const charger = await this.adminService.suspendCharger(id, suspend, reason);
+
+    await this.adminAuditService.logAction(
+      req.user.userId,
+      suspend ? 'suspend_charger' : 'resume_charger',
+      'charger',
+      id,
+      { reason },
+      reason,
+      ip,
+    );
+
+    return charger;
+  }
+
+  /**
+   * Override charger status
+   */
+  @Put('chargers/:id/status')
+  async setChargerStatus(
+    @Request() req,
+    @Param('id') id: string,
+    @Body('status') status: 'available' | 'in-use' | 'offline',
+    @Body('reason') reason?: string,
+    @Ip() ip?: string,
+  ) {
+    const charger = await this.adminService.setChargerStatus(id, status, reason);
+
+    await this.adminAuditService.logAction(
+      req.user.userId,
+      'change_charger_status',
+      'charger',
+      id,
+      { newStatus: status, reason },
+      reason,
+      ip,
+    );
+
+    return charger;
+  }
+
+  /**
+   * Set price override for a charger
+   */
+  @Put('chargers/:id/price-override')
+  async setPriceOverride(
+    @Request() req,
+    @Param('id') id: string,
+    @Body('pricePerKwh') pricePerKwh: number,
+    @Body('reason') reason?: string,
+    @Ip() ip?: string,
+  ) {
+    const charger = await this.adminService.setChargerPriceOverride(id, pricePerKwh, reason);
+
+    await this.adminAuditService.logAction(
+      req.user.userId,
+      'override_charger_price',
+      'charger',
+      id,
+      { newPrice: pricePerKwh, reason },
+      reason,
+      ip,
+    );
+
+    return charger;
+  }
+
+  /**
+   * Get charger owner details for admin
+   */
+  @Get('chargers/:id/owner')
+  async getChargerOwner(@Param('id') id: string) {
+    return this.adminService.getChargerOwnerDetails(id);
+  }
+
+  /**
+   * Contact charger owner via chat
+   */
+  @Post('chargers/:id/contact-owner')
+  async contactChargerOwner(
+    @Request() req,
+    @Param('id') chargerId: string,
+    @Body('message') message: string,
+  ) {
+    const owner = await this.adminService.getChargerOwnerDetails(chargerId);
+    return this.initiateChat(req, { body: { targetUserId: owner.id, initialMessage: message } } as any);
+  }
+
+  // ==================== MARKETPLACE SELLER MANAGEMENT ====================
+
+  /**
+   * Get all marketplace listings with admin filters
+   */
+  @Get('marketplace/listings')
+  async getMarketplaceListings(
+    @Query('page') page: string,
+    @Query('limit') limit: string,
+    @Query('status') status: string,
+    @Query('search') search: string,
+  ) {
+    return this.adminService.getMarketplaceListings({
+      page: page ? parseInt(page) : 1,
+      limit: limit ? parseInt(limit) : 20,
+      status,
+      search,
+    });
+  }
+
+  /**
+   * Approve marketplace listing
+   */
+  @Put('marketplace/listings/:id/approve')
+  async approveMarketplaceListing(
+    @Request() req,
+    @Param('id') id: string,
+    @Body('adminNotes') adminNotes?: string,
+    @Ip() ip?: string,
+  ) {
+    const listing = await this.adminService.approveMarketplaceListing(id, adminNotes);
+
+    await this.adminAuditService.logAction(
+      req.user.userId,
+      'approve_listing',
+      'marketplace_listing',
+      id,
+      { adminNotes },
+      adminNotes,
+      ip,
+    );
+
+    return listing;
+  }
+
+  /**
+   * Reject marketplace listing
+   */
+  @Put('marketplace/listings/:id/reject')
+  async rejectMarketplaceListing(
+    @Request() req,
+    @Param('id') id: string,
+    @Body('reason') reason: string,
+    @Ip() ip?: string,
+  ) {
+    const listing = await this.adminService.rejectMarketplaceListing(id, reason);
+
+    await this.adminAuditService.logAction(
+      req.user.userId,
+      'reject_listing',
+      'marketplace_listing',
+      id,
+      { reason },
+      reason,
+      ip,
+    );
+
+    return listing;
+  }
+
+  /**
+   * Edit marketplace listing (admin override)
+   */
+  @Put('marketplace/listings/:id/edit')
+  async editMarketplaceListing(
+    @Request() req,
+    @Param('id') id: string,
+    @Body() updates: any,
+    @Ip() ip?: string,
+  ) {
+    const listing = await this.adminService.editMarketplaceListing(id, updates);
+
+    await this.adminAuditService.logAction(
+      req.user.userId,
+      'edit_listing',
+      'marketplace_listing',
+      id,
+      { updates },
+      'Admin edited listing',
+      ip,
+    );
+
+    return listing;
+  }
+
+  /**
+   * Contact seller via chat
+   */
+  @Post('marketplace/sellers/:id/contact')
+  async contactSeller(
+    @Request() req,
+    @Param('id') sellerId: string,
+    @Body('message') message: string,
+  ) {
+    return this.initiateChat(req, { body: { targetUserId: sellerId, initialMessage: message } } as any);
+  }
+
+  /**
+   * Suspend seller account
+   */
+  @Put('marketplace/sellers/:id/suspend')
+  async suspendSeller(
+    @Request() req,
+    @Param('id') sellerId: string,
+    @Body('suspend') suspend: boolean,
+    @Body('reason') reason: string,
+    @Ip() ip?: string,
+  ) {
+    const result = await this.adminService.suspendSeller(sellerId, suspend, reason);
+
+    await this.adminAuditService.logAction(
+      req.user.userId,
+      suspend ? 'suspend_seller' : 'resume_seller',
+      'user',
+      sellerId,
+      { reason },
+      reason,
+      ip,
+    );
+
+    return result;
+  }
+
+  // ==================== ENHANCED MECHANIC MANAGEMENT ====================
+
+  /**
+   * Verify mechanic credentials
+   */
+  @Put('mechanics/:id/verify')
+  async verifyMechanic(
+    @Request() req,
+    @Param('id') id: string,
+    @Body('verified') verified: boolean,
+    @Body('notes') notes?: string,
+    @Ip() ip?: string,
+  ) {
+    const mechanic = await this.adminService.verifyMechanic(id, verified, notes);
+
+    await this.adminAuditService.logAction(
+      req.user.userId,
+      verified ? 'verify_mechanic' : 'unverify_mechanic',
+      'mechanic',
+      id,
+      { notes },
+      notes,
+      ip,
+    );
+
+    return mechanic;
+  }
+
+  /**
+   * Suspend mechanic
+   */
+  @Put('mechanics/:id/suspend')
+  async suspendMechanic(
+    @Request() req,
+    @Param('id') id: string,
+    @Body('suspend') suspend: boolean,
+    @Body('reason') reason: string,
+    @Ip() ip?: string,
+  ) {
+    const mechanic = await this.adminService.suspendMechanic(id, suspend, reason);
+
+    await this.adminAuditService.logAction(
+      req.user.userId,
+      suspend ? 'suspend_mechanic' : 'resume_mechanic',
+      'mechanic',
+      id,
+      { reason },
+      reason,
+      ip,
+    );
+
+    return mechanic;
+  }
+
+  /**
+   * Contact mechanic via chat
+   */
+  @Post('mechanics/:id/contact')
+  async contactMechanic(
+    @Request() req,
+    @Param('id') mechanicId: string,
+    @Body('message') message: string,
+  ) {
+    const mechanic = await this.adminService.getMechanicById(mechanicId);
+    return this.initiateChat(req, { body: { targetUserId: mechanic.userId, initialMessage: message } } as any);
+  }
+
+  /**
+   * Get mechanic job history
+   */
+  @Get('mechanics/:id/jobs')
+  async getMechanicJobs(
+    @Param('id') id: string,
+    @Query('page') page: string,
+    @Query('limit') limit: string,
+  ) {
+    return this.adminService.getMechanicJobs(
+      id,
+      page ? parseInt(page) : 1,
+      limit ? parseInt(limit) : 20,
+    );
+  }
+
+  // ==================== AUDIT LOG ====================
+
+  /**
+   * Get admin action history
+   */
+  @Get('audit/actions')
+  async getAuditLog(
+    @Query('adminId') adminId: string,
+    @Query('targetType') targetType: string,
+    @Query('targetId') targetId: string,
+    @Query('actionType') actionType: string,
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+    @Query('page') page: string,
+    @Query('limit') limit: string,
+  ) {
+    return this.adminAuditService.getActionHistory(
+      {
+        adminId,
+        targetType,
+        targetId,
+        actionType,
+        startDate: startDate ? new Date(startDate) : undefined,
+        endDate: endDate ? new Date(endDate) : undefined,
+      },
+      page ? parseInt(page) : 1,
+      limit ? parseInt(limit) : 50,
+    );
   }
 }
