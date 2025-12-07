@@ -35,6 +35,7 @@ export class UserEntity {
   isBanned: boolean;
 
   // EV Driver Profile Information
+  // Vehicle types: car, van, bus, truck, three-wheeler, bike
   @Column({ name: 'vehicle_type', nullable: true })
   vehicleType: string;
 
@@ -47,8 +48,10 @@ export class UserEntity {
   @Column({ name: 'battery_capacity', type: 'decimal', precision: 5, scale: 2, nullable: true })
   batteryCapacity: number;
 
-  @Column({ name: 'connector_type', nullable: true })
-  connectorType: string;
+  // Multiple connector types supported (JSON array)
+  // e.g., ["Type 2 (AC)", "CCS2 (DC)"]
+  @Column({ name: 'connector_type', type: 'jsonb', nullable: true })
+  connectorTypes: string[];
 
   // Legal Requirements
   @Column({ name: 'accepted_terms', default: false })

@@ -50,7 +50,7 @@ async function migrateVehicleProfiles() {
         model: user.vehicleModel,
         year: new Date().getFullYear(), // Default to current year
         batteryCapacity: user.batteryCapacity || 0,
-        connectorType: user.connectorType || 'Type2',
+        connectorType: (user.connectorTypes && user.connectorTypes.length > 0) ? user.connectorTypes[0] : 'Type2',
         rangeKm: 0, // Default value
         isPrimary: true, // First vehicle is primary
       });

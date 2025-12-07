@@ -31,6 +31,7 @@ export class EnhancedAuthService {
       vehicleModel,
       batteryCapacity,
       connectorType,
+      connectorTypes,
       acceptTerms,
       acceptPrivacyPolicy,
     } = registerDto;
@@ -60,6 +61,11 @@ export class EnhancedAuthService {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // Create user with complete EV driver profile
+    // Handle both single connectorType (old) and multiple connectorTypes (new)
+    const finalConnectorTypes = connectorTypes && connectorTypes.length > 0 
+      ? connectorTypes 
+      : (connectorType ? [connectorType] : []);
+
     const user = this.userRepository.create({
       name: name,
       email: email || undefined,
@@ -70,7 +76,7 @@ export class EnhancedAuthService {
       vehicleBrand: vehicleBrand,
       vehicleModel: vehicleModel,
       batteryCapacity: batteryCapacity,
-      connectorType: connectorType,
+      connectorTypes: finalConnectorTypes,
       acceptedTerms: acceptTerms,
       acceptedPrivacyPolicy: acceptPrivacyPolicy,
       termsAcceptedAt: new Date(),
@@ -79,8 +85,8 @@ export class EnhancedAuthService {
 
     await this.userRepository.save(user);
 
-    // Create VehicleProfile if vehicle details were provided
-    if (vehicleType && vehicleBrand && vehicleModel && batteryCapacity) {
+    // Create vehicle profile if vehicle data is provided
+    if (vehicleBrand && vehicleModel) {
       try {
         const vehicleProfile = this.vehicleProfileRepository.create({
           userId: user.id,
@@ -88,7 +94,7 @@ export class EnhancedAuthService {
           model: vehicleModel,
           year: new Date().getFullYear(), // Default to current year
           batteryCapacity: Number(batteryCapacity),
-          connectorType: connectorType || 'Type2',
+          connectorType: finalConnectorTypes.length > 0 ? finalConnectorTypes[0] : 'Type2',
           rangeKm: 300, // Default value (reasonable estimate), user can update later
           isPrimary: true, // First vehicle is primary
         });
@@ -123,7 +129,7 @@ export class EnhancedAuthService {
           vehicleBrand: user.vehicleBrand,
           vehicleModel: user.vehicleModel,
           batteryCapacity: user.batteryCapacity,
-          connectorType: user.connectorType,
+          connectorTypes: user.connectorTypes,
         },
         isVerified: user.isVerified,
       },
@@ -159,7 +165,7 @@ export class EnhancedAuthService {
         vehicleBrand: user.vehicleBrand,
         vehicleModel: user.vehicleModel,
         batteryCapacity: user.batteryCapacity,
-        connectorType: user.connectorType,
+        connectorTypes: user.connectorTypes,
       },
       isVerified: user.isVerified,
       createdAt: user.createdAt,
@@ -181,7 +187,13 @@ export class EnhancedAuthService {
     if (vehicleData.vehicleBrand) user.vehicleBrand = vehicleData.vehicleBrand;
     if (vehicleData.vehicleModel) user.vehicleModel = vehicleData.vehicleModel;
     if (vehicleData.batteryCapacity) user.batteryCapacity = vehicleData.batteryCapacity;
-    if (vehicleData.connectorType) user.connectorType = vehicleData.connectorType;
+    
+    // Handle both single connectorType and array connectorTypes
+    if (vehicleData.connectorTypes && vehicleData.connectorTypes.length > 0) {
+      user.connectorTypes = vehicleData.connectorTypes;
+    } else if (vehicleData.connectorType) {
+      user.connectorTypes = [vehicleData.connectorType];
+    }
 
     await this.userRepository.save(user);
 

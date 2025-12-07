@@ -11,6 +11,7 @@ import {
   Matches,
   ValidateIf,
   IsPhoneNumber,
+  IsArray,
 } from 'class-validator';
 
 // Enums for vehicle information
@@ -71,10 +72,13 @@ export class EnhancedRegisterDto {
   batteryCapacity?: number;
 
   @ValidateIf(o => o.connectorType !== undefined && o.connectorType !== null && o.connectorType !== '')
-  @IsEnum(ConnectorType, {
-    message: 'Connector type must be one of: CCS, Type 2, CHAdeMO, GBT',
-  })
-  connectorType?: ConnectorType;
+  @IsString({ message: 'connectorType must be a string (for backward compatibility)' })
+  connectorType?: string;
+
+  @ValidateIf(o => o.connectorTypes !== undefined && o.connectorTypes !== null)
+  @IsArray({ message: 'connectorTypes must be an array' })
+  @IsString({ each: true, message: 'Each connector type must be a string' })
+  connectorTypes?: string[];
 
   // Legal Requirements
   @IsBoolean({ message: 'Terms acceptance must be a boolean value' })

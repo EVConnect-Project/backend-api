@@ -51,7 +51,7 @@ export class MigrationController {
           model: user.vehicleModel,
           year: new Date().getFullYear(),
           batteryCapacity: user.batteryCapacity || 50,
-          connectorType: user.connectorType || 'Type2',
+          connectorType: (user.connectorTypes && user.connectorTypes.length > 0) ? user.connectorTypes[0] : 'Type2',
           rangeKm: 300,
           isPrimary: true,
         });
