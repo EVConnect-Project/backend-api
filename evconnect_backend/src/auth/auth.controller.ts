@@ -3,6 +3,7 @@ import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { SendOtpDto, VerifyOtpDto, RegisterPhoneDto, LoginPhoneDto, ResetPasswordDto } from './dto/phone-auth.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -135,5 +136,56 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   async deleteAccount(@Request() req) {
     return this.authService.deleteAccount(req.user.userId);
+  }
+
+  // ==================== PHONE AUTHENTICATION ENDPOINTS ====================
+
+  @Post('send-otp')
+  async sendOTP(@Body(ValidationPipe) sendOtpDto: SendOtpDto) {
+    return this.authService.sendOTP(sendOtpDto.phoneNumber);
+  }
+
+  @Post('verify-otp')
+  async verifyOTP(@Body(ValidationPipe) verifyOtpDto: VerifyOtpDto) {
+    return this.authService.verifyOTP(
+      verifyOtpDto.phoneNumber,
+      verifyOtpDto.otp,
+    );
+  }
+
+  @Post('resend-otp')
+  async resendOTP(@Body(ValidationPipe) sendOtpDto: SendOtpDto) {
+    return this.authService.sendOTP(sendOtpDto.phoneNumber);
+  }
+
+  @Post('register-phone')
+  async registerPhone(@Body(ValidationPipe) registerPhoneDto: RegisterPhoneDto) {
+    return this.authService.registerWithPhone(
+      registerPhoneDto.phoneNumber,
+      registerPhoneDto.password,
+      registerPhoneDto.verificationToken,
+    );
+  }
+
+  @Post('login-phone')
+  async loginPhone(@Body(ValidationPipe) loginPhoneDto: LoginPhoneDto) {
+    return this.authService.loginWithPhone(
+      loginPhoneDto.phoneNumber,
+      loginPhoneDto.password,
+    );
+  }
+
+  @Post('forgot-password')
+  async forgotPassword(@Body(ValidationPipe) sendOtpDto: SendOtpDto) {
+    return this.authService.sendPasswordResetOTP(sendOtpDto.phoneNumber);
+  }
+
+  @Post('reset-password')
+  async resetPassword(@Body(ValidationPipe) resetPasswordDto: ResetPasswordDto) {
+    return this.authService.resetPassword(
+      resetPasswordDto.phoneNumber,
+      resetPasswordDto.newPassword,
+      resetPasswordDto.verificationToken,
+    );
   }
 }

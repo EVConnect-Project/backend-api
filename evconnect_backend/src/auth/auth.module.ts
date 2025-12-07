@@ -10,15 +10,18 @@ import { EnhancedAuthService } from './enhanced-auth.service';
 import { VehicleProfileController } from './vehicle-profile.controller';
 import { VehicleProfileService } from './vehicle-profile.service';
 import { MigrationController } from './migration.controller';
+import { OtpService } from './otp.service';
+import { SmsService } from './sms.service';
 import { UserEntity } from '../users/entities/user.entity';
 import { VehicleProfile } from './entities/vehicle-profile.entity';
+import { OtpVerification } from './otp.service';
 import { Charger } from '../charger/entities/charger.entity';
 import { MechanicEntity } from '../mechanics/entities/mechanic.entity';
 import { JwtStrategy } from './strategies/jwt.strategy';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([UserEntity, VehicleProfile, Charger, MechanicEntity]),
+    TypeOrmModule.forFeature([UserEntity, VehicleProfile, Charger, MechanicEntity, OtpVerification]),
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -32,7 +35,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     }),
   ],
   controllers: [AuthController, EnhancedAuthController, VehicleProfileController, MigrationController],
-  providers: [AuthService, EnhancedAuthService, VehicleProfileService, JwtStrategy],
+  providers: [AuthService, EnhancedAuthService, VehicleProfileService, OtpService, SmsService, JwtStrategy],
   exports: [AuthService, EnhancedAuthService, JwtModule],
 })
 export class AuthModule {}

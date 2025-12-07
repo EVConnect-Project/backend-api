@@ -12,6 +12,9 @@ export class UserEntity {
   @Column({ nullable: true })
   phone: string;
 
+  @Column({ nullable: true, unique: true })
+  phoneNumber: string;
+
   @Column({ nullable: true })
   countryCode: string;
 

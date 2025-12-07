@@ -1,8 +1,8 @@
 {
-  "name": "evconnect_backend",
+  "name": "evrs_backend",
   "version": "0.0.1",
-  "description": "",
-  "author": "",
+  "description": "EVRS - Connecting to EV World - Backend API",
+  "author": "EVRS Team",
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
@@ -35,7 +35,7 @@
     "@nestjs/platform-express": "^11.1.9",
     "@nestjs/platform-socket.io": "^11.1.9",
     "@nestjs/schedule": "^6.0.1",
-    "@nestjs/throttler": "^6.4.0",
+    "@nestjs/throttler": "^6.5.0",
     "@nestjs/typeorm": "^11.0.0",
     "@nestjs/websockets": "^11.1.9",
     "@types/bcrypt": "^6.0.0",
@@ -49,6 +49,7 @@
     "compression": "^1.8.1",
     "firebase-admin": "^13.6.0",
     "helmet": "^8.1.0",
+    "libphonenumber-js": "^1.12.31",
     "multer": "^2.0.2",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
@@ -56,6 +57,7 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "socket.io": "^4.8.1",
+    "twilio": "^5.10.7",
     "typeorm": "^0.3.27",
     "winston": "^3.18.3"
   },
