@@ -47,6 +47,12 @@ export class Charger {
   status: 'available' | 'in-use' | 'offline';
 
   // Charger Type Fields
+  @Column({ name: 'charger_type', type: 'varchar', length: 10 })
+  chargerType: 'ac' | 'dc';
+
+  @Column({ name: 'max_power_kw', type: 'decimal', precision: 6, scale: 2 })
+  maxPowerKw: number;
+
   @Column({ type: 'varchar', length: 50, nullable: true })
   speedType: 'ac_slow' | 'ac_fast' | 'dc_fast' | 'dc_rapid' | 'ultra_rapid' | 'tesla_supercharger' | null;
 
@@ -152,6 +158,13 @@ export class Charger {
   // Payment Account Field
   @Column({ type: 'uuid', nullable: true })
   paymentAccountId: string | null;
+
+  // Station Association (for chargers that are part of a station)
+  @Column({ type: 'uuid', nullable: true })
+  stationId: string | null;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  chargerIdentifier: string | null;
 
   @CreateDateColumn()
   createdAt: Date;

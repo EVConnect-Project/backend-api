@@ -17,6 +17,8 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { IsChargerOwnerGuard } from './guards/is-charger-owner.guard';
 import { CreateChargerDto } from '../charger/dto/create-charger.dto';
 import { UpdateChargerDto } from '../charger/dto/update-charger.dto';
+import { CreateIndividualChargerDto } from './dto/create-individual-charger.dto';
+import { CreateStationDto } from './dto/create-station.dto';
 
 /**
  * Owner Controller
@@ -36,7 +38,7 @@ export class OwnerController {
   constructor(private readonly ownerService: OwnerService) {}
 
   /**
-   * Register a new charger
+   * Register a new charger (simple flat structure - legacy)
    * User automatically becomes 'owner' if not already
    * Accessible to all authenticated users (user, owner, admin)
    * Chargers start as unverified - admin must approve via /admin/chargers/:id/approve
@@ -47,6 +49,36 @@ export class OwnerController {
     @Request() req,
   ) {
     return this.ownerService.registerCharger(createChargerDto, req.user.userId);
+  }
+
+  /**
+   * Register an individual charger with sockets configuration
+   * Supports complex socket-based configuration from mobile app
+   */
+  @Post('chargers/individual')
+  async registerIndividualCharger(
+    @Body() createIndividualChargerDto: CreateIndividualChargerDto,
+    @Request() req,
+  ) {
+    return this.ownerService.registerIndividualCharger(
+      createIndividualChargerDto,
+      req.user.userId,
+    );
+  }
+
+  /**
+   * Register a charging station with multiple chargers
+   * Supports full station configuration with amenities from mobile app
+   */
+  @Post('chargers/station')
+  async registerStation(
+    @Body() createStationDto: CreateStationDto,
+    @Request() req,
+  ) {
+    return this.ownerService.registerStation(
+      createStationDto,
+      req.user.userId,
+    );
   }
 
   /**
@@ -101,6 +133,7 @@ export class OwnerController {
    * Owner can delete their own charger if it has no active bookings
    */
   @Delete('chargers/:id')
+  @UseGuards(IsChargerOwnerGuard)
   async deleteCharger(@Param('id') id: string, @Request() req) {
     return this.ownerService.deleteCharger(id, req.user.userId);
   }
