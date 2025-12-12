@@ -160,7 +160,7 @@ export class Charger {
   paymentAccountId: string | null;
 
   // Station Association (for chargers that are part of a station)
-  @Column({ type: 'uuid', nullable: true })
+  @Column({ name: 'station_id', type: 'uuid', nullable: true })
   stationId: string | null;
 
   @Column({ type: 'varchar', length: 100, nullable: true })

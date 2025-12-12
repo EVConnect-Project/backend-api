@@ -38,47 +38,6 @@ export class OwnerService {
    * Register a new charger and upgrade user to 'owner' role if needed
    * Note: If user is already a mechanic, they keep mechanic role but can still own chargers
    */
-  async registerCharger(createChargerDto: CreateChargerDto, userId: string) {
-    const user = await this.userRepository.findOne({ where: { id: userId } });
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
-
-    // Validate payment account requirement for pre-booking mode only
-    // Hybrid mode allows walk-ins (no payment account) and bookings (payment account optional but recommended)
-    const bookingMode = createChargerDto.bookingMode || 'walk_in_only';
-    if (bookingMode === 'pre_booking_required') {
-      if (!createChargerDto.paymentAccountId) {
-        throw new BadRequestException(
-          'Payment account is required for pre-booking mode. Please set up your bank account first.'
-        );
-      }
-    }
-
-    // Upgrade role to 'owner' only if user is a regular 'user' (not mechanic or admin)
-    // Mechanics and admins can own chargers without changing their role
-    if (user.role === 'user') {
-      user.role = 'owner';
-      await this.userRepository.save(user);
-    }
-
-    // Create charger with verified=false (requires admin approval)
-    const charger = this.chargerRepository.create({
-      ...createChargerDto,
-      ownerId: userId,
-      verified: false, // Requires admin approval
-      status: 'offline', // Default to offline until verified
-    });
-
-    const savedCharger = await this.chargerRepository.save(charger);
-
-    return {
-      ...savedCharger,
-      message: 'Charger registered successfully. Awaiting admin approval.',
-      needsApproval: true,
-    };
-  }
-
   /**
    * Get all chargers owned by a user
    */

@@ -12,12 +12,15 @@ import { ChargerStatus } from './enums/charger-status.enum';
 import { UpdateBookingModeDto } from './dto/update-booking-mode.dto';
 import { UpdateChargerStatusDto } from './dto/update-charger-status.dto';
 import { DEFAULT_BOOKING_SETTINGS } from './interfaces/booking-settings.interface';
+import { ChargingStation } from '../owner/entities/charging-station.entity';
 
 @Injectable()
 export class ChargerService {
   constructor(
     @InjectRepository(Charger)
     private chargerRepository: Repository<Charger>,
+    @InjectRepository(ChargingStation)
+    private stationRepository: Repository<ChargingStation>,
     @Inject(forwardRef(() => ChargerIntegrationService))
     private integrationService: ChargerIntegrationService,
     @Inject(forwardRef(() => ChargersGateway))
@@ -284,6 +287,94 @@ export class ChargerService {
       offset,
       hasMore: offset + chargers.length < total,
     };
+  }
+
+  async filterStations(filters: any): Promise<any> {
+    try {
+      console.log('filterStations called with filters:', filters);
+      
+      // Get all verified charging stations - simplified, no joins initially
+      const stations = await this.stationRepository.find({
+        where: { verified: true },
+      });
+      
+      console.log(`Found ${stations.length} verified stations`);
+
+      // For each station, fetch its chargers
+      const stationsWithChargers = await Promise.all(
+        stations.map(async (station) => {
+          console.log(`Fetching chargers for station ${station.id}`);
+          const chargers = await this.chargerRepository.find({
+            where: { stationId: station.id, verified: true },
+          });
+          console.log(`Found ${chargers.length} chargers for station ${station.stationName}`);
+          
+          return {
+            ...station,
+            chargers,
+          };
+        })
+      );
+
+      console.log(`Processed ${stationsWithChargers.length} stations with chargers`);
+
+      // Apply filters
+      let filteredStations: any[] = stationsWithChargers;
+
+      // Location filter
+      if (filters.lat && filters.lng) {
+      const radius = filters.radius || 10;
+      filteredStations = filteredStations.map(station => {
+        const distance = this.calculateDistance(
+          filters.lat, filters.lng,
+          station.lat, 
+          station.lng
+        );
+        return { ...station, distance };
+      }).filter(station => station.distance < radius);
+
+        if (filters.sortBy === 'distance') {
+          filteredStations.sort((a, b) => 
+            filters.sortOrder === 'desc' ? b.distance - a.distance : a.distance - b.distance
+          );
+        }
+      }
+
+      // Pagination
+      const limit = filters.limit || 50;
+      const offset = filters.offset || 0;
+      const total = filteredStations.length;
+      const paginatedStations = filteredStations.slice(offset, offset + limit);
+
+      console.log(`Returning ${paginatedStations.length} of ${total} stations`);
+
+      return {
+        data: paginatedStations,
+        total,
+        limit,
+        offset,
+        hasMore: offset + paginatedStations.length < total,
+      };
+    } catch (error) {
+      console.error('Error in filterStations:', error);
+      throw error;
+    }
+  }
+
+  private calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+    const R = 6371; // Earth's radius in km
+    const dLat = this.deg2rad(lat2 - lat1);
+    const dLng = this.deg2rad(lng2 - lng1);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(this.deg2rad(lat1)) * Math.cos(this.deg2rad(lat2)) *
+      Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  }
+
+  private deg2rad(deg: number): number {
+    return deg * (Math.PI / 180);
   }
 
   /**

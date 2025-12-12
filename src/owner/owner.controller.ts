@@ -38,20 +38,6 @@ export class OwnerController {
   constructor(private readonly ownerService: OwnerService) {}
 
   /**
-   * Register a new charger (simple flat structure - legacy)
-   * User automatically becomes 'owner' if not already
-   * Accessible to all authenticated users (user, owner, admin)
-   * Chargers start as unverified - admin must approve via /admin/chargers/:id/approve
-   */
-  @Post('chargers')
-  async registerCharger(
-    @Body() createChargerDto: CreateChargerDto,
-    @Request() req,
-  ) {
-    return this.ownerService.registerCharger(createChargerDto, req.user.userId);
-  }
-
-  /**
    * Register an individual charger with sockets configuration
    * Supports complex socket-based configuration from mobile app
    */

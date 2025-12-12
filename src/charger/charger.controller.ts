@@ -48,6 +48,24 @@ export class ChargerController {
     return this.chargerService.filterChargers(filterDto);
   }
 
+  @Get('filter-stations')
+  filterStations(@Query() filters: any) {
+    // Convert string query params to proper types
+    const filterDto = {
+      lat: filters.lat ? parseFloat(filters.lat) : undefined,
+      lng: filters.lng ? parseFloat(filters.lng) : undefined,
+      radius: filters.radius ? parseFloat(filters.radius) : undefined,
+      availableNow: filters.availableNow === 'true',
+      amenities: filters.amenities ? (Array.isArray(filters.amenities) ? filters.amenities : [filters.amenities]) : undefined,
+      sortBy: filters.sortBy || 'distance',
+      sortOrder: filters.sortOrder || 'asc',
+      limit: filters.limit ? parseInt(filters.limit) : 50,
+      offset: filters.offset ? parseInt(filters.offset) : 0,
+    };
+
+    return this.chargerService.filterStations(filterDto);
+  }
+
   @Get('nearby')
   findNearby(
     @Query('lat') lat: string,
