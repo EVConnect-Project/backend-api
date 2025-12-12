@@ -72,7 +72,7 @@ export class ChargerService {
   async findAll(): Promise<Charger[]> {
     return this.chargerRepository.find({
       where: { verified: true, isBanned: false },
-      relations: ['owner'],
+      relations: ['owner', 'sockets'],
       order: { createdAt: 'DESC' },
     });
   }
@@ -80,7 +80,7 @@ export class ChargerService {
   async findOne(id: string): Promise<Charger> {
     const charger = await this.chargerRepository.findOne({
       where: { id },
-      relations: ['owner'],
+      relations: ['owner', 'sockets'],
     });
 
     if (!charger) {
@@ -155,6 +155,7 @@ export class ChargerService {
   async findByOwner(ownerId: string): Promise<Charger[]> {
     return this.chargerRepository.find({
       where: { ownerId },
+      relations: ['sockets'],
       order: { createdAt: 'DESC' },
     });
   }
@@ -193,6 +194,7 @@ export class ChargerService {
   async filterChargers(filters: FilterChargersDto): Promise<any> {
     const query = this.chargerRepository.createQueryBuilder('charger')
       .leftJoinAndSelect('charger.owner', 'owner')
+      .leftJoinAndSelect('charger.sockets', 'sockets')
       .where('charger.verified = :verified', { verified: true });
 
     // Location filters (if provided)
@@ -300,12 +302,13 @@ export class ChargerService {
       
       console.log(`Found ${stations.length} verified stations`);
 
-      // For each station, fetch its chargers
+      // For each station, fetch its chargers with sockets
       const stationsWithChargers = await Promise.all(
         stations.map(async (station) => {
           console.log(`Fetching chargers for station ${station.id}`);
           const chargers = await this.chargerRepository.find({
             where: { stationId: station.id, verified: true },
+            relations: ['sockets'],
           });
           console.log(`Found ${chargers.length} chargers for station ${station.stationName}`);
           

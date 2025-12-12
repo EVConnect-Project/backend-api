@@ -1,5 +1,6 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, OneToMany, JoinColumn } from 'typeorm';
 import { UserEntity } from '../../users/entities/user.entity';
+import { ChargerSocket } from '../../owner/entities/charger-socket.entity';
 import { BookingMode } from '../enums/booking-mode.enum';
 import { ChargerStatus } from '../enums/charger-status.enum';
 import type { BookingSettings } from '../interfaces/booking-settings.interface';
@@ -165,6 +166,10 @@ export class Charger {
 
   @Column({ type: 'varchar', length: 100, nullable: true })
   chargerIdentifier: string | null;
+
+  // Socket Relations
+  @OneToMany(() => ChargerSocket, socket => socket.charger, { cascade: true })
+  sockets: ChargerSocket[];
 
   @CreateDateColumn()
   createdAt: Date;
