@@ -43,5 +43,9 @@ export class CreateIndividualChargerDto {
 
   @IsString()
   @IsOptional()
+  phoneNumber?: string;
+
+  @IsString()
+  @IsOptional()
   accessType?: 'public' | 'private' | 'semi-public';
 }

@@ -44,6 +44,10 @@ export class CreateStationDto {
   @IsOptional()
   accessType?: 'public' | 'private' | 'semi-public';
 
+  @IsString()
+  @IsOptional()
+  phoneNumber?: string;
+
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => ChargerConfigDto)

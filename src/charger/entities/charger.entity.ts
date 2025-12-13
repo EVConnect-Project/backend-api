@@ -167,6 +167,25 @@ export class Charger {
   @Column({ type: 'varchar', length: 100, nullable: true })
   chargerIdentifier: string | null;
 
+  // Contact Information
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  phoneNumber: string | null;
+
+  // Amenities
+  @Column({ 
+    type: 'jsonb',
+    nullable: true,
+    default: null
+  })
+  amenities: {
+    coffee?: boolean;
+    restaurant?: boolean;
+    parking?: boolean;
+    restroom?: boolean;
+    wifi?: boolean;
+    service?: boolean;
+  } | null;
+
   // Socket Relations
   @OneToMany(() => ChargerSocket, socket => socket.charger, { cascade: true })
   sockets: ChargerSocket[];
