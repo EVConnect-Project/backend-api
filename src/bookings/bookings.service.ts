@@ -857,10 +857,10 @@ export class BookingsService {
    */
   private validateBookingType(charger: Charger, bookingType: BookingType): boolean {
     switch (charger.bookingMode) {
-      case BookingMode.PRE_BOOKING_REQUIRED:
+      case BookingMode.PRE_BOOKING:
         return bookingType === BookingType.PRE_BOOKING;
       
-      case BookingMode.WALK_IN_ONLY:
+      case BookingMode.WALK_IN:
         return bookingType === BookingType.WALK_IN;
       
       case BookingMode.HYBRID:

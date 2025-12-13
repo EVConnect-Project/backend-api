@@ -48,4 +48,8 @@ export class CreateIndividualChargerDto {
   @IsString()
   @IsOptional()
   accessType?: 'public' | 'private' | 'semi-public';
+
+  @IsString()
+  @IsOptional()
+  bookingMode?: 'pre_booking' | 'walk_in' | 'hybrid';
 }

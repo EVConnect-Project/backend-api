@@ -62,7 +62,7 @@ export class CreateChargerDto {
   @IsOptional()
   bookingMode?: BookingMode;
 
-  @ValidateIf(o => o.bookingMode === BookingMode.PRE_BOOKING_REQUIRED)
+  @ValidateIf(o => o.bookingMode === BookingMode.PRE_BOOKING)
   @IsUUID()
   @IsNotEmpty({ message: 'Payment account is required for pre-booking mode' })
   paymentAccountId?: string;

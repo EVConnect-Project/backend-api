@@ -442,7 +442,7 @@ export class ChargerService {
     }
 
     // Validate pre-booking requirements
-    if (updateDto.bookingMode === BookingMode.PRE_BOOKING_REQUIRED && 
+    if (updateDto.bookingMode === BookingMode.PRE_BOOKING && 
         settings.advanceBookingDays === 0) {
       throw new BadRequestException(
         'Pre-booking required mode must allow advance bookings'

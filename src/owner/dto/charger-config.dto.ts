@@ -24,4 +24,8 @@ export class ChargerConfigDto {
   @ValidateNested({ each: true })
   @Type(() => SocketDto)
   sockets: SocketDto[];
+
+  @IsString()
+  @IsOptional()
+  bookingMode?: 'pre_booking' | 'walk_in' | 'hybrid';
 }

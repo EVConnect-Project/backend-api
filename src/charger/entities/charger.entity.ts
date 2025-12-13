@@ -124,7 +124,7 @@ export class Charger {
     name: 'booking_mode',
     type: 'varchar', 
     length: 30, 
-    default: BookingMode.WALK_IN_ONLY 
+    default: BookingMode.HYBRID 
   })
   bookingMode: BookingMode;
 
