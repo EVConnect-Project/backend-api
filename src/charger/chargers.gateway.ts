@@ -308,7 +308,7 @@ export class ChargersGateway
       user: {
         id: user.id,
         name: user.name,
-        email: user.email,
+        phoneNumber: user.phoneNumber,
         role: user.role,
         isBanned: user.isBanned,
       },

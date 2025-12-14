@@ -20,7 +20,7 @@ export class UserPaymentSettingsEntity {
   saveReceipts: boolean;
 
   @Column({ type: 'boolean', default: true })
-  emailNotifications: boolean;
+  appNotifications: boolean;
 
   @Column({ type: 'boolean', default: true })
   smsNotifications: boolean;

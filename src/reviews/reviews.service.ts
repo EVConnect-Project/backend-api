@@ -51,7 +51,7 @@ export class ReviewsService {
       ...review,
       userName: review.user?.name || 'Anonymous',
       userAvatar: null, // UserEntity doesn't have profilePicture field
-      isVerifiedUser: review.user?.email ? true : false,
+      isVerifiedUser: review.user?.phoneNumber ? true : false,
     }));
 
     return { reviews: reviewsWithUser as any, total };

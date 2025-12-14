@@ -28,6 +28,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { TripModule } from './trip/trip.module';
 import { SupportModule } from './support/support.module';
 import { EmergencyModule } from './emergency/emergency.module';
+import { FeedbackModule } from './feedback/feedback.module';
 
 @Module({
   imports: [
@@ -75,6 +76,7 @@ import { EmergencyModule } from './emergency/emergency.module';
     TripModule,
     SupportModule,
     EmergencyModule,
+    FeedbackModule,
   ],
   controllers: [AppController],
   providers: [AppService],
@@ -152,11 +154,9 @@ export class AppModule implements OnModuleInit {
       await queryRunner.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS accepted_terms BOOLEAN DEFAULT false`);
       await queryRunner.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS accepted_privacy_policy BOOLEAN DEFAULT false`);
       await queryRunner.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_accepted_at TIMESTAMP`);
-      await queryRunner.query(`ALTER TABLE users ALTER COLUMN email DROP NOT NULL`);
       
       // Create indexes
       await queryRunner.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_phone_users ON users(phone) WHERE phone IS NOT NULL`);
-      await queryRunner.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_email_users ON users(email) WHERE email IS NOT NULL`);
       
       console.log('✅ Schema fixes applied successfully');
     } catch (error) {

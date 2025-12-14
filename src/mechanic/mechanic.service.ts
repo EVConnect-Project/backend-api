@@ -210,7 +210,7 @@ export class MechanicService {
   async getAllMechanics() {
     const mechanics = await this.userRepository.find({
       where: { role: 'mechanic' },
-      select: ['id', 'name', 'email', 'role', 'createdAt'],
+      select: ['id', 'name', 'phoneNumber', 'role', 'createdAt'],
     });
 
     return mechanics;

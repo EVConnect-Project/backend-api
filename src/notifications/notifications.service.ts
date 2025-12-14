@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import * as admin from 'firebase-admin';
 import { FcmTokenEntity } from './entities/fcm-token.entity';
@@ -577,5 +577,49 @@ export class NotificationsService implements OnModuleInit {
         screen: 'ConnectWithEV',
       },
     });
+  }
+
+  /**
+   * Update user's FCM token (for Firebase notification integration)
+   */
+  async updateUserFcmToken(userId: string, fcmToken: string): Promise<void> {
+    // This would need a User entity with fcm_token column
+    // For now, use the existing saveFcmToken method
+    await this.saveFcmToken(userId, fcmToken, 'android');
+  }
+
+  /**
+   * Get user's FCM token
+   */
+  async getUserFcmToken(userId: string): Promise<string | null> {
+    const tokens = await this.fcmTokenRepository.find({
+      where: { userId, isActive: true },
+      order: { createdAt: 'DESC' },
+      take: 1,
+    });
+
+    return tokens.length > 0 ? tokens[0].fcmToken : null;
+  }
+
+  /**
+   * Get all FCM tokens for multiple users
+   */
+  async getUsersFcmTokens(userIds: string[]): Promise<Map<string, string[]>> {
+    const tokens = await this.fcmTokenRepository.find({
+      where: { userId: In(userIds), isActive: true },
+    });
+
+    const tokenMap = new Map<string, string[]>();
+    tokens.forEach(token => {
+      if (!tokenMap.has(token.userId)) {
+        tokenMap.set(token.userId, []);
+      }
+      const userTokens = tokenMap.get(token.userId);
+      if (userTokens) {
+        userTokens.push(token.fcmToken);
+      }
+    });
+
+    return tokenMap;
   }
 }

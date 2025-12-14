@@ -1,4 +1,4 @@
-import { IsString, IsArray, IsNumber, IsOptional, IsEmail, IsBoolean, Min, Max } from 'class-validator';
+import { IsString, IsArray, IsNumber, IsOptional, IsBoolean, Min, Max } from 'class-validator';
 
 export class CreateMechanicDto {
   @IsString()
@@ -23,10 +23,6 @@ export class CreateMechanicDto {
   @IsOptional()
   @IsString()
   phone?: string;
-
-  @IsOptional()
-  @IsEmail()
-  email?: string;
 
   @IsOptional()
   @IsString()

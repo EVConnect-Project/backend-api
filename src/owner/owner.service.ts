@@ -473,7 +473,7 @@ export class OwnerService {
         console.error('User not found with ID:', userId);
         throw new NotFoundException('User not found');
       }
-      console.log('User found:', user.email, 'Role:', user.role);
+      console.log('User found:', user.phoneNumber, 'Role:', user.role);
 
       // Upgrade to owner role if needed
       if (user.role === 'user') {

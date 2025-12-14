@@ -22,7 +22,7 @@ export class MechanicEntity {
   @Column({ nullable: true })
   specialization: string;
 
-  @Column({ type: 'int', default: 0 })
+  @Column({ name: 'yearsofexperience', type: 'int', default: 0 })
   yearsOfExperience: number;
 
   @Column({ type: 'decimal', precision: 10, scale: 7 })
@@ -37,33 +37,42 @@ export class MechanicEntity {
   @Column({ nullable: true })
   phone: string;
 
-  @Column({ nullable: true })
-  email: string;
-
   @Column({ type: 'text', nullable: true })
   description: string;
 
   @Column({ default: true })
   available: boolean;
 
-  @Column({ default: false })
+  @Column({ name: 'isbanned', default: false })
   isBanned: boolean;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  @Column({ name: 'priceperhour', type: 'decimal', precision: 10, scale: 2, nullable: true })
   pricePerHour: number;
 
-  @Column({ type: 'int', default: 0 })
+  @Column({ name: 'completedjobs', type: 'int', default: 0 })
   completedJobs: number;
 
-  @Column({ nullable: true })
+  @Column({ name: 'licensenumber', nullable: true })
   licenseNumber: string;
 
   @Column({ nullable: true })
   certifications: string;
 
-  @CreateDateColumn()
+  @Column({ name: 'currentlocationlat', type: 'decimal', precision: 10, scale: 7, nullable: true })
+  currentLocationLat: number;
+
+  @Column({ name: 'currentlocationlng', type: 'decimal', precision: 10, scale: 7, nullable: true })
+  currentLocationLng: number;
+
+  @Column({ name: 'isonjob', type: 'boolean', default: false })
+  isOnJob: boolean;
+
+  @Column({ name: 'lastonlineat', type: 'timestamp', nullable: true })
+  lastOnlineAt: Date;
+
+  @CreateDateColumn({ name: 'createdat' })
   createdAt: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ name: 'updatedat' })
   updatedAt: Date;
 }

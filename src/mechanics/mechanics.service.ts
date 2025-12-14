@@ -9,8 +9,11 @@ import { CreateMechanicDto } from './dto/create-mechanic.dto';
 import { UpdateMechanicDto } from './dto/update-mechanic.dto';
 import { EmergencyRequestDto } from './dto/emergency-request.dto';
 import { NotificationsService } from '../notifications/notifications.service';
+import { FirebaseNotificationService } from '../notifications/services/firebase-notification.service';
 import { NotificationType } from '../notifications/types/notification-types';
 import { EmergencyService } from '../emergency/emergency.service';
+import { TrafficService } from './services/traffic.service';
+import { ServiceMatcherService } from './services/service-matcher.service';
 import axios from 'axios';
 
 @Injectable()
@@ -25,8 +28,11 @@ export class MechanicsService {
     @InjectRepository(Charger)
     private chargerRepository: Repository<Charger>,
     private notificationsService: NotificationsService,
+    private firebaseNotificationService: FirebaseNotificationService,
     @Inject(forwardRef(() => EmergencyService))
     private emergencyService: EmergencyService,
+    private trafficService: TrafficService,
+    private serviceMatcherService: ServiceMatcherService,
   ) {}
 
   async register(createMechanicDto: CreateMechanicDto): Promise<MechanicEntity> {
@@ -70,7 +76,6 @@ export class MechanicsService {
           lng: parseFloat(mechanic.lng as any),
           rating: parseFloat(mechanic.rating as any),
           phone: mechanic.phone,
-          email: mechanic.email,
           description: mechanic.description,
           available: mechanic.available,
           pricePerHour: mechanic.pricePerHour ? parseFloat(mechanic.pricePerHour as any) : null,
@@ -271,18 +276,36 @@ export class MechanicsService {
       );
     }
 
-    // Combine AI scores with additional factors
+    // Get real-time traffic ETAs for top mechanics
+    const trafficETAs = await this.getTrafficETAs(request.lat, request.lng, nearbyMechanics.slice(0, 10));
+
+    // Combine AI scores with additional factors including traffic
     const scoredMechanics = nearbyMechanics.map((mechanic, idx) => {
       const baseScore = aiScores[idx] || 50;
-      const eta = this.estimateArrivalTime(mechanic.distance, urgencyMultiplier);
+      const trafficData = trafficETAs.get(mechanic.id);
+      
+      // Use traffic-aware ETA if available, otherwise estimate
+      const eta = trafficData 
+        ? trafficData.durationInTrafficMinutes 
+        : this.estimateArrivalTime(mechanic.distance, urgencyMultiplier);
+
+      // Adjust score based on traffic conditions
+      let adjustedScore = baseScore;
+      if (trafficData) {
+        // Penalize mechanics stuck in heavy traffic
+        if (trafficData.trafficLevel === 'heavy') adjustedScore -= 5;
+        if (trafficData.trafficLevel === 'severe') adjustedScore -= 10;
+      }
 
       return {
         ...mechanic,
-        aiScore: baseScore,
+        aiScore: Math.max(0, adjustedScore),
         estimatedArrivalMinutes: eta,
-        recommendationTier: this.getRecommendationTier(baseScore),
-        matchReasons: this.getMatchReasons(mechanic, request, baseScore),
+        recommendationTier: this.getRecommendationTier(adjustedScore),
+        matchReasons: this.getMatchReasons(mechanic, request, adjustedScore, trafficData),
         usingMLModel: usingAI,
+        trafficConditions: trafficData?.trafficLevel || 'unknown',
+        routeSummary: trafficData?.routeSummary || null,
       };
     });
 
@@ -300,15 +323,15 @@ export class MechanicsService {
   }
 
   private calculateServiceMatch(mechanic: any, request: EmergencyRequestDto): number {
-    if (!request.requiredServices || request.requiredServices.length === 0) {
-      return 0.5; // Neutral if no services specified
-    }
-
-    const matches = request.requiredServices.filter(s => 
-      mechanic.services.includes(s)
+    // Use enhanced service matcher with compatibility matrix
+    const score = this.serviceMatcherService.calculateServiceMatchScore(
+      mechanic.services,
+      request.requiredServices,
+      request.problemType,
     );
-
-    return matches.length / request.requiredServices.length;
+    
+    // Return as ratio (0-1) for AI model compatibility
+    return score / 100;
   }
 
   private getUrgencyNumber(urgencyLevel?: string): number {
@@ -371,13 +394,55 @@ export class MechanicsService {
     return 'available';
   }
 
-  private getMatchReasons(mechanic: any, request: EmergencyRequestDto, score: number): string[] {
+  /**
+   * Get real-time traffic ETAs for mechanics
+   */
+  private async getTrafficETAs(
+    userLat: number,
+    userLng: number,
+    mechanics: any[],
+  ): Promise<Map<string, any>> {
+    try {
+      const mechanicsWithLocation = mechanics
+        .filter(m => m.lat && m.lng)
+        .map(m => ({ id: m.id, lat: m.lat, lng: m.lng }));
+
+      if (mechanicsWithLocation.length === 0) {
+        return new Map();
+      }
+
+      return await this.trafficService.getBulkETAs(
+        userLat,
+        userLng,
+        mechanicsWithLocation,
+      );
+    } catch (error) {
+      console.warn('Traffic ETA calculation failed:', error.message);
+      return new Map();
+    }
+  }
+
+  private getMatchReasons(
+    mechanic: any, 
+    request: EmergencyRequestDto, 
+    score: number, 
+    trafficData?: any
+  ): string[] {
     const reasons: string[] = [];
 
     if (mechanic.distance < 2) {
       reasons.push('Very close to your location');
     } else if (mechanic.distance < 5) {
       reasons.push('Nearby location');
+    }
+
+    // Add traffic-aware ETA reason
+    if (trafficData) {
+      if (trafficData.trafficLevel === 'low') {
+        reasons.push('Clear route - fast arrival');
+      } else if (trafficData.trafficLevel === 'moderate') {
+        reasons.push('Moderate traffic conditions');
+      }
     }
 
     if (mechanic.rating >= 4.5) {
@@ -388,6 +453,11 @@ export class MechanicsService {
 
     if (mechanic.completedJobs >= 50) {
       reasons.push('Experienced professional');
+    }
+
+    // Add response time reputation
+    if (mechanic.average_response_time_minutes && mechanic.average_response_time_minutes < 10) {
+      reasons.push('Fast response history');
     }
 
     if (request.requiredServices && request.requiredServices.length > 0) {
@@ -465,13 +535,12 @@ export class MechanicsService {
             NotificationType.MECHANIC_ASSIGNED,
             {
               title: '🚨 Emergency Breakdown Request',
-              body: `${user.name || user.email} needs urgent assistance at ${locationText}`,
+              body: `${user.name || user.phoneNumber} needs urgent assistance at ${locationText}`,
               data: {
                 type: 'emergency_request',
                 requestId: emergencyRequest.id,
                 userId,
-                userName: user.name || user.email,
-                userEmail: user.email,
+                userName: user.name || user.phoneNumber,
                 userPhone: user.phoneNumber,
                 location: locationText,
                 lat: userLocation.lat.toString(),
@@ -504,6 +573,68 @@ export class MechanicsService {
       console.error('❌ Error sending emergency alerts:', error);
       throw error;
     }
+  }
+
+  /**
+   * Get route with traffic information using TrafficService
+   */
+  async getRouteWithTraffic(
+    originLat: number,
+    originLng: number,
+    destLat: number,
+    destLng: number,
+  ): Promise<any> {
+    try {
+      // Get traffic-aware ETA
+      const trafficETA = await this.trafficService.getTrafficAwareETA(
+        originLat,
+        originLng,
+        destLat,
+        destLng,
+      );
+
+      // Calculate distance
+      const distance = this.calculateDistance(originLat, originLng, destLat, destLng);
+
+      // Get route polyline (simplified - in production use Google Maps Directions API)
+      const polyline = this.generateSimplePolyline(originLat, originLng, destLat, destLng);
+
+      return {
+        distance,
+        duration: trafficETA.durationMinutes,
+        trafficCondition: trafficETA.trafficLevel,
+        polyline,
+        routeSummary: trafficETA.routeSummary || `${distance.toFixed(1)} km`,
+      };
+    } catch (error) {
+      console.error('❌ Error getting route with traffic:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Generate simple polyline between two points
+   * In production, use Google Maps Directions API for actual route
+   */
+  private generateSimplePolyline(
+    startLat: number,
+    startLng: number,
+    endLat: number,
+    endLng: number,
+  ): Array<{ lat: number; lng: number }> {
+    // Simple straight line with 10 points
+    const points: Array<{ lat: number; lng: number }> = [];
+    const steps = 10;
+
+    for (let i = 0; i <= steps; i++) {
+      const ratio = i / steps;
+      points.push({
+        lat: startLat + (endLat - startLat) * ratio,
+        lng: startLng + (endLng - startLng) * ratio,
+      });
+    }
+
+    return points;
   }
 }
 

@@ -12,13 +12,12 @@ import { SmsService } from './sms.service';
 
 @Injectable()
 export class AuthService {
-    async updateUserProfile(userId: string, data: Partial<{ name: string; email: string; phone: string; countryCode: string }>) {
+    async updateUserProfile(userId: string, data: Partial<{ name: string; phone: string; countryCode: string }>) {
       const user = await this.userRepository.findOne({ where: { id: userId } });
       if (!user) {
         throw new UnauthorizedException('User not found');
       }
       if (data.name) user.name = data.name;
-      if (data.email) user.email = data.email;
       if (data.phone) user.phone = data.phone;
       if (data.countryCode) user.countryCode = data.countryCode;
       await this.userRepository.save(user);
@@ -34,12 +33,12 @@ export class AuthService {
   ) {}
 
   async register(registerDto: RegisterDto) {
-    const { email, password, name } = registerDto;
+    const { phoneNumber, password, name } = registerDto;
 
     // Check if user already exists
-    const existingUser = await this.userRepository.findOne({ where: { email } });
+    const existingUser = await this.userRepository.findOne({ where: { phoneNumber } });
     if (existingUser) {
-      throw new ConflictException('Email already registered');
+      throw new ConflictException('Phone number already registered');
     }
 
     // Hash password
@@ -47,7 +46,7 @@ export class AuthService {
 
     // Create user
     const user = this.userRepository.create({
-      email,
+      phoneNumber,
       password: hashedPassword,
       name,
     });
@@ -55,14 +54,14 @@ export class AuthService {
     await this.userRepository.save(user);
 
     // Generate JWT token
-    const payload = { sub: user.id, email: user.email, role: user.role };
+    const payload = { sub: user.id, phone: user.phoneNumber, role: user.role };
     const access_token = this.jwtService.sign(payload);
 
     return {
       access_token,
       user: {
         id: user.id,
-        email: user.email,
+        phone: user.phoneNumber,
         name: user.name,
         role: user.role,
       },
@@ -70,18 +69,11 @@ export class AuthService {
   }
 
   async login(loginDto: LoginDto) {
-    const { email, password } = loginDto;
+    const { phoneNumber, password } = loginDto;
 
-    // If it's not an email format, convert phone to temp email format
-    let searchEmail = email;
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      // It's a phone number, convert to temp email format
-      searchEmail = `${email}@temp.evconnect.com`;
-    }
-
-    // Find user by email (including phone-formatted emails)
+    // Find user by phone number
     const user = await this.userRepository.findOne({
-      where: { email: searchEmail },
+      where: { phoneNumber },
     });
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
@@ -94,14 +86,14 @@ export class AuthService {
     }
 
     // Generate JWT token
-    const payload = { sub: user.id, email: user.email, role: user.role };
+    const payload = { sub: user.id, phone: user.phoneNumber, role: user.role };
     const access_token = this.jwtService.sign(payload);
 
     return {
       access_token,
       user: {
         id: user.id,
-        email: user.email,
+        phone: user.phoneNumber,
         name: user.name,
         role: user.role,
       },
@@ -113,18 +105,11 @@ export class AuthService {
   }
 
   async adminLogin(loginDto: LoginDto) {
-    const { email, password } = loginDto;
+    const { phoneNumber, password } = loginDto;
 
-    // If it's not an email format, convert phone to temp email format
-    let searchEmail = email;
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      // It's a phone number, convert to temp email format
-      searchEmail = `${email}@temp.evconnect.com`;
-    }
-
-    // Find user by email (including phone-formatted emails)
+    // Find user by phone number
     const user = await this.userRepository.findOne({
-      where: { email: searchEmail },
+      where: { phoneNumber },
     });
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
@@ -147,14 +132,14 @@ export class AuthService {
     }
 
     // Generate JWT token with role
-    const payload = { sub: user.id, email: user.email, role: user.role };
+    const payload = { sub: user.id, phone: user.phoneNumber, role: user.role };
     const access_token = this.jwtService.sign(payload);
 
     return {
       access_token,
       user: {
         id: user.id,
-        email: user.email,
+        phone: user.phoneNumber,
         name: user.name,
         role: user.role,
       },
@@ -269,7 +254,6 @@ export class AuthService {
       phoneNumber,
       password: hashedPassword,
       name: `User ${phoneNumber.slice(-4)}`, // Default name
-      email: `${phoneNumber}@evrs.app`, // Temporary email
       isVerified: true, // Phone is verified via OTP
     });
 
@@ -300,42 +284,56 @@ export class AuthService {
    * Login with phone number and password
    */
   async loginWithPhone(phoneNumber: string, password: string) {
-    // Find user by phone number
-    const user = await this.userRepository.findOne({
-      where: { phoneNumber },
-    });
+    try {
+      console.log('[loginWithPhone] Starting login with phoneNumber:', phoneNumber);
+      
+      // Find user by phone number
+      const user = await this.userRepository.findOne({
+        where: { phoneNumber },
+      });
 
-    if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
+      console.log('[loginWithPhone] User found:', user ? 'YES' : 'NO');
+      
+      if (!user) {
+        throw new UnauthorizedException('Invalid credentials');
+      }
+
+      // Check if user is banned
+      if (user.isBanned) {
+        throw new UnauthorizedException('Your account has been banned');
+      }
+
+      console.log('[loginWithPhone] Comparing password...');
+      // Verify password
+      const isPasswordValid = await bcrypt.compare(password, user.password);
+      console.log('[loginWithPhone] Password valid:', isPasswordValid);
+      
+      if (!isPasswordValid) {
+        throw new UnauthorizedException('Invalid credentials');
+      }
+
+      console.log('[loginWithPhone] Generating tokens...');
+      // Generate JWT tokens
+      const payload = { sub: user.id, phoneNumber: user.phoneNumber, role: user.role };
+      const access_token = this.jwtService.sign(payload, { expiresIn: '24h' });
+      const refresh_token = this.jwtService.sign(payload, { expiresIn: '30d' });
+
+      console.log('[loginWithPhone] Login successful');
+      return {
+        access_token,
+        refresh_token,
+        user: {
+          id: user.id,
+          phoneNumber: user.phoneNumber,
+          name: user.name,
+          role: user.role,
+          isVerified: user.isVerified,
+        },
+      };
+    } catch (error) {
+      console.error('[loginWithPhone] Error:', error.message, error.stack);
+      throw error;
     }
-
-    // Check if user is banned
-    if (user.isBanned) {
-      throw new UnauthorizedException('Your account has been banned');
-    }
-
-    // Verify password
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
-
-    // Generate JWT tokens
-    const payload = { sub: user.id, phoneNumber: user.phoneNumber, role: user.role };
-    const access_token = this.jwtService.sign(payload, { expiresIn: '24h' });
-    const refresh_token = this.jwtService.sign(payload, { expiresIn: '30d' });
-
-    return {
-      access_token,
-      refresh_token,
-      user: {
-        id: user.id,
-        phoneNumber: user.phoneNumber,
-        name: user.name,
-        role: user.role,
-        isVerified: user.isVerified,
-      },
-    };
   }
 
   /**

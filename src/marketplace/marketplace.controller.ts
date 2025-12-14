@@ -31,7 +31,8 @@ export class MarketplaceController {
   }
 
   @Get('feed')
-  getMarketplaceFeed(@Query(ValidationPipe) dto: GetMarketplaceFeedDto) {
+  getMarketplaceFeed(@Query() dto: GetMarketplaceFeedDto) {
+    console.log('🎯 Controller: getMarketplaceFeed called', dto);
     return this.marketplaceService.getMarketplaceFeed(dto);
   }
 

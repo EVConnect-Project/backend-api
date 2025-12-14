@@ -207,7 +207,7 @@ export class AdminService {
 
     if (search) {
       queryBuilder.where(
-        '(user.name ILIKE :search OR user.email ILIKE :search)',
+        '(user.name ILIKE :search OR user.phone ILIKE :search)',
         { search: `%${search}%` },
       );
     }
@@ -227,7 +227,7 @@ export class AdminService {
       users: users.map((u) => ({
         id: u.id,
         name: u.name,
-        email: u.email,
+        phone: u.phoneNumber,
         role: u.role,
         isBanned: u.isBanned,
         createdAt: u.createdAt,
@@ -245,7 +245,7 @@ export class AdminService {
     return {
       id: user.id,
       name: user.name,
-      email: user.email,
+      phone: user.phoneNumber,
       role: user.role,
       isBanned: user.isBanned,
       createdAt: user.createdAt,
@@ -380,7 +380,7 @@ export class AdminService {
           ? {
               id: c.owner.id,
               name: c.owner.name,
-              email: c.owner.email,
+              phone: c.owner.phoneNumber,
             }
           : null,
         ownerId: c.ownerId,
@@ -414,7 +414,7 @@ export class AdminService {
         ? {
             id: charger.owner.id,
             name: charger.owner.name,
-            email: charger.owner.email,
+            phone: charger.owner.phoneNumber,
           }
         : null,
       ownerId: charger.ownerId,
@@ -613,7 +613,7 @@ export class AdminService {
           ? {
               id: b.user.id,
               name: b.user.name,
-              email: b.user.email,
+              phone: b.user.phoneNumber,
             }
           : null,
         charger: b.charger
@@ -650,7 +650,7 @@ export class AdminService {
         ? {
             id: booking.user.id,
             name: booking.user.name,
-            email: booking.user.email,
+            phone: booking.user.phoneNumber,
           }
         : null,
       charger: booking.charger
@@ -751,7 +751,7 @@ export class AdminService {
         user: a.user ? {
           id: a.user.id,
           name: a.user.name,
-          email: a.user.email,
+          phone: a.user.phoneNumber,
         } : null,
       })),
       total,
@@ -790,7 +790,7 @@ export class AdminService {
       user: application.user ? {
         id: application.user.id,
         name: application.user.name,
-        email: application.user.email,
+        phone: application.user.phoneNumber,
         role: application.user.role,
       } : null,
     };
@@ -922,7 +922,7 @@ export class AdminService {
         user: m.user ? {
           id: m.user.id,
           name: m.user.name,
-          email: m.user.email,
+          phone: m.user.phoneNumber,
         } : null,
         createdAt: m.createdAt,
         updatedAt: m.updatedAt,
@@ -957,7 +957,7 @@ export class AdminService {
       user: mechanic.user ? {
         id: mechanic.user.id,
         name: mechanic.user.name,
-        email: mechanic.user.email,
+        phone: mechanic.user.phoneNumber,
         role: mechanic.user.role,
       } : null,
       createdAt: mechanic.createdAt,
@@ -1229,8 +1229,7 @@ export class AdminService {
     return {
       id: charger.owner.id,
       name: charger.owner.name,
-      email: charger.owner.email,
-      phone: charger.owner.phone,
+      phone: charger.owner.phoneNumber,
       role: charger.owner.role,
       createdAt: charger.owner.createdAt,
     };
