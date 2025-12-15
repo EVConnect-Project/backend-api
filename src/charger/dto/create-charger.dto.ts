@@ -66,4 +66,14 @@ export class CreateChargerDto {
   @IsUUID()
   @IsNotEmpty({ message: 'Payment account is required for pre-booking mode' })
   paymentAccountId?: string;
+
+  @IsString()
+  @IsOptional()
+  googleMapUrl?: string;
+
+  @IsNumber()
+  @IsOptional()
+  @Min(0)
+  @Max(1)
+  reliabilityScore?: number;
 }

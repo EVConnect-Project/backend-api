@@ -186,6 +186,13 @@ export class Charger {
     service?: boolean;
   } | null;
 
+  // Trip Planning Fields
+  @Column({ type: 'text', nullable: true, name: 'google_map_url' })
+  googleMapUrl: string | null;
+
+  @Column({ type: 'decimal', precision: 4, scale: 2, default: 0.95, name: 'reliability_score' })
+  reliabilityScore: number;
+
   // Socket Relations
   @OneToMany(() => ChargerSocket, socket => socket.charger, { cascade: true })
   sockets: ChargerSocket[];

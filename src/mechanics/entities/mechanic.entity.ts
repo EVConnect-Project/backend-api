@@ -22,7 +22,7 @@ export class MechanicEntity {
   @Column({ nullable: true })
   specialization: string;
 
-  @Column({ name: 'yearsofexperience', type: 'int', default: 0 })
+  @Column({ name: 'yearsOfExperience', type: 'int', default: 0 })
   yearsOfExperience: number;
 
   @Column({ type: 'decimal', precision: 10, scale: 7 })
@@ -43,36 +43,36 @@ export class MechanicEntity {
   @Column({ default: true })
   available: boolean;
 
-  @Column({ name: 'isbanned', default: false })
+  @Column({ name: 'isBanned', default: false })
   isBanned: boolean;
 
-  @Column({ name: 'priceperhour', type: 'decimal', precision: 10, scale: 2, nullable: true })
+  @Column({ name: 'pricePerHour', type: 'decimal', precision: 10, scale: 2, nullable: true })
   pricePerHour: number;
 
-  @Column({ name: 'completedjobs', type: 'int', default: 0 })
+  @Column({ name: 'completedJobs', type: 'int', default: 0 })
   completedJobs: number;
 
-  @Column({ name: 'licensenumber', nullable: true })
+  @Column({ name: 'licenseNumber', nullable: true })
   licenseNumber: string;
 
   @Column({ nullable: true })
   certifications: string;
 
-  @Column({ name: 'currentlocationlat', type: 'decimal', precision: 10, scale: 7, nullable: true })
+  @Column({ name: 'currentLocationLat', type: 'decimal', precision: 10, scale: 7, nullable: true })
   currentLocationLat: number;
 
-  @Column({ name: 'currentlocationlng', type: 'decimal', precision: 10, scale: 7, nullable: true })
+  @Column({ name: 'currentLocationLng', type: 'decimal', precision: 10, scale: 7, nullable: true })
   currentLocationLng: number;
 
-  @Column({ name: 'isonjob', type: 'boolean', default: false })
+  @Column({ name: 'isOnJob', type: 'boolean', default: false })
   isOnJob: boolean;
 
-  @Column({ name: 'lastonlineat', type: 'timestamp', nullable: true })
+  @Column({ name: 'lastOnlineAt', type: 'timestamp', nullable: true })
   lastOnlineAt: Date;
 
-  @CreateDateColumn({ name: 'createdat' })
+  @CreateDateColumn({ name: 'createdAt' })
   createdAt: Date;
 
-  @UpdateDateColumn({ name: 'updatedat' })
+  @UpdateDateColumn({ name: 'updatedAt' })
   updatedAt: Date;
 }

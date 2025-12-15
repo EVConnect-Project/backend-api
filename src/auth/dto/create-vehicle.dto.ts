@@ -35,9 +35,18 @@ export class CreateVehicleDto {
   @IsString()
   vehicleType?: string;
 
+  @IsOptional()
+  @IsString()
+  maxAcChargingPower?: string;
+
+  @IsOptional()
+  @IsString()
+  maxDcChargingPower?: string;
+
+  @IsOptional()
   @IsNumber()
   @Min(1)
-  rangeKm: number;
+  rangeKm?: number;
 
   // Trip Planning Fields
   @IsOptional()

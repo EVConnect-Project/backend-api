@@ -6,17 +6,8 @@ export class UserEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ name: 'phone', nullable: true, unique: true })
+  @Column({ name: 'phoneNumber', nullable: true, unique: true })
   phoneNumber: string;
-
-  // Alias for phoneNumber to maintain backward compatibility
-  get phone(): string {
-    return this.phoneNumber;
-  }
-
-  set phone(value: string) {
-    this.phoneNumber = value;
-  }
 
   @Column({ name: 'countryCode', nullable: true })
   countryCode: string;

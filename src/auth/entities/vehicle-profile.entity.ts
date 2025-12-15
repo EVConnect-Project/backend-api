@@ -30,7 +30,13 @@ export class VehicleProfile {
   @Column({ type: 'varchar', length: 50, nullable: true })
   vehicleType: string; // 'car', 'van', 'bus', 'truck', 'three-wheeler', 'bike'
 
-  @Column({ type: 'decimal', precision: 10, scale: 2 })
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  maxAcChargingPower: string;
+
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  maxDcChargingPower: string;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
   rangeKm: number;
 
   // Trip Planning: Energy Efficiency Fields

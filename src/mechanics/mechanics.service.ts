@@ -41,10 +41,21 @@ export class MechanicsService {
   }
 
   async findAll(): Promise<MechanicEntity[]> {
-    return this.mechanicRepository.find({
-      where: { available: true, isBanned: false },
-      order: { rating: 'DESC' },
-    });
+    try {
+      // Try with both filters first
+      const mechanics = await this.mechanicRepository.find({
+        where: { available: true, isBanned: false },
+        order: { rating: 'DESC' },
+      });
+      return mechanics;
+    } catch (error) {
+      console.error('Error fetching mechanics with isBanned filter:', error.message);
+      // Fallback: just filter by available
+      return this.mechanicRepository.find({
+        where: { available: true },
+        order: { rating: 'DESC' },
+      });
+    }
   }
 
   async findOne(id: string): Promise<MechanicEntity> {

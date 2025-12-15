@@ -44,26 +44,40 @@ export class VehicleProfileService {
   }
 
   async create(userId: string, createVehicleDto: CreateVehicleDto): Promise<VehicleProfile> {
-    // Check if this is the first vehicle - make it primary automatically
-    const existingVehicles = await this.vehicleProfileRepository.count({ where: { userId } });
-    const isPrimary = existingVehicles === 0;
+    try {
+      this.logger.log(`Creating vehicle for user ${userId}: ${JSON.stringify(createVehicleDto)}`);
+      
+      // Check if this is the first vehicle - make it primary automatically
+      const existingVehicles = await this.vehicleProfileRepository.count({ where: { userId } });
+      const isPrimary = existingVehicles === 0;
 
-    const vehicle = this.vehicleProfileRepository.create({
-      userId,
-      isPrimary,
-      make: createVehicleDto.make,
-      model: createVehicleDto.model,
-      year: createVehicleDto.year,
-      batteryCapacity: createVehicleDto.batteryCapacity,
-      connectorType: createVehicleDto.connectorType,
-      rangeKm: createVehicleDto.rangeKm,
-      averageConsumption: createVehicleDto.averageConsumption,
-      efficiency: createVehicleDto.efficiency,
-      chargingCurve: createVehicleDto.chargingCurve as any,
-      drivingMode: createVehicleDto.drivingMode,
-    });
+      this.logger.log(`Existing vehicles: ${existingVehicles}, Setting isPrimary: ${isPrimary}`);
 
-    return await this.vehicleProfileRepository.save(vehicle);
+      const vehicle = this.vehicleProfileRepository.create({
+        userId,
+        isPrimary,
+        make: createVehicleDto.make,
+        model: createVehicleDto.model,
+        year: createVehicleDto.year,
+        batteryCapacity: createVehicleDto.batteryCapacity,
+        connectorType: createVehicleDto.connectorType,
+        vehicleType: createVehicleDto.vehicleType,
+        maxAcChargingPower: createVehicleDto.maxAcChargingPower,
+        maxDcChargingPower: createVehicleDto.maxDcChargingPower,
+        rangeKm: createVehicleDto.rangeKm,
+        averageConsumption: createVehicleDto.averageConsumption,
+        efficiency: createVehicleDto.efficiency,
+        chargingCurve: createVehicleDto.chargingCurve as any,
+        drivingMode: createVehicleDto.drivingMode,
+      });
+
+      const saved = await this.vehicleProfileRepository.save(vehicle);
+      this.logger.log(`Vehicle created successfully with ID: ${saved.id}`);
+      return saved;
+    } catch (error) {
+      this.logger.error(`Error creating vehicle: ${error.message}`, error.stack);
+      throw error;
+    }
   }
 
   async update(id: string, userId: string, updateVehicleDto: UpdateVehicleDto): Promise<VehicleProfile> {

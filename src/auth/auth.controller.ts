@@ -29,7 +29,7 @@ export class AuthController {
         id: user.id,
         name: user.name,
         role: user.role,
-        phone: user.phone,
+        phone: user.phoneNumber,
         countryCode: user.countryCode,
         isVerified: user.isVerified,
         isBanned: user.isBanned,
@@ -64,7 +64,7 @@ export class AuthController {
       valid: user.role === 'admin' && !user.isBanned,
       user: {
         id: user.userId,
-        phone: user.phone,
+        phone: user.phoneNumber,
         role: user.role,
       },
     };
@@ -80,7 +80,7 @@ export class AuthController {
       return { error: 'User not found' };
     }
 
-    console.log('🔍 /auth/me: Checking chargers for user:', user.phone, 'ID:', user.id);
+    console.log('🔍 /auth/me: Checking chargers for user:', user.phoneNumber, 'ID:', user.id);
     
     // Check if user owns any chargers (determines isOwner status)
     const chargerCount = await this.chargerRepository.count({
@@ -94,7 +94,7 @@ export class AuthController {
     });
     const hasMechanicProfile = mechanicProfile !== null;
 
-    console.log('📊 /auth/me: User:', user.phone);
+    console.log('📊 /auth/me: User:', user.phoneNumber);
     console.log('   - Role:', user.role);
     console.log('   - Charger count:', chargerCount);
     console.log('   - hasChargers:', hasChargers);
@@ -107,7 +107,7 @@ export class AuthController {
         id: user.id,
         name: user.name,
         role: user.role,
-        phone: user.phone,
+        phone: user.phoneNumber,
         countryCode: user.countryCode,
         isVerified: user.isVerified,
         isBanned: user.isBanned,

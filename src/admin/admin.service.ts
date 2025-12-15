@@ -207,7 +207,7 @@ export class AdminService {
 
     if (search) {
       queryBuilder.where(
-        '(user.name ILIKE :search OR user.phone ILIKE :search)',
+        '(user.name ILIKE :search OR user.phoneNumber ILIKE :search)',
         { search: `%${search}%` },
       );
     }

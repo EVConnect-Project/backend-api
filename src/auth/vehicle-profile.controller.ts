@@ -51,7 +51,23 @@ export class VehicleProfileController {
 
   @Post()
   async create(@Body() createVehicleDto: CreateVehicleDto, @Request() req) {
-    return this.vehicleProfileService.create(req.user.userId, createVehicleDto);
+    try {
+      this.logger.log(`🚗 POST /auth/vehicle-profiles - User: ${req.user?.userId}`);
+      this.logger.log(`🚗 Vehicle data: ${JSON.stringify(createVehicleDto)}`);
+      const vehicle = await this.vehicleProfileService.create(req.user.userId, createVehicleDto);
+      this.logger.log(`🚗 Vehicle created successfully with ID: ${vehicle.id}`);
+      return vehicle;
+    } catch (error) {
+      this.logger.error(`❌ Error creating vehicle: ${error.message}`, error.stack);
+      throw new HttpException(
+        {
+          statusCode: HttpStatus.BAD_REQUEST,
+          message: 'Failed to create vehicle',
+          error: error.message,
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
   }
 
   @Patch(':id')
