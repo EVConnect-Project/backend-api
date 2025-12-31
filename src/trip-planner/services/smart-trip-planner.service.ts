@@ -414,11 +414,9 @@ export class SmartTripPlannerService {
     // Determine vehicle max power based on charger type
     let vehicleMaxPower = 50; // Default
     if (charger.chargerType === 'ac') {
-      const maxAc = vehicle.maxAcChargingPower ? parseFloat(vehicle.maxAcChargingPower) : 11;
-      vehicleMaxPower = maxAc;
+      vehicleMaxPower = 11; // Default AC charging power
     } else {
-      const maxDc = vehicle.maxDcChargingPower ? parseFloat(vehicle.maxDcChargingPower) : 50;
-      vehicleMaxPower = maxDc;
+      vehicleMaxPower = 50; // Default DC fast charging power
     }
 
     // Effective power is the minimum of charger and vehicle capability

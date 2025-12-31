@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThan } from 'typeorm';
+import { Repository, LessThan, MoreThan } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn } from 'typeorm';
 import * as crypto from 'crypto';
@@ -53,7 +53,7 @@ export class OtpService {
     const recentAttempts = await this.otpRepository.count({
       where: {
         phoneNumber,
-        createdAt: LessThan(oneHourAgo),
+        createdAt: MoreThan(oneHourAgo),
       },
     });
 

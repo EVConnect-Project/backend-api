@@ -8,24 +8,24 @@ export class BookingEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'uuid' })
+  @Column({ name: 'user_id', type: 'uuid' })
   userId: string;
 
   @ManyToOne(() => UserEntity)
-  @JoinColumn({ name: 'userId' })
+  @JoinColumn({ name: 'user_id' })
   user: UserEntity;
 
-  @Column({ type: 'uuid' })
+  @Column({ name: 'charger_id', type: 'uuid' })
   chargerId: string;
 
   @ManyToOne(() => Charger)
-  @JoinColumn({ name: 'chargerId' })
+  @JoinColumn({ name: 'charger_id' })
   charger: Charger;
 
-  @Column({ type: 'timestamp' })
+  @Column({ name: 'start_time', type: 'timestamp' })
   startTime: Date;
 
-  @Column({ type: 'timestamp' })
+  @Column({ name: 'end_time', type: 'timestamp' })
   endTime: Date;
 
   @Column({ 
@@ -35,10 +35,10 @@ export class BookingEntity {
   })
   status: string;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2 })
+  @Column({ name: 'total_cost', type: 'decimal', precision: 10, scale: 2, nullable: true })
   price: number;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  @Column({ name: 'energy_consumed', type: 'decimal', precision: 10, scale: 2, nullable: true })
   energyConsumed: number;
 
   // Booking Type Fields
