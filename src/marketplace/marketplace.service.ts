@@ -388,9 +388,11 @@ export class MarketplaceService {
       const queryBuilder = this.listingRepository
         .createQueryBuilder('listing')
         .leftJoin('listing.seller', 'seller')
-        .addSelect(['seller.id', 'seller.name', 'seller.phoneNumber'])
+        .addSelect(['seller.id', 'seller.name', 'seller.phoneNumber', 'seller.isBanned'])
         .leftJoinAndSelect('listing.images', 'images')
-        .where('listing.status = :status', { status: 'approved' });
+        .where('listing.status = :status', { status: 'approved' })
+        .andWhere('listing.isBanned = :isBanned', { isBanned: false })
+        .andWhere('(seller.isBanned IS NULL OR seller.isBanned = :sellerBanned)', { sellerBanned: false });
       
       console.log('📝 Query built successfully');
 
