@@ -47,7 +47,15 @@ export class AuthController {
 
   @Post('login')
   async login(@Body(ValidationPipe) loginDto: LoginDto) {
-    return this.authService.login(loginDto);
+    try {
+      console.log('[AUTH CONTROLLER] Login request received for:', loginDto.phoneNumber);
+      const result = await this.authService.login(loginDto);
+      console.log('[AUTH CONTROLLER] Login successful for:', loginDto.phoneNumber);
+      return result;
+    } catch (error) {
+      console.error('[AUTH CONTROLLER] Login error:', error.message, error.stack);
+      throw error;
+    }
   }
 
   @Post('admin/login')

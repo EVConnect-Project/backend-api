@@ -69,35 +69,53 @@ export class AuthService {
   }
 
   async login(loginDto: LoginDto) {
-    const { phoneNumber, password } = loginDto;
+    try {
+      const { phoneNumber, password } = loginDto;
+      
+      console.log('[AUTH SERVICE] Login attempt for phoneNumber:', phoneNumber);
 
-    // Find user by phone number
-    const user = await this.userRepository.findOne({
-      where: { phoneNumber },
-    });
-    if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
+      // Find user by phone number
+      const user = await this.userRepository.findOne({
+        where: { phoneNumber },
+      });
+      
+      console.log('[AUTH SERVICE] User found:', user ? `YES (ID: ${user.id})` : 'NO');
+
+      if (!user) {
+        console.log('[AUTH SERVICE] User not found for:', phoneNumber);
+        throw new UnauthorizedException('Invalid credentials');
+      }
+
+      console.log('[AUTH SERVICE] Verifying password...');
+      // Verify password
+      const isPasswordValid = await bcrypt.compare(password, user.password);
+      console.log('[AUTH SERVICE] Password valid:', isPasswordValid);
+      
+      if (!isPasswordValid) {
+        console.log('[AUTH SERVICE] Invalid password for:', phoneNumber);
+        throw new UnauthorizedException('Invalid credentials');
+      }
+
+      console.log('[AUTH SERVICE] Generating JWT token...');
+      // Generate JWT token
+      const payload = { sub: user.id, phone: user.phoneNumber, role: user.role };
+      const access_token = this.jwtService.sign(payload);
+      
+      console.log('[AUTH SERVICE] Login successful for:', phoneNumber);
+
+      return {
+        access_token,
+        user: {
+          id: user.id,
+          phone: user.phoneNumber,
+          name: user.name,
+          role: user.role,
+        },
+      };
+    } catch (error) {
+      console.error('[AUTH SERVICE] Login error:', error.message, error.stack);
+      throw error;
     }
-
-    // Verify password
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
-
-    // Generate JWT token
-    const payload = { sub: user.id, phone: user.phoneNumber, role: user.role };
-    const access_token = this.jwtService.sign(payload);
-
-    return {
-      access_token,
-      user: {
-        id: user.id,
-        phone: user.phoneNumber,
-        name: user.name,
-        role: user.role,
-      },
-    };
   }
 
   async validateUser(userId: string): Promise<UserEntity | null> {
