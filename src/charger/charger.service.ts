@@ -295,49 +295,31 @@ export class ChargerService {
     try {
       console.log('filterStations called with filters:', filters);
       
-      // Get all verified charging stations - simplified, no joins initially
-      const stations = await this.stationRepository.find({
-        where: { verified: true },
+      // Get all verified chargers with their sockets and owner
+      const chargers = await this.chargerRepository.find({
+        where: { verified: true, isBanned: false },
+        relations: ['sockets', 'owner'],
       });
       
-      console.log(`Found ${stations.length} verified stations`);
-
-      // For each station, fetch its chargers with sockets
-      const stationsWithChargers = await Promise.all(
-        stations.map(async (station) => {
-          console.log(`Fetching chargers for station ${station.id}`);
-          const chargers = await this.chargerRepository.find({
-            where: { stationId: station.id, verified: true },
-            relations: ['sockets'],
-          });
-          console.log(`Found ${chargers.length} chargers for station ${station.stationName}`);
-          
-          return {
-            ...station,
-            chargers,
-          };
-        })
-      );
-
-      console.log(`Processed ${stationsWithChargers.length} stations with chargers`);
+      console.log(`Found ${chargers.length} verified chargers`);
 
       // Apply filters
-      let filteredStations: any[] = stationsWithChargers;
+      let filteredChargers: any[] = chargers;
 
       // Location filter
       if (filters.lat && filters.lng) {
-      const radius = filters.radius || 10;
-      filteredStations = filteredStations.map(station => {
-        const distance = this.calculateDistance(
-          filters.lat, filters.lng,
-          station.lat, 
-          station.lng
-        );
-        return { ...station, distance };
-      }).filter(station => station.distance < radius);
+        const radius = filters.radius || 10;
+        filteredChargers = filteredChargers.map(charger => {
+          const distance = this.calculateDistance(
+            filters.lat, filters.lng,
+            parseFloat(charger.lat), 
+            parseFloat(charger.lng)
+          );
+          return { ...charger, distance };
+        }).filter(charger => charger.distance < radius);
 
         if (filters.sortBy === 'distance') {
-          filteredStations.sort((a, b) => 
+          filteredChargers.sort((a, b) => 
             filters.sortOrder === 'desc' ? b.distance - a.distance : a.distance - b.distance
           );
         }
@@ -346,17 +328,17 @@ export class ChargerService {
       // Pagination
       const limit = filters.limit || 50;
       const offset = filters.offset || 0;
-      const total = filteredStations.length;
-      const paginatedStations = filteredStations.slice(offset, offset + limit);
+      const total = filteredChargers.length;
+      const paginatedChargers = filteredChargers.slice(offset, offset + limit);
 
-      console.log(`Returning ${paginatedStations.length} of ${total} stations`);
+      console.log(`Returning ${paginatedChargers.length} of ${total} chargers`);
 
       return {
-        data: paginatedStations,
+        data: paginatedChargers,
         total,
         limit,
         offset,
-        hasMore: offset + paginatedStations.length < total,
+        hasMore: offset + paginatedChargers.length < total,
       };
     } catch (error) {
       console.error('Error in filterStations:', error);
