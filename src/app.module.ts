@@ -29,6 +29,7 @@ import { TripModule } from './trip/trip.module';
 import { SupportModule } from './support/support.module';
 import { EmergencyModule } from './emergency/emergency.module';
 import { FeedbackModule } from './feedback/feedback.module';
+import { PromotionsModule } from './promotions/promotions.module';
 
 @Module({
   imports: [
@@ -77,6 +78,7 @@ import { FeedbackModule } from './feedback/feedback.module';
     SupportModule,
     EmergencyModule,
     FeedbackModule,
+    PromotionsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

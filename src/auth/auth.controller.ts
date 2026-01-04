@@ -1,4 +1,4 @@
-import { Controller, Post, Body, ValidationPipe, Get, UseGuards, Request, Inject, Patch, Delete } from '@nestjs/common';
+import { Controller, Post, Body, Get, UseGuards, Request, Inject, Patch, Delete } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -41,12 +41,12 @@ export class AuthController {
   }
 
   @Post('register')
-  async register(@Body(ValidationPipe) registerDto: RegisterDto) {
+  async register(@Body() registerDto: RegisterDto) {
     return this.authService.register(registerDto);
   }
 
   @Post('login')
-  async login(@Body(ValidationPipe) loginDto: LoginDto) {
+  async login(@Body() loginDto: LoginDto) {
     try {
       console.log('[AUTH CONTROLLER] Login request received for:', loginDto.phoneNumber);
       const result = await this.authService.login(loginDto);
@@ -59,7 +59,7 @@ export class AuthController {
   }
 
   @Post('admin/login')
-  async adminLogin(@Body(ValidationPipe) loginDto: LoginDto) {
+  async adminLogin(@Body() loginDto: LoginDto) {
     return this.authService.adminLogin(loginDto);
   }
 
@@ -130,7 +130,7 @@ export class AuthController {
 
   @Post('change-password')
   @UseGuards(JwtAuthGuard)
-  async changePassword(@Request() req, @Body(ValidationPipe) changePasswordDto: ChangePasswordDto) {
+  async changePassword(@Request() req, @Body() changePasswordDto: ChangePasswordDto) {
     return this.authService.changePassword(
       req.user.userId,
       changePasswordDto.currentPassword,
@@ -147,12 +147,12 @@ export class AuthController {
   // ==================== PHONE AUTHENTICATION ENDPOINTS ====================
 
   @Post('send-otp')
-  async sendOTP(@Body(ValidationPipe) sendOtpDto: SendOtpDto) {
+  async sendOTP(@Body() sendOtpDto: SendOtpDto) {
     return this.authService.sendOTP(sendOtpDto.phoneNumber);
   }
 
   @Post('verify-otp')
-  async verifyOTP(@Body(ValidationPipe) verifyOtpDto: VerifyOtpDto) {
+  async verifyOTP(@Body() verifyOtpDto: VerifyOtpDto) {
     return this.authService.verifyOTP(
       verifyOtpDto.phoneNumber,
       verifyOtpDto.otp,
@@ -160,12 +160,12 @@ export class AuthController {
   }
 
   @Post('resend-otp')
-  async resendOTP(@Body(ValidationPipe) sendOtpDto: SendOtpDto) {
+  async resendOTP(@Body() sendOtpDto: SendOtpDto) {
     return this.authService.sendOTP(sendOtpDto.phoneNumber);
   }
 
   @Post('register-phone')
-  async registerPhone(@Body(ValidationPipe) registerPhoneDto: RegisterPhoneDto) {
+  async registerPhone(@Body() registerPhoneDto: RegisterPhoneDto) {
     return this.authService.registerWithPhone(
       registerPhoneDto.phoneNumber,
       registerPhoneDto.password,
@@ -174,7 +174,7 @@ export class AuthController {
   }
 
   @Post('login-phone')
-  async loginPhone(@Body(ValidationPipe) loginPhoneDto: LoginPhoneDto) {
+  async loginPhone(@Body() loginPhoneDto: LoginPhoneDto) {
     return this.authService.loginWithPhone(
       loginPhoneDto.phoneNumber,
       loginPhoneDto.password,
@@ -182,12 +182,12 @@ export class AuthController {
   }
 
   @Post('forgot-password')
-  async forgotPassword(@Body(ValidationPipe) sendOtpDto: SendOtpDto) {
+  async forgotPassword(@Body() sendOtpDto: SendOtpDto) {
     return this.authService.sendPasswordResetOTP(sendOtpDto.phoneNumber);
   }
 
   @Post('reset-password')
-  async resetPassword(@Body(ValidationPipe) resetPasswordDto: ResetPasswordDto) {
+  async resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
     return this.authService.resetPassword(
       resetPasswordDto.phoneNumber,
       resetPasswordDto.newPassword,

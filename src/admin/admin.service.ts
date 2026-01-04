@@ -502,6 +502,101 @@ export class AdminService {
     return { message: 'Charger deleted successfully' };
   }
 
+  async getChargerAnalytics(id: string) {
+    const charger = await this.chargerRepository.findOne({ 
+      where: { id },
+      relations: ['owner']
+    });
+    
+    if (!charger) {
+      throw new NotFoundException('Charger not found');
+    }
+
+    // Get all bookings for this charger
+    const bookings = await this.bookingRepository.find({
+      where: { chargerId: id },
+      order: { createdAt: 'DESC' },
+    });
+
+    // Calculate revenue data by month (last 12 months)
+    const revenueData: Array<{ month: string; revenue: number; bookings: number }> = [];
+    const now = new Date();
+    for (let i = 11; i >= 0; i--) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const monthBookings = bookings.filter(b => {
+        const bookingDate = new Date(b.createdAt);
+        return bookingDate.getMonth() === date.getMonth() && 
+               bookingDate.getFullYear() === date.getFullYear() &&
+               b.status === 'completed';
+      });
+      
+      const revenue = monthBookings.reduce((sum, b) => sum + (Number(b.price) || 0), 0);
+      
+      revenueData.push({
+        month: date.toLocaleDateString('en-US', { month: 'short' }),
+        revenue: Math.round(revenue * 100) / 100,
+        bookings: monthBookings.length,
+      });
+    }
+
+    // Calculate utilization data by day (last 30 days)
+    const utilizationData: Array<{ date: string; utilization: number }> = [];
+    for (let i = 29; i >= 0; i--) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      date.setHours(0, 0, 0, 0);
+      
+      const dayBookings = bookings.filter(b => {
+        const bookingDate = new Date(b.createdAt);
+        bookingDate.setHours(0, 0, 0, 0);
+        return bookingDate.getTime() === date.getTime();
+      });
+
+      // Calculate total hours used (assuming each booking is ~2 hours average)
+      const hoursUsed = dayBookings.length * 2;
+      const utilizationRate = Math.min((hoursUsed / 24) * 100, 100);
+
+      utilizationData.push({
+        date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        utilization: Math.round(utilizationRate * 10) / 10,
+      });
+    }
+
+    // Calculate status distribution
+    const completedCount = bookings.filter(b => b.status === 'completed').length;
+    const cancelledCount = bookings.filter(b => b.status === 'cancelled').length;
+    const activeCount = bookings.filter(b => b.status === 'active').length;
+    const totalCount = bookings.length || 1; // Prevent division by zero
+
+    const statusDistribution = [
+      { status: 'Completed', count: completedCount, percentage: Math.round((completedCount / totalCount) * 100) },
+      { status: 'Cancelled', count: cancelledCount, percentage: Math.round((cancelledCount / totalCount) * 100) },
+      { status: 'Active', count: activeCount, percentage: Math.round((activeCount / totalCount) * 100) },
+    ];
+
+    // Calculate summary stats
+    const totalRevenue = bookings
+      .filter(b => b.status === 'completed')
+      .reduce((sum, b) => sum + (Number(b.price) || 0), 0);
+    
+    const totalEnergyDelivered = bookings
+      .filter(b => b.status === 'completed')
+      .reduce((sum, b) => sum + (Number(b.energyConsumed) || 0), 0);
+
+    return {
+      revenueData,
+      utilizationData,
+      statusDistribution,
+      summary: {
+        totalBookings: bookings.length,
+        completedBookings: completedCount,
+        totalRevenue: Math.round(totalRevenue * 100) / 100,
+        totalEnergyDelivered: Math.round(totalEnergyDelivered * 100) / 100,
+        averageBookingValue: bookings.length > 0 ? Math.round((totalRevenue / completedCount) * 100) / 100 : 0,
+      },
+    };
+  }
+
   async banCharger(id: string) {
     const charger = await this.chargerRepository.findOne({ 
       where: { id },
@@ -661,6 +756,140 @@ export class AdminService {
           }
         : null,
       createdAt: booking.createdAt,
+    };
+  }
+
+  async getBookingTimeline(id: string) {
+    const booking = await this.bookingRepository.findOne({
+      where: { id },
+      relations: ['user', 'charger'],
+    });
+
+    if (!booking) {
+      throw new NotFoundException('Booking not found');
+    }
+
+    // Build timeline events based on booking data
+    const timeline: Array<{
+      time: string;
+      event: string;
+      status: 'completed' | 'pending' | 'cancelled';
+      details?: string;
+    }> = [];
+
+    // Booking created
+    timeline.push({
+      time: booking.createdAt.toISOString(),
+      event: 'Booking Created',
+      status: 'completed',
+      details: `Booking created by ${booking.user?.name || 'User'}`,
+    });
+
+    // Charging started
+    if (booking.startTime) {
+      timeline.push({
+        time: booking.startTime.toISOString(),
+        event: 'Charging Started',
+        status: 'completed',
+        details: `Started charging at ${booking.charger?.name || 'charger'}`,
+      });
+
+      // Calculate charging progress events based on energy consumed
+      if (booking.energyConsumed && booking.status === 'completed') {
+        const startTime = new Date(booking.startTime).getTime();
+        const endTime = booking.endTime ? new Date(booking.endTime).getTime() : Date.now();
+        const duration = endTime - startTime;
+
+        // 25% charged
+        timeline.push({
+          time: new Date(startTime + duration * 0.25).toISOString(),
+          event: '25% Charged',
+          status: 'completed',
+          details: `${Math.round(booking.energyConsumed * 0.25 * 100) / 100} kWh delivered`,
+        });
+
+        // 50% charged
+        timeline.push({
+          time: new Date(startTime + duration * 0.5).toISOString(),
+          event: '50% Charged',
+          status: 'completed',
+          details: `${Math.round(booking.energyConsumed * 0.5 * 100) / 100} kWh delivered`,
+        });
+
+        // 75% charged
+        timeline.push({
+          time: new Date(startTime + duration * 0.75).toISOString(),
+          event: '75% Charged',
+          status: 'completed',
+          details: `${Math.round(booking.energyConsumed * 0.75 * 100) / 100} kWh delivered`,
+        });
+      }
+    }
+
+    // Charging completed or cancelled
+    if (booking.endTime && booking.status === 'completed') {
+      timeline.push({
+        time: booking.endTime.toISOString(),
+        event: 'Charging Completed',
+        status: 'completed',
+        details: `Total energy: ${booking.energyConsumed} kWh, Cost: $${booking.price}`,
+      });
+    } else if (booking.status === 'cancelled') {
+      timeline.push({
+        time: (booking.updatedAt || booking.createdAt).toISOString(),
+        event: 'Booking Cancelled',
+        status: 'cancelled',
+        details: 'Booking was cancelled',
+      });
+    } else if (booking.status === 'active') {
+      timeline.push({
+        time: new Date().toISOString(),
+        event: 'Charging In Progress',
+        status: 'pending',
+        details: 'Charging is currently ongoing',
+      });
+    }
+
+    // Generate energy consumption data if charging completed
+    const energyData: Array<{ time: string; power: number; energy: number }> = [];
+    
+    if (booking.startTime && booking.energyConsumed && booking.status === 'completed') {
+      const startTime = new Date(booking.startTime).getTime();
+      const endTime = booking.endTime ? new Date(booking.endTime).getTime() : Date.now();
+      const duration = (endTime - startTime) / (1000 * 60); // Duration in minutes
+      const dataPoints = Math.min(20, Math.floor(duration / 5)); // Sample every 5 minutes or 20 points max
+
+      for (let i = 0; i <= dataPoints; i++) {
+        const progress = i / dataPoints;
+        const timeOffset = Math.floor(progress * duration);
+        
+        // Simulate realistic power curve (starts high, tapers off near end)
+        const basePower = booking.charger?.powerKw || 50;
+        const powerVariation = progress < 0.8 
+          ? basePower * (0.9 + Math.random() * 0.2) // 90-110% of rated power
+          : basePower * (0.5 + Math.random() * 0.3); // Tapers to 50-80% near end
+
+        energyData.push({
+          time: `${timeOffset}m`,
+          power: Math.round(powerVariation * 10) / 10,
+          energy: Math.round(booking.energyConsumed * progress * 100) / 100,
+        });
+      }
+    }
+
+    return {
+      timeline: timeline.sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime()),
+      energyData,
+      summary: {
+        totalEnergy: booking.energyConsumed || 0,
+        totalCost: booking.price || 0,
+        duration: booking.startTime && booking.endTime
+          ? Math.round((new Date(booking.endTime).getTime() - new Date(booking.startTime).getTime()) / (1000 * 60))
+          : 0,
+        averagePower: booking.energyConsumed && booking.startTime && booking.endTime
+          ? Math.round((booking.energyConsumed / ((new Date(booking.endTime).getTime() - new Date(booking.startTime).getTime()) / (1000 * 60 * 60))) * 10) / 10
+          : 0,
+      },
     };
   }
 

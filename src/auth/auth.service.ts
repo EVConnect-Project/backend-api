@@ -99,7 +99,15 @@ export class AuthService {
       console.log('[AUTH SERVICE] Generating JWT token...');
       // Generate JWT token
       const payload = { sub: user.id, phone: user.phoneNumber, role: user.role };
-      const access_token = this.jwtService.sign(payload);
+      
+      let access_token: string;
+      try {
+        access_token = this.jwtService.sign(payload);
+        console.log('[AUTH SERVICE] JWT token generated successfully');
+      } catch (jwtError) {
+        console.error('[AUTH SERVICE] JWT signing error:', jwtError);
+        throw new UnauthorizedException('Failed to generate authentication token');
+      }
       
       console.log('[AUTH SERVICE] Login successful for:', phoneNumber);
 
@@ -129,9 +137,12 @@ export class AuthService {
     const user = await this.userRepository.findOne({
       where: { phoneNumber },
     });
+    console.log('Admin login attempt:', { phoneNumber, userFound: !!user });
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
+
+    console.log('User details:', { id: user.id, role: user.role, hasPassword: !!user.password });
 
     // Check if user is admin
     if (user.role !== 'admin') {
@@ -145,6 +156,7 @@ export class AuthService {
 
     // Verify password
     const isPasswordValid = await bcrypt.compare(password, user.password);
+    console.log('Password validation:', { isPasswordValid });
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid credentials');
     }

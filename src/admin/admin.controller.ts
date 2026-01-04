@@ -151,6 +151,11 @@ export class AdminController {
     return this.adminService.getChargerById(id);
   }
 
+  @Get('chargers/:id/analytics')
+  async getChargerAnalytics(@Param('id') id: string) {
+    return this.adminService.getChargerAnalytics(id);
+  }
+
   @Post('chargers/:id/approve')
   async approveCharger(@Param('id') id: string) {
     const charger = await this.adminService.approveCharger(id);
@@ -221,6 +226,11 @@ export class AdminController {
   @Get('bookings/:id')
   async getBookingById(@Param('id') id: string) {
     return this.adminService.getBookingById(id);
+  }
+
+  @Get('bookings/:id/timeline')
+  async getBookingTimeline(@Param('id') id: string) {
+    return this.adminService.getBookingTimeline(id);
   }
 
   @Post('bookings/:id/approve')
