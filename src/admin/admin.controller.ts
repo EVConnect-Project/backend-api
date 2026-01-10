@@ -32,7 +32,13 @@ export class AdminController {
   // Dashboard Stats
   @Get('stats')
   async getDashboardStats() {
-    return this.adminService.getDashboardStats();
+    try {
+      return await this.adminService.getDashboardStats();
+    } catch (error) {
+      console.error('Controller error in getDashboardStats:', error.message);
+      console.error('Stack trace:', error.stack);
+      throw error;
+    }
   }
 
   // Analytics
