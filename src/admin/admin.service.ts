@@ -318,8 +318,9 @@ export class AdminService {
     search?: string;
     status?: string;
     verified?: boolean;
+    banned?: boolean;
   }) {
-    const { page, limit, search, status, verified } = params;
+    const { page, limit, search, status, verified, banned } = params;
     const skip = (page - 1) * limit;
 
     const queryBuilder = this.chargerRepository
@@ -342,6 +343,10 @@ export class AdminService {
       queryBuilder.andWhere('charger.verified = :verified', { verified });
     }
 
+    if (banned !== undefined) {
+      queryBuilder.andWhere('charger.isBanned = :banned', { banned });
+    }
+
     const [chargers, total] = await queryBuilder
       .skip(skip)
       .take(limit)
@@ -359,6 +364,7 @@ export class AdminService {
         powerKw: Number(c.powerKw),
         pricePerKwh: Number(c.pricePerKwh),
         verified: c.verified,
+        isBanned: c.isBanned,
         description: c.description,
         owner: c.owner
           ? {

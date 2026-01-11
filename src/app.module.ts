@@ -30,6 +30,7 @@ import { SupportModule } from './support/support.module';
 import { EmergencyModule } from './emergency/emergency.module';
 import { FeedbackModule } from './feedback/feedback.module';
 import { PromotionsModule } from './promotions/promotions.module';
+import { StationModule } from './station/station.module';
 
 @Module({
   imports: [
@@ -79,6 +80,7 @@ import { PromotionsModule } from './promotions/promotions.module';
     EmergencyModule,
     FeedbackModule,
     PromotionsModule,
+    StationModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -142,6 +142,7 @@ export class AdminController {
     @Query('search') search: string,
     @Query('status') status: string,
     @Query('verified') verified: string,
+    @Query('banned') banned: string,
   ) {
     return this.adminService.getChargers({
       page: page ? parseInt(page) : 1,
@@ -149,6 +150,7 @@ export class AdminController {
       search,
       status,
       verified: verified ? verified === 'true' : undefined,
+      banned: banned ? banned === 'true' : undefined,
     });
   }
 

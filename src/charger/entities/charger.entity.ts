@@ -13,6 +13,7 @@ import { ChargerSocket } from "../../owner/entities/charger-socket.entity";
 import { BookingMode } from "../enums/booking-mode.enum";
 import { ChargerStatus } from "../enums/charger-status.enum";
 import type { BookingSettings } from "../interfaces/booking-settings.interface";
+import { Station } from "../../station/entities/station.entity";
 
 @Entity("chargers")
 export class Charger {
@@ -191,6 +192,10 @@ export class Charger {
   // Station Association (for chargers that are part of a station)
   @Column({ name: "station_id", type: "uuid", nullable: true })
   stationId: string | null;
+
+  @ManyToOne(() => Station, (station) => station.chargers)
+  @JoinColumn({ name: "station_id" })
+  station: Station;
 
   @Column({ type: "varchar", length: 100, nullable: true })
   chargerIdentifier: string | null;

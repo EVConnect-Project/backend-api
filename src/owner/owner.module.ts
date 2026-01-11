@@ -11,6 +11,7 @@ import { UserEntity } from '../users/entities/user.entity';
 import { OwnerPaymentAccount } from './entities/owner-payment-account.entity';
 import { ChargerSocket } from './entities/charger-socket.entity';
 import { ChargingStation } from './entities/charging-station.entity';
+import { Station } from '../station/entities/station.entity';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { ChargingStation } from './entities/charging-station.entity';
       OwnerPaymentAccount,
       ChargerSocket,
       ChargingStation,
+      Station,
     ]),
   ],
   controllers: [OwnerController, OwnerPaymentAccountController],

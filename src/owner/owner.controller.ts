@@ -90,8 +90,18 @@ export class OwnerController {
    * Temporarily removed role restriction to debug 403 error
    */
   @Get('chargers')
+  @UseGuards(JwtAuthGuard)
   async getMyChargers(@Request() req) {
-    return this.ownerService.getMyChargers(req.user.userId);
+    try {
+      console.log('✅ [OwnerController] Getting chargers for user:', req.user.userId);
+      const result = await this.ownerService.getMyChargers(req.user.userId);
+      console.log('✅ [OwnerController] Successfully got chargers:', result.length, 'chargers');
+      return result;
+    } catch (error) {
+      console.error('❌ [OwnerController] Error in getMyChargers:', error.message);
+      console.error('❌ [OwnerController] Error stack:', error.stack);
+      throw error;
+    }
   }
 
   /**
