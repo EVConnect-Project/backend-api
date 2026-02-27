@@ -27,6 +27,9 @@ export class VehicleProfile {
   @Column()
   connectorType: string;
 
+  @Column({ nullable: true })
+  vehicleType: string; // e.g., 'car', 'suv', 'van', 'bus', 'motorbike', 'scooty', 'threewheel', 'truck'
+
   @Column({ type: 'decimal', precision: 10, scale: 2 })
   rangeKm: number;
 

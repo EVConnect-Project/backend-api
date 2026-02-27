@@ -122,9 +122,14 @@ export class AppModule implements OnModuleInit {
       await queryRunner.query(`ALTER TABLE vehicle_profiles ADD COLUMN IF NOT EXISTS "efficiency" DECIMAL(10, 2)`);
       await queryRunner.query(`ALTER TABLE vehicle_profiles ADD COLUMN IF NOT EXISTS "chargingCurve" JSONB`);
       await queryRunner.query(`ALTER TABLE vehicle_profiles ADD COLUMN IF NOT EXISTS "drivingMode" VARCHAR(20) DEFAULT 'normal'`);
+      await queryRunner.query(`ALTER TABLE vehicle_profiles ADD COLUMN IF NOT EXISTS "vehicleType" VARCHAR(50) DEFAULT 'car'`);
+      
+      // Update existing records to have 'car' as default vehicleType where NULL
+      await queryRunner.query(`UPDATE vehicle_profiles SET "vehicleType" = 'car' WHERE "vehicleType" IS NULL`);
       
       await queryRunner.query(`CREATE INDEX IF NOT EXISTS idx_vehicle_profiles_user_id ON vehicle_profiles("userId")`);
       await queryRunner.query(`CREATE INDEX IF NOT EXISTS idx_vehicle_profiles_is_primary ON vehicle_profiles("isPrimary")`);
+      await queryRunner.query(`CREATE INDEX IF NOT EXISTS idx_vehicle_profiles_vehicle_type ON vehicle_profiles("vehicleType")`);
       
       // Create trigger function for vehicle_profiles if not exists
       await queryRunner.query(`

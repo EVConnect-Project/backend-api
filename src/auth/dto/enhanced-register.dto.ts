@@ -17,9 +17,12 @@ import {
 // Enums for vehicle information
 export enum VehicleType {
   CAR = 'car',
-  BIKE = 'bike',
+  MOTORBIKE = 'motorbike',
+  SCOOTY = 'scooty',
   THREEWHEEL = 'threewheel',
   VAN = 'van',
+  SUV = 'suv',
+  BUS = 'bus',
 }
 
 export enum ConnectorType {
@@ -51,7 +54,7 @@ export class EnhancedRegisterDto {
   // EV Driver Profile Information (OPTIONAL - for EV owners only)
   @ValidateIf(o => o.vehicleType !== undefined && o.vehicleType !== null && o.vehicleType !== '')
   @IsEnum(VehicleType, {
-    message: 'Vehicle type must be one of: car, bike, threewheel, van',
+    message: 'Vehicle type must be one of: car, motorbike, scooty, threewheel, van, suv, bus',
   })
   vehicleType?: VehicleType;
 

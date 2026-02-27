@@ -11,6 +11,7 @@ import {
   Headers,
   Req,
   Patch,
+  Put,
   Delete,
 } from '@nestjs/common';
 import type { Request as ExpressRequest } from 'express';
@@ -120,10 +121,25 @@ export class PaymentsController {
     return this.paymentSettingsService.setPaymentPin(req.user.userId, pin);
   }
 
-  @Post('settings/pin/verify')
+  @Post('settings/verify-pin')
   @UseGuards(JwtAuthGuard)
   verifyPaymentPin(@Body('pin') pin: string, @Request() req) {
     return this.paymentSettingsService.verifyPaymentPin(req.user.userId, pin);
+  }
+
+  @Put('settings/pin')
+  @UseGuards(JwtAuthGuard)
+  changePaymentPin(
+    @Body() { oldPin, newPin }: { oldPin: string; newPin: string },
+    @Request() req,
+  ) {
+    return this.paymentSettingsService.changePaymentPin(req.user.userId, oldPin, newPin);
+  }
+
+  @Get('settings/pin-status')
+  @UseGuards(JwtAuthGuard)
+  getPinStatus(@Request() req) {
+    return this.paymentSettingsService.getPinStatus(req.user.userId);
   }
 
   @Delete('settings/pin')

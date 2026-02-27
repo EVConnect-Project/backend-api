@@ -46,6 +46,7 @@ export class VehicleProfileService {
   async create(userId: string, createVehicleDto: CreateVehicleDto): Promise<VehicleProfile> {
     try {
       this.logger.log(`Creating vehicle for user ${userId}: ${JSON.stringify(createVehicleDto)}`);
+      this.logger.log(`VehicleType received: ${createVehicleDto.vehicleType}`);
       
       // Check if this is the first vehicle - make it primary automatically
       const existingVehicles = await this.vehicleProfileRepository.count({ where: { userId } });
@@ -61,6 +62,7 @@ export class VehicleProfileService {
         year: createVehicleDto.year,
         batteryCapacity: createVehicleDto.batteryCapacity,
         connectorType: createVehicleDto.connectorType,
+        vehicleType: createVehicleDto.vehicleType || 'car', // Default to 'car' if not provided
         rangeKm: createVehicleDto.rangeKm,
         averageConsumption: createVehicleDto.averageConsumption,
         efficiency: createVehicleDto.efficiency,
