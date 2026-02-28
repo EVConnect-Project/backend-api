@@ -104,10 +104,6 @@ export class Charger {
     };
   };
 
-  // Access Management Fields
-  @Column({ type: "varchar", length: 20, default: "private" })
-  accessType: "private" | "public" | "semi-public";
-
   @Column({ default: true })
   requiresAuth: boolean;
 

@@ -36,7 +36,6 @@ export class ChargerController {
       minPrice: filters.minPrice ? parseFloat(filters.minPrice) : undefined,
       maxPrice: filters.maxPrice ? parseFloat(filters.maxPrice) : undefined,
       availableNow: filters.availableNow === 'true',
-      accessTypes: filters.accessTypes ? (Array.isArray(filters.accessTypes) ? filters.accessTypes : [filters.accessTypes]) : undefined,
       bookingModes: filters.bookingModes ? (Array.isArray(filters.bookingModes) ? filters.bookingModes : filters.bookingModes.split(',')) : undefined,
       amenities: filters.amenities ? (Array.isArray(filters.amenities) ? filters.amenities : [filters.amenities]) : undefined,
       sortBy: filters.sortBy || 'distance',

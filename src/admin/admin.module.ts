@@ -15,6 +15,7 @@ import { Message } from '../chat/entities/message.entity';
 import { AdminAction } from './entities/admin-action.entity';
 import { OwnerPaymentAccount } from '../owner/entities/owner-payment-account.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { ChargingModule } from '../charging/charging.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
       OwnerPaymentAccount,
     ]),
     NotificationsModule,
+    ChargingModule,
   ],
   controllers: [AdminController],
   providers: [AdminService, AdminChatService, AdminAuditService],

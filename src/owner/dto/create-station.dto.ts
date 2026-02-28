@@ -42,10 +42,6 @@ export class CreateStationDto {
 
   @IsString()
   @IsOptional()
-  accessType?: 'public' | 'private' | 'semi-public';
-
-  @IsString()
-  @IsOptional()
   phoneNumber?: string;
 
   @IsArray()

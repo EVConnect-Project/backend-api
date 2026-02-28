@@ -18,7 +18,6 @@ export class FilterChargersDto {
 
   // Availability
   availableNow?: boolean;
-  accessTypes?: string[]; // ['private', 'public', 'semi_public']
 
   // Booking Modes
   bookingModes?: string[]; // ['pre_booking_required', 'walk_in_only', 'hybrid']

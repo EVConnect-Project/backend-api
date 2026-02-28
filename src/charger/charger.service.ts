@@ -244,11 +244,6 @@ export class ChargerService {
       query.andWhere('charger.status = :status', { status: 'available' });
     }
 
-    // Access type filters
-    if (filters.accessTypes && filters.accessTypes.length > 0) {
-      query.andWhere('charger.accessType IN (:...accessTypes)', { accessTypes: filters.accessTypes });
-    }
-
     // Booking mode filters
     if (filters.bookingModes && filters.bookingModes.length > 0) {
       query.andWhere('charger.bookingMode IN (:...bookingModes)', { bookingModes: filters.bookingModes });

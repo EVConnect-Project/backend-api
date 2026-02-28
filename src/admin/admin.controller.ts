@@ -213,6 +213,51 @@ export class AdminController {
     return this.adminService.unbanCharger(id);
   }
 
+  // OCPP Live Controls
+  @Get('ocpp/live')
+  async ocppLive() {
+    const [connected, sessions] = await Promise.all([
+      this.adminService.ocppGetConnectedChargers(),
+      this.adminService.ocppGetActiveSessions(),
+    ]);
+    return { connected, sessions };
+  }
+
+  @Get('ocpp/sessions')
+  async ocppGetSessions(@Query('status') status?: string) {
+    return this.adminService.ocppGetActiveSessions(status);
+  }
+
+  @Post('chargers/:id/ocpp/reset')
+  async ocppReset(
+    @Param('id') id: string,
+    @Body('type') type: 'Soft' | 'Hard' = 'Soft',
+  ) {
+    return this.adminService.ocppResetCharger(id, type);
+  }
+
+  @Post('chargers/:id/ocpp/unlock')
+  async ocppUnlock(
+    @Param('id') id: string,
+    @Body('connectorId') connectorId = 1,
+  ) {
+    return this.adminService.ocppUnlockConnector(id, connectorId);
+  }
+
+  @Post('chargers/:id/ocpp/availability')
+  async ocppAvailability(
+    @Param('id') id: string,
+    @Body('connectorId') connectorId: number,
+    @Body('type') type: 'Operative' | 'Inoperative',
+  ) {
+    return this.adminService.ocppSetAvailability(id, connectorId, type);
+  }
+
+  @Post('sessions/:sessionId/ocpp/stop')
+  async ocppForceStop(@Param('sessionId') sessionId: string) {
+    return this.adminService.ocppForceStopSession(sessionId);
+  }
+
   // Booking Management
   @Get('bookings')
   async getBookings(

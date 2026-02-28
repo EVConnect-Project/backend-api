@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, HttpException, HttpStatus } from '@nestjs/common';
+import { ChargingService } from '../charging/charging.service';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, Like } from 'typeorm';
 import { UserEntity } from '../users/entities/user.entity';
@@ -29,6 +30,7 @@ export class AdminService {
     @InjectRepository(OwnerPaymentAccount)
     private paymentAccountRepository: Repository<OwnerPaymentAccount>,
     private notificationsService: NotificationsService,
+    private chargingService: ChargingService,
   ) {}
 
   // Dashboard Stats
@@ -366,6 +368,7 @@ export class AdminService {
         verified: c.verified,
         isBanned: c.isBanned,
         description: c.description,
+        chargeBoxIdentity: c.chargeBoxIdentity || null,
         owner: c.owner
           ? {
               id: c.owner.id,
@@ -1892,5 +1895,45 @@ export class AdminService {
     }
 
     return this.mechanicRepository.save(mechanic);
+  }
+
+  // ── Admin OCPP Controls ────────────────────────────────────────────────────
+
+  private async resolveOcppId(postgresChargerId: string): Promise<string> {
+    const charger = await this.chargerRepository.findOne({ where: { id: postgresChargerId } });
+    if (!charger) throw new NotFoundException('Charger not found');
+    if (!charger.chargeBoxIdentity) {
+      throw new HttpException('Charger has no OCPP identity — not yet registered with OCPP service', HttpStatus.BAD_REQUEST);
+    }
+    // Resolve to ev-charging-service internal UUID
+    const ocppCharger = await this.chargingService.getChargerByIdentity(charger.chargeBoxIdentity);
+    return ocppCharger.id;
+  }
+
+  async ocppResetCharger(chargerId: string, type: 'Soft' | 'Hard' = 'Soft') {
+    const ocppId = await this.resolveOcppId(chargerId);
+    return this.chargingService.resetCharger(ocppId, type);
+  }
+
+  async ocppUnlockConnector(chargerId: string, connectorId = 1) {
+    const ocppId = await this.resolveOcppId(chargerId);
+    return this.chargingService.unlockConnector(ocppId, connectorId);
+  }
+
+  async ocppSetAvailability(chargerId: string, connectorId: number, type: 'Operative' | 'Inoperative') {
+    const ocppId = await this.resolveOcppId(chargerId);
+    return this.chargingService.setAvailability(ocppId, connectorId, type);
+  }
+
+  async ocppGetActiveSessions(status?: string) {
+    return this.chargingService.getAllSessions(status);
+  }
+
+  async ocppForceStopSession(sessionId: string) {
+    return this.chargingService.forceStopSession(sessionId);
+  }
+
+  async ocppGetConnectedChargers() {
+    return this.chargingService.getConnectedChargers();
   }
 }

@@ -92,7 +92,7 @@ export class OwnerService {
           power: charger.station ? charger.station.power : charger.maxPowerKw,
           price: charger.station ? charger.station.price : charger.pricePerKwh,
           isVerified: charger.verified,
-          isPublic: charger.station ? charger.station.isPublic : (charger.accessType === 'public'),
+          isPublic: charger.station ? charger.station.isPublic : true,
           bookingMode: charger.bookingMode,
           ownerId: charger.ownerId,
           stationId: charger.stationId,
@@ -526,6 +526,22 @@ export class OwnerService {
       const { lat, lng, address } = this.parseLocationUrl(dto.locationUrl);
       console.log('Parsed coordinates:', { lat, lng, address });
 
+      // Validate maxPowerKw
+      if (!dto.maxPowerKw || dto.maxPowerKw <= 0) {
+        console.error('Invalid maxPowerKw:', dto.maxPowerKw);
+        throw new BadRequestException(
+          'Invalid power rating. Please ensure maxPowerKw is a positive number.',
+        );
+      }
+      console.log('maxPowerKw validated:', dto.maxPowerKw);
+
+      // Validate sockets
+      if (!dto.sockets || dto.sockets.length === 0) {
+        console.error('No sockets provided');
+        throw new BadRequestException('At least one socket must be configured');
+      }
+      console.log('Sockets validated:', dto.sockets.length);
+
       // Use transaction to ensure atomicity
       const queryRunner = this.dataSource.createQueryRunner();
       await queryRunner.connect();
@@ -571,7 +587,6 @@ export class OwnerService {
         numberOfPlugs: dto.sockets.length,
         description: dto.description,
         phoneNumber: dto.phoneNumber || null,
-        accessType: dto.accessType || 'public',
         bookingMode: (dto.bookingMode as BookingMode) || BookingMode.HYBRID,
         openingHours: dto.openingHours || { is24Hours: true, schedule: {} },
         verified: false,
@@ -690,7 +705,6 @@ export class OwnerService {
         amenities: dto.amenities || [],
         openingHours: dto.openingHours || { is24Hours: true, schedule: {} },
         images: dto.images || [],
-        accessType: dto.accessType || 'public',
         verified: false,
       });
 
@@ -726,7 +740,6 @@ export class OwnerService {
           connectorType: firstSocket.connectorType,
           numberOfPlugs: chargerDto.sockets.length,
           phoneNumber: dto.phoneNumber || null,
-          accessType: dto.accessType || 'public',
           bookingMode: (chargerDto.bookingMode as BookingMode) || BookingMode.HYBRID,
           openingHours: dto.openingHours || { is24Hours: true, schedule: {} },
           verified: false,
@@ -797,28 +810,45 @@ export class OwnerService {
     try {
       console.log('Parsing location URL:', locationUrl);
       
+      if (!locationUrl || typeof locationUrl !== 'string') {
+        throw new BadRequestException('Location URL is required and must be a string');
+      }
+
+      const trimmed = locationUrl.trim();
+      if (trimmed.length === 0) {
+        throw new BadRequestException('Location URL cannot be empty');
+      }
+      
       // Try multiple Google Maps URL formats:
       // Format 1: https://maps.google.com/?q=6.9271,79.8612
       // Format 2: https://www.google.com/maps/place/.../@6.9271,79.8612,17z
-      // Format 3: https://goo.gl/maps/... (short link - extract from redirect)
-      // Format 4: Just coordinates: 6.9271,79.8612
+      // Format 3: https://www.google.com/maps/.../@6.9271,79.8612...
+      // Format 4: https://goo.gl/maps/... (short link)
+      // Format 5: Just coordinates: 6.9271,79.8612
       
-      // Try to match coordinates with @ symbol (e.g., /@6.9271,79.8612,17z)
-      let coordMatch = locationUrl.match(/@(-?\d+\.?\d*),(-?\d+\.?\d*)/);
+      let coordMatch: RegExpMatchArray | null = null;
+      
+      // Try to match coordinates with @ symbol (e.g., /@6.9271,79.8612,17z or /@6.9271,79.8612/)
+      coordMatch = trimmed.match(/@(-?\d+\.?\d+),(-?\d+\.?\d+)/);
       
       // Try to match coordinates with ?q= (e.g., ?q=6.9271,79.8612)
       if (!coordMatch) {
-        coordMatch = locationUrl.match(/[?&]q=(-?\d+\.?\d*),(-?\d+\.?\d*)/);
+        coordMatch = trimmed.match(/[\?&]q=(-?\d+\.?\d+),(-?\d+\.?\d+)/);
+      }
+      
+      // Try to match coordinates with ?ll= (e.g., ?ll=6.9271,79.8612)
+      if (!coordMatch) {
+        coordMatch = trimmed.match(/[\?&]ll=(-?\d+\.?\d+),(-?\d+\.?\d+)/);
       }
       
       // Try to match just coordinates (e.g., 6.9271,79.8612)
       if (!coordMatch) {
-        coordMatch = locationUrl.match(/^(-?\d+\.?\d*),\s*(-?\d+\.?\d*)$/);
+        coordMatch = trimmed.match(/^(-?\d+\.?\d+),\s*(-?\d+\.?\d+)$/);
       }
       
-      // Try to match coordinates anywhere in the string
+      // Try to match coordinates anywhere in the string (fallback)
       if (!coordMatch) {
-        coordMatch = locationUrl.match(/(-?\d+\.?\d+),\s*(-?\d+\.?\d+)/);
+        coordMatch = trimmed.match(/(-?\d+\.?\d+),\s*(-?\d+\.?\d+)/);
       }
       
       if (coordMatch && coordMatch[1] && coordMatch[2]) {
@@ -832,7 +862,7 @@ export class OwnerService {
           return {
             lat,
             lng,
-            address: locationUrl,
+            address: trimmed,
           };
         } else {
           throw new BadRequestException(
@@ -841,7 +871,8 @@ export class OwnerService {
         }
       }
 
-      // If no coordinates found, throw error
+      // If no coordinates found, throw error with hint
+      console.error('Could not extract coordinates from:', trimmed);
       throw new BadRequestException(
         'Could not extract coordinates from location URL. Please provide a Google Maps link or coordinates in format: latitude,longitude',
       );

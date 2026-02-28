@@ -12,7 +12,7 @@ import { ChargerStatus } from '../charger/enums/charger-status.enum';
 import { CreateWalkInBookingDto, CreatePreBookingDto, CheckInBookingDto } from './dto/booking-type.dto';
 
 export interface BookingWarning {
-  type: 'public_charger' | 'semi_public_charger' | 'no_occupancy_sensor' | 'requires_verification';
+  type: 'no_occupancy_sensor' | 'requires_verification';
   severity: 'low' | 'medium' | 'high';
   message: string;
   recommendedAction?: string;
@@ -21,7 +21,6 @@ export interface BookingWarning {
 export interface BookingResponse {
   booking: BookingEntity;
   warnings: BookingWarning[];
-  accessType: string;
   requiresPhysicalVerification: boolean;
   gracePeriodMinutes: number;
   autoCancelAfterMinutes: number;
@@ -75,48 +74,6 @@ export class BookingsService {
     // Initialize warnings array
     const warnings: BookingWarning[] = [];
 
-    // ACCESS TYPE CHECKING - Critical for conflict prevention
-    const accessType = charger.accessType || 'private';
-
-    // Handle PUBLIC chargers - Warning only, no guaranteed booking
-    if (accessType === 'public') {
-      warnings.push({
-        type: 'public_charger',
-        severity: 'high',
-        message: '⚠️ This is a PUBLIC charger accessible without the app. Your booking is NOT guaranteed.',
-        recommendedAction: 'Arrive on time. Consider booking a PRIVATE charger for guaranteed availability.'
-      });
-
-      // PUBLIC chargers cannot have guaranteed bookings
-      if (!charger.requiresAuth) {
-        warnings.push({
-          type: 'no_occupancy_sensor',
-          severity: 'medium',
-          message: 'This charger does not require authentication and may be occupied by non-app users.',
-          recommendedAction: 'Have backup chargers ready. Check real-time availability before departure.'
-        });
-      }
-    }
-
-    // Handle SEMI-PUBLIC chargers - Verification required
-    if (accessType === 'semi-public') {
-      warnings.push({
-        type: 'semi_public_charger',
-        severity: 'medium',
-        message: 'This is a SEMI-PUBLIC charger. Physical verification required upon arrival.',
-        recommendedAction: 'You will need to confirm your presence at the charger via the app.'
-      });
-
-      if (charger.requiresPhysicalCheck) {
-        warnings.push({
-          type: 'requires_verification',
-          severity: 'medium',
-          message: 'You must verify your physical presence within 10 minutes of start time.',
-          recommendedAction: 'Open the app when you arrive and tap "I\'m Here" to confirm.'
-        });
-      }
-    }
-
     // Check for overlapping bookings (with grace period consideration)
     const gracePeriod = charger.bookingGracePeriod || 0;
     const effectiveStartTime = new Date(start.getTime() - gracePeriod * 60 * 1000);
@@ -132,18 +89,7 @@ export class BookingsService {
       .getOne();
 
     if (overlappingBooking) {
-      // For PRIVATE chargers, strictly prevent overlaps
-      if (accessType === 'private') {
-        throw new BadRequestException('Charger is already booked for this time slot');
-      }
-      
-      // For PUBLIC/SEMI-PUBLIC, warn but allow booking
-      warnings.push({
-        type: 'public_charger',
-        severity: 'high',
-        message: 'Another booking exists for this time. Since this is a public/semi-public charger, both bookings will proceed.',
-        recommendedAction: 'Consider selecting a different time slot or charger for guaranteed availability.'
-      });
+      throw new BadRequestException('Charger is already booked for this time slot');
     }
 
     // Calculate price
@@ -172,7 +118,7 @@ export class BookingsService {
 
     const savedBooking = await this.bookingRepository.save(booking);
 
-    this.logger.log(`Booking created: ${savedBooking.id} for charger ${chargerId} (${accessType}) by user ${userId}`);
+    this.logger.log(`Booking created: ${savedBooking.id} for charger ${chargerId} by user ${userId}`);
 
     // Send booking confirmation notification
     await this.notificationsService.sendBookingConfirmed(
@@ -186,7 +132,6 @@ export class BookingsService {
     return {
       booking: savedBooking,
       warnings,
-      accessType,
       requiresPhysicalVerification: charger.requiresPhysicalCheck || false,
       gracePeriodMinutes: charger.bookingGracePeriod || 0,
       autoCancelAfterMinutes: charger.autoCancelAfter || 15,
@@ -334,7 +279,7 @@ export class BookingsService {
         cancelledCount++;
 
         this.logger.warn(
-          `Auto-cancelled booking ${booking.id} for charger ${charger.id} (${charger.accessType}) - ` +
+          `Auto-cancelled booking ${booking.id} for charger ${charger.id} - ` +
           `User ${booking.userId} did not verify within ${autoCancelMinutes} minutes`
         );
 
@@ -454,7 +399,7 @@ export class BookingsService {
           .andWhere('(booking.startTime < :endTime AND booking.endTime > :startTime)', { startTime, endTime })
           .getOne();
 
-        if (!hasOverlap || charger.accessType === 'public') {
+        if (!hasOverlap) {
           alternativeChargers.push(charger);
         }
       }
@@ -464,10 +409,6 @@ export class BookingsService {
     alternativeChargers.sort((a, b) => {
       const distA = this.calculateDistance(originalCharger.lat, originalCharger.lng, a.lat, a.lng);
       const distB = this.calculateDistance(originalCharger.lat, originalCharger.lng, b.lat, b.lng);
-      
-      // Prefer PRIVATE chargers
-      if (a.accessType === 'private' && b.accessType !== 'private') return -1;
-      if (a.accessType !== 'private' && b.accessType === 'private') return 1;
       
       return distA - distB;
     });
@@ -601,7 +542,6 @@ export class BookingsService {
     return {
       booking: savedBooking,
       warnings: [],
-      accessType: charger.accessType,
       requiresPhysicalVerification: false,
       gracePeriodMinutes: 0,
       autoCancelAfterMinutes: 0,
@@ -739,7 +679,6 @@ export class BookingsService {
     return {
       booking: savedBooking,
       warnings,
-      accessType: charger.accessType,
       requiresPhysicalVerification: true,
       gracePeriodMinutes: settings.gracePeriodMinutes,
       autoCancelAfterMinutes: settings.gracePeriodMinutes,
