@@ -55,7 +55,13 @@ export class ChargerController {
       lng: filters.lng ? parseFloat(filters.lng) : undefined,
       radius: filters.radius ? parseFloat(filters.radius) : undefined,
       availableNow: filters.availableNow === 'true',
+      chargerType: filters.chargerType || undefined,
+      connectorTypes: filters.connectorTypes ? (Array.isArray(filters.connectorTypes) ? filters.connectorTypes : [filters.connectorTypes]) : undefined,
       amenities: filters.amenities ? (Array.isArray(filters.amenities) ? filters.amenities : [filters.amenities]) : undefined,
+      minPowerKw: filters.minPowerKw ? parseFloat(filters.minPowerKw) : undefined,
+      minPrice: filters.minPrice ? parseFloat(filters.minPrice) : undefined,
+      maxPrice: filters.maxPrice ? parseFloat(filters.maxPrice) : undefined,
+      stationType: filters.stationType || undefined,
       sortBy: filters.sortBy || 'distance',
       sortOrder: filters.sortOrder || 'asc',
       limit: filters.limit ? parseInt(filters.limit) : 50,
@@ -76,6 +82,27 @@ export class ChargerController {
     const radiusNum = radius ? parseFloat(radius) : 10;
     
     return this.chargerService.findNearby(latNum, lngNum, radiusNum);
+  }
+
+  @Get('nearby-stations')
+  findNearbyStations(
+    @Query('lat') lat: string,
+    @Query('lng') lng: string,
+    @Query('radius') radius?: string,
+  ) {
+    const latNum = parseFloat(lat);
+    const lngNum = parseFloat(lng);
+    const radiusNum = radius ? parseFloat(radius) : 10;
+    
+    return this.chargerService.filterStations({
+      lat: latNum,
+      lng: lngNum,
+      radius: radiusNum,
+      sortBy: 'distance',
+      sortOrder: 'asc',
+      limit: 50,
+      offset: 0,
+    });
   }
 
   @Get('my-chargers')

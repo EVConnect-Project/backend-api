@@ -49,7 +49,7 @@ export class BreakdownService {
   async getMyRequests(userId: string) {
     const requests = await this.breakdownRequestRepository.find({
       where: { userId },
-      relations: ['mechanic'],
+      relations: ['user'],
       order: { createdAt: 'DESC' },
     });
 
@@ -62,7 +62,7 @@ export class BreakdownService {
   async getRequestById(id: string, userId: string) {
     const request = await this.breakdownRequestRepository.findOne({
       where: { id },
-      relations: ['mechanic', 'user'],
+      relations: ['user'],
     });
 
     if (!request) {

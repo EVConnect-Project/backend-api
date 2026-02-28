@@ -298,12 +298,11 @@ export class ChargerService {
       
       console.log(`Found ${chargers.length} verified chargers`);
 
-      // Apply filters
+      // Apply location filter
       let filteredChargers: any[] = chargers;
 
-      // Location filter
       if (filters.lat && filters.lng) {
-        const radius = filters.radius || 10;
+        const radius = filters.radius || 50;
         filteredChargers = filteredChargers.map(charger => {
           const distance = this.calculateDistance(
             filters.lat, filters.lng,
@@ -312,28 +311,278 @@ export class ChargerService {
           );
           return { ...charger, distance };
         }).filter(charger => charger.distance < radius);
+      }
 
-        if (filters.sortBy === 'distance') {
-          filteredChargers.sort((a, b) => 
-            filters.sortOrder === 'desc' ? b.distance - a.distance : a.distance - b.distance
-          );
+      // Apply charger type filter
+      if (filters.chargerType) {
+        filteredChargers = filteredChargers.filter(c => 
+          c.chargerType === filters.chargerType || c.speedType?.includes(filters.chargerType)
+        );
+      }
+
+      // Apply availability filter
+      if (filters.availableNow) {
+        filteredChargers = filteredChargers.filter(c => c.status === 'available');
+      }
+
+      // Apply connector type filter
+      if (filters.connectorTypes && filters.connectorTypes.length > 0) {
+        filteredChargers = filteredChargers.filter(c => {
+          if (c.sockets && c.sockets.length > 0) {
+            return c.sockets.some((s: any) => filters.connectorTypes.includes(s.connectorType));
+          }
+          return filters.connectorTypes.includes(c.connectorType);
+        });
+      }
+
+      // Group chargers by stationId
+      const stationMap: Record<string, any[]> = {};
+      const individualChargers: any[] = [];
+      
+      for (const charger of filteredChargers) {
+        if (charger.stationId) {
+          if (!stationMap[charger.stationId]) {
+            stationMap[charger.stationId] = [];
+          }
+          stationMap[charger.stationId].push(charger);
+        } else {
+          individualChargers.push(charger);
         }
+      }
+
+      // Fetch station metadata from charging_stations table
+      const stationIds = Object.keys(stationMap);
+      let stationMetadata: Record<string, any> = {};
+      
+      if (stationIds.length > 0) {
+        const stationRecords = await this.stationRepository
+          .createQueryBuilder('s')
+          .where('s.id IN (:...ids)', { ids: stationIds })
+          .getMany();
+        
+        for (const s of stationRecords) {
+          stationMetadata[s.id] = s;
+        }
+      }
+
+      // Build station objects with nested chargers
+      const stations = Object.entries(stationMap).map(([stationId, stationChargers]) => {
+        const meta = stationMetadata[stationId];
+        const firstCharger = stationChargers[0];
+        
+        // Collect all unique connector types across all chargers/sockets
+        const connectorTypes = new Set<string>();
+        let totalSockets = 0;
+        let availableSockets = 0;
+        let minPrice = Infinity;
+        let maxPower = 0;
+        
+        for (const charger of stationChargers) {
+          if (charger.sockets && charger.sockets.length > 0) {
+            for (const socket of charger.sockets) {
+              connectorTypes.add(socket.connectorType);
+              totalSockets++;
+              if (socket.status === 'available') availableSockets++;
+              const price = parseFloat(socket.pricePerKwh || socket.pricePerHour || '0');
+              if (price > 0 && price < minPrice) minPrice = price;
+              const power = parseFloat(socket.maxPowerKw || '0');
+              if (power > maxPower) maxPower = power;
+            }
+          } else {
+            if (charger.connectorType) connectorTypes.add(charger.connectorType);
+            totalSockets++;
+            if (charger.status === 'available') availableSockets++;
+            const price = parseFloat(charger.pricePerKwh || '0');
+            if (price > 0 && price < minPrice) minPrice = price;
+            const power = parseFloat(charger.maxPowerKw || charger.powerKw || '0');
+            if (power > maxPower) maxPower = power;
+          }
+        }
+
+        if (minPrice === Infinity) minPrice = 0;
+
+        // Compute distance from first charger (all chargers in a station share location)
+        const distance = firstCharger.distance ?? null;
+
+        return {
+          id: stationId,
+          type: 'station',
+          ownerId: meta?.ownerId || firstCharger.ownerId,
+          stationName: meta?.stationName || firstCharger.name || 'Charging Station',
+          address: meta?.address || firstCharger.address || '',
+          lat: parseFloat(meta?.lat || firstCharger.lat),
+          lng: parseFloat(meta?.lng || firstCharger.lng),
+          stationType: meta?.stationType || 'public',
+          parkingCapacity: meta?.parkingCapacity || null,
+          description: meta?.description || firstCharger.description || null,
+          amenities: meta?.amenities || [],
+          openingHours: meta?.openingHours || firstCharger.openingHours || { is24Hours: true },
+          images: meta?.images || [],
+          verified: meta?.verified ?? firstCharger.verified,
+          isBanned: meta?.isBanned ?? false,
+          createdAt: meta?.createdAt || firstCharger.createdAt,
+          updatedAt: meta?.updatedAt || firstCharger.updatedAt,
+          distance,
+          connectorTypes: Array.from(connectorTypes),
+          totalSockets,
+          availableSockets,
+          minPrice,
+          maxPowerKw: maxPower,
+          chargers: stationChargers.map(c => ({
+            id: c.id,
+            ownerId: c.ownerId,
+            lat: parseFloat(c.lat),
+            lng: parseFloat(c.lng),
+            stationId: c.stationId,
+            chargerName: c.name || c.chargerIdentifier || 'Charger',
+            chargerIdentifier: c.chargerIdentifier,
+            chargerType: c.chargerType,
+            maxPowerKw: parseFloat(c.maxPowerKw || c.powerKw || '0'),
+            powerKw: parseFloat(c.powerKw || c.maxPowerKw || '0'),
+            pricePerKwh: parseFloat(c.pricePerKwh || '0'),
+            connectorType: c.connectorType,
+            speedType: c.speedType,
+            status: c.status,
+            currentStatus: c.currentStatus,
+            verified: c.verified ?? false,
+            name: c.name,
+            address: c.address,
+            description: c.description,
+            bookingMode: c.bookingMode,
+            bookingSettings: c.bookingSettings,
+            phoneNumber: c.phoneNumber,
+            amenities: c.amenities,
+            openingHours: c.openingHours,
+            isOnline: c.isOnline ?? false,
+            createdAt: c.createdAt,
+            updatedAt: c.updatedAt,
+            sockets: (c.sockets || []).map((s: any) => ({
+              id: s.id,
+              chargerId: s.chargerId || c.id,
+              socketNumber: s.socketNumber,
+              socketLabel: s.socketLabel,
+              connectorType: s.connectorType,
+              maxPowerKw: parseFloat(s.maxPowerKw || '0'),
+              pricePerKwh: s.pricePerKwh ? parseFloat(s.pricePerKwh) : null,
+              pricePerHour: s.pricePerHour ? parseFloat(s.pricePerHour) : null,
+              isFree: s.isFree || false,
+              currentStatus: s.status,
+              bookingMode: s.bookingMode,
+              isOccupied: s.occupiedBy ? true : false,
+              createdAt: s.createdAt,
+              updatedAt: s.updatedAt,
+            })),
+          })),
+        };
+      });
+
+      // Build individual charger objects (chargers without stationId)
+      const individuals = individualChargers.map(c => {
+        const sockets = c.sockets || [];
+        let totalSockets = sockets.length || 1;
+        let availableSockets = sockets.filter((s: any) => s.status === 'available').length;
+        if (sockets.length === 0 && c.status === 'available') availableSockets = 1;
+        
+        const connectorTypes = new Set<string>();
+        if (sockets.length > 0) {
+          sockets.forEach((s: any) => connectorTypes.add(s.connectorType));
+        } else if (c.connectorType) {
+          connectorTypes.add(c.connectorType);
+        }
+        
+        return {
+          id: c.id,
+          type: 'individual',
+          ownerId: c.ownerId,
+          stationName: c.name || 'Individual Charger',
+          address: c.address || '',
+          lat: parseFloat(c.lat),
+          lng: parseFloat(c.lng),
+          stationType: 'individual',
+          description: c.description || null,
+          amenities: c.amenities ? Object.entries(c.amenities).filter(([_, v]) => v).map(([k]) => k) : [],
+          openingHours: c.openingHours || { is24Hours: true },
+          verified: c.verified,
+          distance: c.distance ?? null,
+          connectorTypes: Array.from(connectorTypes),
+          totalSockets,
+          availableSockets,
+          minPrice: parseFloat(c.pricePerKwh || '0'),
+          maxPowerKw: parseFloat(c.maxPowerKw || c.powerKw || '0'),
+          chargers: [{
+            id: c.id,
+            ownerId: c.ownerId,
+            lat: parseFloat(c.lat),
+            lng: parseFloat(c.lng),
+            stationId: c.stationId,
+            chargerName: c.name || 'Charger',
+            chargerIdentifier: c.chargerIdentifier,
+            chargerType: c.chargerType,
+            maxPowerKw: parseFloat(c.maxPowerKw || c.powerKw || '0'),
+            powerKw: parseFloat(c.powerKw || c.maxPowerKw || '0'),
+            pricePerKwh: parseFloat(c.pricePerKwh || '0'),
+            connectorType: c.connectorType,
+            speedType: c.speedType,
+            status: c.status,
+            currentStatus: c.currentStatus,
+            verified: c.verified ?? false,
+            name: c.name,
+            address: c.address,
+            description: c.description,
+            bookingMode: c.bookingMode,
+            bookingSettings: c.bookingSettings,
+            phoneNumber: c.phoneNumber,
+            amenities: c.amenities,
+            openingHours: c.openingHours,
+            isOnline: c.isOnline ?? false,
+            createdAt: c.createdAt,
+            updatedAt: c.updatedAt,
+            sockets: sockets.map((s: any) => ({
+              id: s.id,
+              chargerId: s.chargerId || c.id,
+              socketNumber: s.socketNumber,
+              socketLabel: s.socketLabel,
+              connectorType: s.connectorType,
+              maxPowerKw: parseFloat(s.maxPowerKw || '0'),
+              pricePerKwh: s.pricePerKwh ? parseFloat(s.pricePerKwh) : null,
+              pricePerHour: s.pricePerHour ? parseFloat(s.pricePerHour) : null,
+              isFree: s.isFree || false,
+              currentStatus: s.status,
+              bookingMode: s.bookingMode,
+              isOccupied: s.occupiedBy ? true : false,
+              createdAt: s.createdAt,
+              updatedAt: s.updatedAt,
+            })),
+          }],
+        };
+      });
+
+      // Merge all results
+      let allResults = [...stations, ...individuals];
+
+      // Sort by distance if location filter applied
+      if (filters.lat && filters.lng) {
+        allResults.sort((a, b) => {
+          const da = a.distance ?? 999999;
+          const db = b.distance ?? 999999;
+          return filters.sortOrder === 'desc' ? db - da : da - db;
+        });
       }
 
       // Pagination
       const limit = filters.limit || 50;
       const offset = filters.offset || 0;
-      const total = filteredChargers.length;
-      const paginatedChargers = filteredChargers.slice(offset, offset + limit);
+      const total = allResults.length;
+      const paginatedResults = allResults.slice(offset, offset + limit);
 
-      console.log(`Returning ${paginatedChargers.length} of ${total} chargers`);
+      console.log(`Returning ${paginatedResults.length} stations/chargers of ${total} total`);
 
       return {
-        data: paginatedChargers,
+        data: paginatedResults,
         total,
         limit,
         offset,
-        hasMore: offset + paginatedChargers.length < total,
+        hasMore: offset + paginatedResults.length < total,
       };
     } catch (error) {
       console.error('Error in filterStations:', error);

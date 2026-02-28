@@ -7,6 +7,8 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, DataSource } from 'typeorm';
+import { HttpService } from '@nestjs/axios';
+import { lastValueFrom } from 'rxjs';
 import { Charger } from '../charger/entities/charger.entity';
 import { BookingEntity } from '../bookings/entities/booking.entity';
 import { UserEntity } from '../users/entities/user.entity';
@@ -35,6 +37,7 @@ export class OwnerService {
     @InjectRepository(Station)
     private stationEntityRepository: Repository<Station>,
     private dataSource: DataSource,
+    private httpService: HttpService,
   ) {}
 
   /**
@@ -551,7 +554,7 @@ export class OwnerService {
 
       // Parse location URL to extract coordinates
       console.log('Parsing location URL:', dto.locationUrl);
-      const { lat, lng, address } = this.parseLocationUrl(dto.locationUrl);
+      const { lat, lng, address } = await this.parseLocationUrl(dto.locationUrl);
       console.log('Parsed coordinates:', { lat, lng, address });
 
       // Validate maxPowerKw
@@ -710,7 +713,7 @@ export class OwnerService {
     }
 
     // Parse location URL
-    const { lat, lng, address } = this.parseLocationUrl(dto.locationUrl);
+    const { lat, lng, address } = await this.parseLocationUrl(dto.locationUrl);
     console.log('📍 Parsed location:', { lat, lng, address });
 
     // Use transaction
@@ -829,12 +832,17 @@ export class OwnerService {
 
   /**
    * Parse Google Maps location URL to extract coordinates
+   * Supports:
+   * - Full Google Maps URLs (https://maps.google.com/?q=lat,lng)
+   * - Google Maps place URLs (https://www.google.com/maps/place/.../@lat,lng)
+   * - Shortened Google Maps URLs (https://maps.app.goo.gl/...)
+   * - Direct coordinates (lat,lng)
    */
-  private parseLocationUrl(locationUrl: string): {
+  private async parseLocationUrl(locationUrl: string): Promise<{
     lat: number;
     lng: number;
     address: string;
-  } {
+  }> {
     try {
       console.log('Parsing location URL:', locationUrl);
       
@@ -847,43 +855,51 @@ export class OwnerService {
         throw new BadRequestException('Location URL cannot be empty');
       }
       
-      // Try multiple Google Maps URL formats:
-      // Format 1: https://maps.google.com/?q=6.9271,79.8612
-      // Format 2: https://www.google.com/maps/place/.../@6.9271,79.8612,17z
-      // Format 3: https://www.google.com/maps/.../@6.9271,79.8612...
-      // Format 4: https://goo.gl/maps/... (short link)
-      // Format 5: Just coordinates: 6.9271,79.8612
+      let urlToCheck = trimmed;
+      
+      // Check if this is a shortened URL (goo.gl or maps.app.goo.gl)
+      if (trimmed.match(/^https?:\/\/(maps\.app\.)?goo\.gl\//i)) {
+        console.log('📍 Detected shortened Google Maps URL, expanding...');
+        try {
+          urlToCheck = await this.expandShortenedUrl(trimmed);
+          console.log('✅ Expanded URL:', urlToCheck);
+        } catch (expandError) {
+          console.warn('⚠️  Could not expand shortened URL:', expandError.message);
+          // Fall through to try to extract from original URL
+          urlToCheck = trimmed;
+        }
+      }
       
       let coordMatch: RegExpMatchArray | null = null;
       
       // Try to match coordinates with @ symbol (e.g., /@6.9271,79.8612,17z or /@6.9271,79.8612/)
-      coordMatch = trimmed.match(/@(-?\d+\.?\d+),(-?\d+\.?\d+)/);
+      coordMatch = urlToCheck.match(/@(-?\d+\.?\d+),(-?\d+\.?\d+)/);
       
       // Try to match coordinates with ?q= (e.g., ?q=6.9271,79.8612)
       if (!coordMatch) {
-        coordMatch = trimmed.match(/[\?&]q=(-?\d+\.?\d+),(-?\d+\.?\d+)/);
+        coordMatch = urlToCheck.match(/[\?&]q=(-?\d+\.?\d+),(-?\d+\.?\d+)/);
       }
       
       // Try to match coordinates with ?ll= (e.g., ?ll=6.9271,79.8612)
       if (!coordMatch) {
-        coordMatch = trimmed.match(/[\?&]ll=(-?\d+\.?\d+),(-?\d+\.?\d+)/);
+        coordMatch = urlToCheck.match(/[\?&]ll=(-?\d+\.?\d+),(-?\d+\.?\d+)/);
       }
       
       // Try to match just coordinates (e.g., 6.9271,79.8612)
       if (!coordMatch) {
-        coordMatch = trimmed.match(/^(-?\d+\.?\d+),\s*(-?\d+\.?\d+)$/);
+        coordMatch = urlToCheck.match(/^(-?\d+\.?\d+),\s*(-?\d+\.?\d+)$/);
       }
       
       // Try to match coordinates anywhere in the string (fallback)
       if (!coordMatch) {
-        coordMatch = trimmed.match(/(-?\d+\.?\d+),\s*(-?\d+\.?\d+)/);
+        coordMatch = urlToCheck.match(/(-?\d+\.?\d+),\s*(-?\d+\.?\d+)/);
       }
       
       if (coordMatch && coordMatch[1] && coordMatch[2]) {
         const lat = parseFloat(coordMatch[1]);
         const lng = parseFloat(coordMatch[2]);
         
-        console.log('Extracted coordinates:', { lat, lng });
+        console.log('✅ Extracted coordinates:', { lat, lng });
         
         // Validate coordinates are reasonable
         if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
@@ -900,18 +916,62 @@ export class OwnerService {
       }
 
       // If no coordinates found, throw error with hint
-      console.error('Could not extract coordinates from:', trimmed);
+      console.error('❌ Could not extract coordinates from:', urlToCheck);
       throw new BadRequestException(
         'Could not extract coordinates from location URL. Please provide a Google Maps link or coordinates in format: latitude,longitude',
       );
     } catch (error) {
-      console.error('Error parsing location URL:', error);
+      console.error('Error parsing location URL:', error.message);
       if (error instanceof BadRequestException) {
         throw error;
       }
       throw new BadRequestException(
         'Invalid location URL format. Please use a Google Maps share link or coordinates.',
       );
+    }
+  }
+
+  /**
+   * Expand shortened Google Maps URLs (goo.gl, maps.app.goo.gl)
+   * Follow redirects to get the full URL with coordinates
+   */
+  private async expandShortenedUrl(shortenedUrl: string): Promise<string> {
+    try {
+      console.log('🔗 Fetching expanded URL from:', shortenedUrl);
+      
+      // Make a request with maxRedirects: 0 to capture the first redirect Location header
+      const response = await lastValueFrom(
+        this.httpService.get(shortenedUrl, {
+          maxRedirects: 0,
+          validateStatus: (status) => status >= 200 && status < 400,
+        })
+      ).catch((err) => {
+        // Axios throws on 3xx when maxRedirects: 0, so catch and inspect headers
+        if (err.response && err.response.status >= 300 && err.response.status < 400) {
+          return err.response;
+        }
+        throw err;
+      });
+
+      // Check Location header for redirect target  
+      const location = response.headers?.location;
+      if (location) {
+        console.log('✅ Location header found:', location);
+        return location;
+      }
+
+      // If no redirect, try the final URL
+      const finalUrl = response.request?.res?.responseUrl || response.config?.url;
+      if (finalUrl && finalUrl !== shortenedUrl) {
+        console.log('✅ Final URL found:', finalUrl);
+        return finalUrl;
+      }
+
+      console.warn('⚠️  Could not determine redirect URL, using original');
+      return shortenedUrl;
+    } catch (error) {
+      console.warn('⚠️  Error expanding shortened URL:', error.message);
+      return shortenedUrl;
     }
   }
 

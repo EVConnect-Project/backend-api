@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { HttpModule } from '@nestjs/axios';
 import { OwnerController } from './owner.controller';
 import { OwnerService } from './owner.service';
 import { OwnerPaymentAccountController } from './owner-payment-account.controller';
@@ -24,6 +25,7 @@ import { Station } from '../station/entities/station.entity';
       ChargingStation,
       Station,
     ]),
+    HttpModule,
   ],
   controllers: [OwnerController, OwnerPaymentAccountController],
   providers: [OwnerService, OwnerPaymentAccountService, IsChargerOwnerGuard],
