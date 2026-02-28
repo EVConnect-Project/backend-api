@@ -17,6 +17,7 @@ import { CreateStationDto } from './dto/create-station.dto';
 import { ChargerSocket } from './entities/charger-socket.entity';
 import { ChargingStation } from './entities/charging-station.entity';
 import { BookingMode } from '../charger/enums/booking-mode.enum';
+import { Station } from '../station/entities/station.entity';
 
 @Injectable()
 export class OwnerService {
@@ -31,6 +32,8 @@ export class OwnerService {
     private socketRepository: Repository<ChargerSocket>,
     @InjectRepository(ChargingStation)
     private stationRepository: Repository<ChargingStation>,
+    @InjectRepository(Station)
+    private stationEntityRepository: Repository<Station>,
     private dataSource: DataSource,
   ) {}
 
@@ -45,72 +48,97 @@ export class OwnerService {
     try {
       console.log(`[OwnerService] Fetching chargers for owner: ${ownerId}`);
 
-      // 1. Fetch chargers with their direct relations
+      // 1. Fetch chargers without eager loading station (table might not exist)
       const chargers = await this.chargerRepository.find({
         where: { ownerId },
-        relations: ['sockets', 'station'],
+        relations: ['sockets'],
         order: { createdAt: 'DESC' },
       });
 
       console.log(`[OwnerService] Found ${chargers.length} chargers.`);
 
       if (chargers.length === 0) {
+        console.log('[OwnerService] No chargers found, returning empty array.');
         return [];
       }
 
       const chargerIds = chargers.map((charger) => charger.id);
+      console.log(`[OwnerService] Charger IDs: ${chargerIds.join(', ')}`);
 
       // 2. Fetch booking statistics in a single efficient query
-      const bookingStats = await this.bookingRepository
-        .createQueryBuilder('booking')
-        .select('booking.chargerId', 'chargerId')
-        .addSelect('COUNT(booking.id)', 'totalBookings')
-        .addSelect("SUM(CASE WHEN booking.status = 'active' THEN 1 ELSE 0 END)", 'activeBookings')
-        .addSelect("SUM(CASE WHEN booking.status = 'pending' THEN 1 ELSE 0 END)", 'pendingBookings')
-        .where('booking.chargerId IN (:...chargerIds)', { chargerIds })
-        .groupBy('booking.chargerId')
-        .getRawMany();
+      let bookingStats = [];
+      if (chargerIds.length > 0) {
+        console.log('[OwnerService] Fetching booking statistics...');
+        bookingStats = await this.bookingRepository
+          .createQueryBuilder('booking')
+          .select('booking.chargerId', 'chargerId')
+          .addSelect('COUNT(booking.id)', 'totalBookings')
+          .addSelect(
+            "SUM(CASE WHEN booking.status = 'active' THEN 1 ELSE 0 END)",
+            'activeBookings',
+          )
+          .addSelect(
+            "SUM(CASE WHEN booking.status = 'pending' THEN 1 ELSE 0 END)",
+            'pendingBookings',
+          )
+          .where('booking.chargerId IN (:...chargerIds)', { chargerIds })
+          .groupBy('booking.chargerId')
+          .getRawMany();
+        console.log(`[OwnerService] Retrieved stats for ${bookingStats.length} chargers.`);
+      }
 
       // 3. Create a lookup map for quick access to stats
-      const statsMap = new Map(bookingStats.map(stat => [stat.chargerId, {
-        totalBookings: parseInt(stat.totalBookings, 10) || 0,
-        activeBookings: parseInt(stat.activeBookings, 10) || 0,
-        pendingBookings: parseInt(stat.pendingBookings, 10) || 0,
-      }]));
+      const statsMap = new Map(
+        bookingStats.map((stat: any) => [
+          stat.chargerId,
+          {
+            totalBookings: parseInt(stat.totalBookings, 10) || 0,
+            activeBookings: parseInt(stat.activeBookings, 10) || 0,
+            pendingBookings: parseInt(stat.pendingBookings, 10) || 0,
+          },
+        ]),
+      );
 
-      // 4. Manually and safely construct the final response object
+      // 4. Manually and safely construct the final response object (without station)
       const chargersWithStats = chargers.map((charger) => {
-        const stats = statsMap.get(charger.id) || { totalBookings: 0, activeBookings: 0, pendingBookings: 0 };
-        // We are creating a plain object to avoid any serialization issues with TypeORM entities
+        const stats =
+          statsMap.get(charger.id) ||
+          { totalBookings: 0, activeBookings: 0, pendingBookings: 0 };
         return {
           id: charger.id,
           name: charger.name,
-          address: charger.station ? charger.station.address : charger.address,
-          latitude: charger.station ? charger.station.latitude : charger.lat,
-          longitude: charger.station ? charger.station.longitude : charger.lng,
+          address: charger.address,
+          latitude: charger.lat,
+          longitude: charger.lng,
           status: charger.status,
-          power: charger.station ? charger.station.power : charger.maxPowerKw,
-          price: charger.station ? charger.station.price : charger.pricePerKwh,
-          isVerified: charger.verified,
-          isPublic: charger.station ? charger.station.isPublic : true,
+          power: charger.maxPowerKw,
+          price: charger.pricePerKwh,
+          verified: charger.verified,
+          isPublic: true,
           bookingMode: charger.bookingMode,
           ownerId: charger.ownerId,
           stationId: charger.stationId,
           createdAt: charger.createdAt,
           updatedAt: charger.updatedAt,
-          sockets: charger.sockets, // Assuming 'sockets' is a simple relation
-          station: charger.station,   // Assuming 'station' is a simple relation
+          sockets: charger.sockets ? charger.sockets : [],
           stats: stats,
         };
       });
 
-      console.log('[OwnerService] Successfully processed chargers with stats.');
+      console.log(
+        '[OwnerService] Successfully processed chargers with stats.',
+      );
       return chargersWithStats;
-
     } catch (error) {
-      console.error('❌ [OwnerService] Critical error in getMyChargers:', error);
+      console.error(
+        '❌ [OwnerService] Critical error in getMyChargers:',
+        error.message,
+        error.stack,
+      );
       // Throw a standard NestJS exception
-      throw new InternalServerErrorException('A critical error occurred while fetching charger data.');
+      throw new InternalServerErrorException(
+        `A critical error occurred while fetching charger data: ${error.message}`,
+      );
     }
   }
 

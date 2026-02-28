@@ -426,7 +426,7 @@ export class AdminService {
     }
     charger.verified = true;
     charger.status = 'available'; // Make charger available when approved
-    await this.chargerRepository.save(charger);
+    const updatedCharger = await this.chargerRepository.save(charger);
     
     // Send approval notification to owner
     try {
@@ -439,7 +439,14 @@ export class AdminService {
       console.error('Failed to send charger approval notification:', error);
     }
     
-    return { message: 'Charger approved successfully' };
+    return {
+      id: updatedCharger.id,
+      name: updatedCharger.name,
+      address: updatedCharger.address,
+      verified: updatedCharger.verified,
+      status: updatedCharger.status,
+      message: 'Charger approved successfully',
+    };
   }
 
   async rejectCharger(id: string, reason: string) {
