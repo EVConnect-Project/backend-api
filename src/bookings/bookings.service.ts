@@ -42,100 +42,123 @@ export class BookingsService {
    * Create a booking with comprehensive access type checking and conflict prevention
    */
   async create(createBookingDto: CreateBookingDto, userId: string): Promise<BookingResponse> {
-    const { chargerId, startTime, endTime, price } = createBookingDto;
+    try {
+      const { chargerId, startTime, endTime, price } = createBookingDto;
 
-    // Validate time range
-    const start = new Date(startTime);
-    const end = new Date(endTime);
+      // Validate time range
+      const start = new Date(startTime);
+      const end = new Date(endTime);
 
-    if (start >= end) {
-      throw new BadRequestException('End time must be after start time');
+      if (start >= end) {
+        throw new BadRequestException('End time must be after start time');
+      }
+
+      if (start < new Date()) {
+        throw new BadRequestException('Start time cannot be in the past');
+      }
+
+      // Fetch charger with owner relationship
+      const charger = await this.chargerRepository.findOne({ 
+        where: { id: chargerId },
+        relations: ['owner']
+      });
+      
+      if (!charger) {
+        throw new NotFoundException(`Charger with ID ${chargerId} not found`);
+      }
+
+      // Check if charger is verified by admin
+      if (!charger.verified) {
+        throw new BadRequestException('This charger is not yet verified by admin and cannot accept bookings');
+      }
+
+      // Initialize warnings array
+      const warnings: BookingWarning[] = [];
+
+      // Check for overlapping bookings (with grace period consideration)
+      const gracePeriod = charger.bookingGracePeriod || 0;
+      const effectiveStartTime = new Date(start.getTime() - gracePeriod * 60 * 1000);
+
+      const overlappingBooking = await this.bookingRepository
+        .createQueryBuilder('booking')
+        .where('booking.chargerId = :chargerId', { chargerId })
+        .andWhere('booking.status NOT IN (:...statuses)', { statuses: ['cancelled', 'completed', 'no_show'] })
+        .andWhere(
+          '(booking.startTime < :endTime AND booking.endTime > :effectiveStartTime)',
+          { effectiveStartTime, endTime: end }
+        )
+        .getOne();
+
+      if (overlappingBooking) {
+        throw new BadRequestException('Charger is already booked for this time slot');
+      }
+
+      // Calculate price
+      let finalPrice = 0;
+      const durationMs = end.getTime() - start.getTime();
+      const durationHours = durationMs / (1000 * 60 * 60);
+      const chargerPower = Number(charger.powerKw || 0);
+      const chargerPricePerKwh = Number(charger.pricePerKwh || 0);
+      const calculatedPrice = chargerPower * chargerPricePerKwh * durationHours;
+
+      if (price && price > 0) {
+        finalPrice = price;
+      } else {
+        finalPrice = Number(calculatedPrice.toFixed(2));
+      }
+
+      // Validate price is not NaN or negative
+      if (isNaN(finalPrice) || finalPrice < 0) {
+        finalPrice = 0;
+        this.logger.warn(`Calculated price was invalid (${calculatedPrice}), falling back to 0 for booking`);
+      }
+
+      // Create booking
+      const booking = this.bookingRepository.create({
+        userId,
+        chargerId,
+        startTime: start,
+        endTime: end,
+        price: finalPrice,
+        status: 'pending',
+      });
+
+      const savedBooking = await this.bookingRepository.save(booking);
+
+      this.logger.log(`Booking created: ${savedBooking.id} for charger ${chargerId} by user ${userId}`);
+
+      // Send booking confirmation notification (fire-and-forget to prevent blocking response)
+      this.notificationsService.sendBookingConfirmed(
+        userId,
+        savedBooking.id,
+        charger.name || 'charging station',
+        start,
+      ).catch((error) => {
+        this.logger.error(`Failed to send booking confirmation notification for booking ${savedBooking.id}:`, error);
+      });
+
+      // Return comprehensive response
+      return {
+        booking: savedBooking,
+        warnings,
+        requiresPhysicalVerification: charger.requiresPhysicalCheck || false,
+        gracePeriodMinutes: charger.bookingGracePeriod || 0,
+        autoCancelAfterMinutes: charger.autoCancelAfter || 15,
+      };
+    } catch (error) {
+      this.logger.error(`Error creating booking for user ${userId}:`, error);
+      
+      // Re-throw known exceptions
+      if (error instanceof BadRequestException || 
+          error instanceof NotFoundException || 
+          error instanceof ForbiddenException) {
+        throw error;
+      }
+
+      // Log and rethrow unknown database/system errors
+      this.logger.error(`Unexpected error in booking creation: ${error.message}`, error.stack);
+      throw new BadRequestException(`Failed to create booking: ${error.message}`);
     }
-
-    if (start < new Date()) {
-      throw new BadRequestException('Start time cannot be in the past');
-    }
-
-    // Fetch charger with owner relationship
-    const charger = await this.chargerRepository.findOne({ 
-      where: { id: chargerId },
-      relations: ['owner']
-    });
-    
-    if (!charger) {
-      throw new NotFoundException(`Charger with ID ${chargerId} not found`);
-    }
-
-    // Check if charger is verified by admin
-    if (!charger.verified) {
-      throw new BadRequestException('This charger is not yet verified by admin and cannot accept bookings');
-    }
-
-    // Initialize warnings array
-    const warnings: BookingWarning[] = [];
-
-    // Check for overlapping bookings (with grace period consideration)
-    const gracePeriod = charger.bookingGracePeriod || 0;
-    const effectiveStartTime = new Date(start.getTime() - gracePeriod * 60 * 1000);
-
-    const overlappingBooking = await this.bookingRepository
-      .createQueryBuilder('booking')
-      .where('booking.chargerId = :chargerId', { chargerId })
-      .andWhere('booking.status NOT IN (:...statuses)', { statuses: ['cancelled', 'completed', 'no_show'] })
-      .andWhere(
-        '(booking.startTime < :endTime AND booking.endTime > :effectiveStartTime)',
-        { effectiveStartTime, endTime: end }
-      )
-      .getOne();
-
-    if (overlappingBooking) {
-      throw new BadRequestException('Charger is already booked for this time slot');
-    }
-
-    // Calculate price
-    let finalPrice = 0;
-    const durationMs = end.getTime() - start.getTime();
-    const durationHours = durationMs / (1000 * 60 * 60);
-    const chargerPower = Number(charger.powerKw || 0);
-    const chargerPricePerKwh = Number(charger.pricePerKwh || 0);
-    const calculatedPrice = chargerPower * chargerPricePerKwh * durationHours;
-
-    if (price && price > 0) {
-      finalPrice = price;
-    } else {
-      finalPrice = Number(calculatedPrice.toFixed(2));
-    }
-
-    // Create booking
-    const booking = this.bookingRepository.create({
-      userId,
-      chargerId,
-      startTime: start,
-      endTime: end,
-      price: finalPrice,
-      status: 'pending',
-    });
-
-    const savedBooking = await this.bookingRepository.save(booking);
-
-    this.logger.log(`Booking created: ${savedBooking.id} for charger ${chargerId} by user ${userId}`);
-
-    // Send booking confirmation notification
-    await this.notificationsService.sendBookingConfirmed(
-      userId,
-      savedBooking.id,
-      charger.name || 'charging station',
-      start,
-    );
-
-    // Return comprehensive response
-    return {
-      booking: savedBooking,
-      warnings,
-      requiresPhysicalVerification: charger.requiresPhysicalCheck || false,
-      gracePeriodMinutes: charger.bookingGracePeriod || 0,
-      autoCancelAfterMinutes: charger.autoCancelAfter || 15,
-    };
   }
 
   async findAll(): Promise<BookingEntity[]> {

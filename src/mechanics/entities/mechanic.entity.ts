@@ -40,6 +40,9 @@ export class MechanicEntity {
   @Column({ type: 'text', nullable: true })
   description: string;
 
+  @Column({ name: 'serviceRadius', type: 'decimal', precision: 5, scale: 2, default: 5 })
+  serviceRadius: number; // Service radius in kilometers (e.g., 5, 10, 25)
+
   @Column({ default: true })
   available: boolean;
 

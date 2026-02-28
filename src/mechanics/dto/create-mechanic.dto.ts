@@ -16,6 +16,12 @@ export class CreateMechanicDto {
 
   @IsOptional()
   @IsNumber()
+  @Min(1)
+  @Max(100)
+  serviceRadius?: number; // Service radius in kilometers
+
+  @IsOptional()
+  @IsNumber()
   @Min(0)
   @Max(5)
   rating?: number;

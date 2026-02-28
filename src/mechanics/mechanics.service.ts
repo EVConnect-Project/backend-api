@@ -90,9 +90,15 @@ export class MechanicsService {
           description: mechanic.description,
           available: mechanic.available,
           pricePerHour: mechanic.pricePerHour ? parseFloat(mechanic.pricePerHour as any) : null,
+          serviceRadius: mechanic.serviceRadius ? parseFloat(mechanic.serviceRadius as any) : 5,
           distance: this.calculateDistance(lat, lng, parseFloat(mechanic.lat as any), parseFloat(mechanic.lng as any)),
         }))
-        .filter(m => m.distance <= radiusKm)
+        // Filter: Request must be within search radius AND within mechanic's service radius
+        .filter(m => {
+          const withinSearchRadius = m.distance <= radiusKm;
+          const withinMechanicServiceRadius = m.distance <= m.serviceRadius;
+          return withinSearchRadius && withinMechanicServiceRadius;
+        })
         .sort((a, b) => a.distance - b.distance);
 
       return mechanicsWithDistance;
