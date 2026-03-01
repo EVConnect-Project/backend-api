@@ -4,6 +4,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, Like } from 'typeorm';
 import { UserEntity } from '../users/entities/user.entity';
 import { Charger } from '../charger/entities/charger.entity';
+import { ChargingStation } from '../owner/entities/charging-station.entity';
+import { ChargerSocket } from '../owner/entities/charger-socket.entity';
 import { BookingEntity } from '../bookings/entities/booking.entity';
 import { MechanicApplication, ApplicationStatus } from '../mechanic/entities/mechanic-application.entity';
 import { MechanicEntity } from '../mechanics/entities/mechanic.entity';
@@ -29,6 +31,10 @@ export class AdminService {
     private marketplaceRepository: Repository<MarketplaceListing>,
     @InjectRepository(OwnerPaymentAccount)
     private paymentAccountRepository: Repository<OwnerPaymentAccount>,
+    @InjectRepository(ChargingStation)
+    private chargingStationRepository: Repository<ChargingStation>,
+    @InjectRepository(ChargerSocket)
+    private chargerSocketRepository: Repository<ChargerSocket>,
     private notificationsService: NotificationsService,
     private chargingService: ChargingService,
   ) {}
@@ -327,7 +333,8 @@ export class AdminService {
 
     const queryBuilder = this.chargerRepository
       .createQueryBuilder('charger')
-      .leftJoinAndSelect('charger.owner', 'owner');
+      .leftJoinAndSelect('charger.owner', 'owner')
+      .leftJoinAndSelect('charger.sockets', 'sockets');
 
     if (search) {
       queryBuilder.where(
@@ -355,6 +362,20 @@ export class AdminService {
       .orderBy('charger.createdAt', 'DESC')
       .getManyAndCount();
 
+    // Batch-fetch station names for chargers that belong to a station
+    const stationIds = [...new Set(chargers.map(c => c.stationId).filter(Boolean))] as string[];
+    const stationMap: Record<string, string> = {};
+    if (stationIds.length > 0) {
+      const stations = await this.chargingStationRepository
+        .createQueryBuilder('s')
+        .select(['s.id', 's.stationName'])
+        .where('s.id IN (:...ids)', { ids: stationIds })
+        .getMany();
+      for (const s of stations) {
+        stationMap[s.id] = s.stationName;
+      }
+    }
+
     return {
       chargers: chargers.map((c) => ({
         id: c.id,
@@ -363,12 +384,24 @@ export class AdminService {
         lat: Number(c.lat),
         lng: Number(c.lng),
         status: c.status,
+        chargerType: c.chargerType || null,
+        maxPowerKw: Number(c.maxPowerKw || 0),
         powerKw: Number(c.powerKw),
         pricePerKwh: Number(c.pricePerKwh),
+        connectorType: c.connectorType || null,
+        speedType: c.speedType || null,
+        numberOfPlugs: c.numberOfPlugs || 1,
+        bookingMode: c.bookingMode || null,
+        isOnline: c.isOnline || false,
         verified: c.verified,
         isBanned: c.isBanned,
         description: c.description,
         chargeBoxIdentity: c.chargeBoxIdentity || null,
+        stationId: c.stationId || null,
+        stationName: c.stationId ? (stationMap[c.stationId] || null) : null,
+        amenities: c.amenities || null,
+        phoneNumber: c.phoneNumber || null,
+        socketsCount: c.sockets ? c.sockets.length : 0,
         owner: c.owner
           ? {
               id: c.owner.id,
@@ -387,11 +420,21 @@ export class AdminService {
   async getChargerById(id: string) {
     const charger = await this.chargerRepository.findOne({
       where: { id },
-      relations: ['owner'],
+      relations: ['owner', 'sockets'],
     });
     if (!charger) {
       throw new NotFoundException('Charger not found');
     }
+
+    // Fetch station name if charger belongs to a station
+    let stationName: string | null = null;
+    if (charger.stationId) {
+      const station = await this.chargingStationRepository.findOne({
+        where: { id: charger.stationId },
+      });
+      if (station) stationName = station.stationName;
+    }
+
     return {
       id: charger.id,
       name: charger.name,
@@ -399,10 +442,48 @@ export class AdminService {
       lat: Number(charger.lat),
       lng: Number(charger.lng),
       status: charger.status,
+      chargerType: charger.chargerType || null,
+      maxPowerKw: Number(charger.maxPowerKw || 0),
       powerKw: Number(charger.powerKw),
       pricePerKwh: Number(charger.pricePerKwh),
+      connectorType: charger.connectorType || null,
+      speedType: charger.speedType || null,
+      numberOfPlugs: charger.numberOfPlugs || 1,
+      bookingMode: charger.bookingMode || null,
+      bookingSettings: charger.bookingSettings || null,
+      openingHours: charger.openingHours || null,
+      isOnline: charger.isOnline || false,
+      ocppStatus: charger.ocppStatus || 'not_configured',
+      chargeBoxIdentity: charger.chargeBoxIdentity || null,
+      currentStatus: charger.currentStatus || null,
+      lastStatusUpdate: charger.lastStatusUpdate || null,
+      lastHeartbeat: charger.lastHeartbeat || null,
       verified: charger.verified,
+      isBanned: charger.isBanned,
       description: charger.description,
+      amenities: charger.amenities || null,
+      phoneNumber: charger.phoneNumber || null,
+      googleMapUrl: charger.googleMapUrl || null,
+      chargerIdentifier: charger.chargerIdentifier || null,
+      reliabilityScore: Number(charger.reliabilityScore || 0),
+      requiresAuth: charger.requiresAuth,
+      requiresPhysicalCheck: charger.requiresPhysicalCheck,
+      hasOccupancySensor: charger.hasOccupancySensor,
+      paymentAccountId: charger.paymentAccountId || null,
+      stationId: charger.stationId || null,
+      stationName,
+      sockets: (charger.sockets || []).map(s => ({
+        id: s.id,
+        socketNumber: s.socketNumber,
+        socketLabel: s.socketLabel || null,
+        connectorType: s.connectorType,
+        maxPowerKw: Number(s.maxPowerKw),
+        pricePerKwh: s.pricePerKwh ? Number(s.pricePerKwh) : null,
+        pricePerHour: s.pricePerHour ? Number(s.pricePerHour) : null,
+        isFree: s.isFree,
+        bookingMode: s.bookingMode,
+        status: s.status,
+      })),
       owner: charger.owner
         ? {
             id: charger.owner.id,
@@ -655,6 +736,220 @@ export class AdminService {
     }
     
     return { message: 'Charger unbanned successfully' };
+  }
+
+  // Charging Station Management
+  async getStations(params: {
+    page: number;
+    limit: number;
+    search?: string;
+    verified?: boolean;
+  }) {
+    const { page, limit, search, verified } = params;
+    const skip = (page - 1) * limit;
+
+    const query = this.chargingStationRepository
+      .createQueryBuilder('station')
+      .leftJoinAndSelect('station.owner', 'owner')
+      .orderBy('station.createdAt', 'DESC')
+      .skip(skip)
+      .take(limit);
+
+    if (search) {
+      query.andWhere(
+        '(station.stationName ILIKE :search OR station.address ILIKE :search)',
+        { search: `%${search}%` },
+      );
+    }
+
+    if (verified !== undefined) {
+      query.andWhere('station.verified = :verified', { verified });
+    }
+
+    const [stations, total] = await query.getManyAndCount();
+
+    // Get charger counts for each station
+    const stationIds = stations.map((s) => s.id);
+    let chargerCountMap: Record<string, number> = {};
+    if (stationIds.length > 0) {
+      const chargerCounts = await this.chargerRepository
+        .createQueryBuilder('charger')
+        .select('charger.stationId', 'stationId')
+        .addSelect('COUNT(*)', 'count')
+        .where('charger.stationId IN (:...stationIds)', { stationIds })
+        .groupBy('charger.stationId')
+        .getRawMany();
+      chargerCountMap = chargerCounts.reduce((acc, row) => {
+        acc[row.stationId] = parseInt(row.count);
+        return acc;
+      }, {} as Record<string, number>);
+    }
+
+    return {
+      data: stations.map((station) => ({
+        id: station.id,
+        stationName: station.stationName,
+        address: station.address,
+        stationType: station.stationType,
+        lat: station.lat,
+        lng: station.lng,
+        parkingCapacity: station.parkingCapacity,
+        amenities: station.amenities,
+        openingHours: station.openingHours,
+        images: station.images,
+        verified: station.verified,
+        isBanned: station.isBanned,
+        createdAt: station.createdAt,
+        updatedAt: station.updatedAt,
+        chargersCount: chargerCountMap[station.id] || 0,
+        owner: station.owner
+          ? {
+              id: station.owner.id,
+              name: station.owner.name,
+              email: station.owner.phoneNumber,
+            }
+          : null,
+      })),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async getStationById(id: string) {
+    const station = await this.chargingStationRepository.findOne({
+      where: { id },
+      relations: ['owner'],
+    });
+
+    if (!station) {
+      throw new NotFoundException('Charging station not found');
+    }
+
+    // Fetch chargers belonging to this station
+    const chargers = await this.chargerRepository.find({
+      where: { stationId: id },
+      relations: ['sockets'],
+      order: { createdAt: 'DESC' },
+    });
+
+    return {
+      id: station.id,
+      stationName: station.stationName,
+      locationUrl: station.locationUrl,
+      stationType: station.stationType,
+      lat: station.lat,
+      lng: station.lng,
+      address: station.address,
+      parkingCapacity: station.parkingCapacity,
+      description: station.description,
+      amenities: station.amenities,
+      openingHours: station.openingHours,
+      images: station.images,
+      verified: station.verified,
+      isBanned: station.isBanned,
+      createdAt: station.createdAt,
+      updatedAt: station.updatedAt,
+      owner: station.owner
+        ? {
+            id: station.owner.id,
+            name: station.owner.name,
+            email: station.owner.phoneNumber,
+            phone: station.owner.phoneNumber,
+          }
+        : null,
+      chargers: chargers.map((c) => ({
+        id: c.id,
+        name: c.name,
+        chargerType: c.chargerType,
+        maxPowerKw: c.maxPowerKw,
+        connectorType: c.connectorType,
+        speedType: c.speedType,
+        status: c.status,
+        currentStatus: c.currentStatus,
+        isOnline: c.isOnline,
+        verified: c.verified,
+        isBanned: c.isBanned,
+        pricePerKwh: c.pricePerKwh,
+        bookingMode: c.bookingMode,
+        socketsCount: c.sockets?.length || 0,
+        sockets: c.sockets?.map((s) => ({
+          id: s.id,
+          socketNumber: s.socketNumber,
+          socketLabel: s.socketLabel,
+          connectorType: s.connectorType,
+          maxPowerKw: s.maxPowerKw,
+          pricePerKwh: s.pricePerKwh,
+          status: s.status,
+        })),
+      })),
+    };
+  }
+
+  async updateStation(id: string, data: any) {
+    const station = await this.chargingStationRepository.findOne({
+      where: { id },
+    });
+
+    if (!station) {
+      throw new NotFoundException('Charging station not found');
+    }
+
+    // Update allowed fields
+    const allowedFields = [
+      'stationName',
+      'address',
+      'stationType',
+      'lat',
+      'lng',
+      'locationUrl',
+      'parkingCapacity',
+      'description',
+      'amenities',
+      'openingHours',
+      'verified',
+      'isBanned',
+    ];
+
+    for (const field of allowedFields) {
+      if (data[field] !== undefined) {
+        (station as any)[field] = data[field];
+      }
+    }
+
+    await this.chargingStationRepository.save(station);
+
+    return { message: 'Station updated successfully', station };
+  }
+
+  async deleteStation(id: string) {
+    const station = await this.chargingStationRepository.findOne({
+      where: { id },
+    });
+
+    if (!station) {
+      throw new NotFoundException('Charging station not found');
+    }
+
+    // Check if station has chargers
+    const chargerCount = await this.chargerRepository.count({
+      where: { stationId: id },
+    });
+
+    if (chargerCount > 0) {
+      // Unlink chargers from station (set stationId to null)
+      await this.chargerRepository
+        .createQueryBuilder()
+        .update(Charger)
+        .set({ stationId: null })
+        .where('stationId = :id', { id })
+        .execute();
+    }
+
+    await this.chargingStationRepository.remove(station);
+
+    return { message: 'Station deleted successfully', unlinkedChargers: chargerCount };
   }
 
   // Booking Management

@@ -70,11 +70,14 @@ export class ChargerService {
   }
 
   async findAll(): Promise<Charger[]> {
-    return this.chargerRepository.find({
-      where: { verified: true, isBanned: false },
-      relations: ['owner', 'sockets'],
-      order: { createdAt: 'DESC' },
-    });
+    const query = `
+      SELECT c.*, cs.station_name AS "stationName"
+      FROM chargers c
+      LEFT JOIN charging_stations cs ON c."stationId" = cs.id
+      WHERE c.verified = true AND c."isBanned" = false
+      ORDER BY c."createdAt" DESC
+    `;
+    return this.chargerRepository.query(query);
   }
 
   async findOne(id: string): Promise<Charger> {
@@ -92,9 +95,10 @@ export class ChargerService {
 
   async findNearby(lat: number, lng: number, radiusKm: number = 10): Promise<Charger[]> {
     // Simple distance calculation using Haversine formula
-    // For production, consider using PostGIS extension for better performance
+    // Includes stationName via LEFT JOIN so clients can display "Station · Charger" labels
     const query = `
-      SELECT * FROM (
+      SELECT cwd.*, cs.station_name AS "stationName"
+      FROM (
         SELECT *, 
           ( 6371 * acos( 
             cos( radians($1) ) * 
@@ -105,9 +109,10 @@ export class ChargerService {
           ) ) AS distance 
         FROM chargers
         WHERE verified = true AND "isBanned" = false
-      ) AS chargers_with_distance
-      WHERE distance < $3 
-      ORDER BY distance
+      ) AS cwd
+      LEFT JOIN charging_stations cs ON cwd."stationId" = cs.id
+      WHERE cwd.distance < $3 
+      ORDER BY cwd.distance
     `;
 
     return this.chargerRepository.query(query, [lat, lng, radiusKm]);

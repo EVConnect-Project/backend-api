@@ -213,6 +213,37 @@ export class AdminController {
     return this.adminService.unbanCharger(id);
   }
 
+  // Charging Station Management
+  @Get('stations')
+  async getStations(
+    @Query('page') page: string,
+    @Query('limit') limit: string,
+    @Query('search') search: string,
+    @Query('verified') verified: string,
+  ) {
+    return this.adminService.getStations({
+      page: page ? parseInt(page) : 1,
+      limit: limit ? parseInt(limit) : 10,
+      search,
+      verified: verified ? verified === 'true' : undefined,
+    });
+  }
+
+  @Get('stations/:id')
+  async getStationById(@Param('id') id: string) {
+    return this.adminService.getStationById(id);
+  }
+
+  @Patch('stations/:id')
+  async updateStation(@Param('id') id: string, @Body() data: any) {
+    return this.adminService.updateStation(id, data);
+  }
+
+  @Delete('stations/:id')
+  async deleteStation(@Param('id') id: string) {
+    return this.adminService.deleteStation(id);
+  }
+
   // OCPP Live Controls
   @Get('ocpp/live')
   async ocppLive() {
