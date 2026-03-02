@@ -20,6 +20,7 @@ import { ChargerSocket } from './entities/charger-socket.entity';
 import { ChargingStation } from './entities/charging-station.entity';
 import { BookingMode } from '../charger/enums/booking-mode.enum';
 import { Station } from '../station/entities/station.entity';
+import { ChargersGateway } from '../charger/chargers.gateway';
 
 @Injectable()
 export class OwnerService {
@@ -38,6 +39,7 @@ export class OwnerService {
     private stationEntityRepository: Repository<Station>,
     private dataSource: DataSource,
     private httpService: HttpService,
+    private chargersGateway: ChargersGateway,
   ) {}
 
   /**
@@ -239,6 +241,14 @@ export class OwnerService {
 
     charger.status = status;
     const updated = await this.chargerRepository.save(charger);
+
+    // Broadcast real-time update so the map removes/updates the pin immediately
+    try {
+      const broadcastAction = status === 'offline' ? 'deleted' : 'updated';
+      this.chargersGateway.broadcastChargerUpdate(updated, broadcastAction);
+    } catch (e) {
+      console.error('[OwnerService] Failed to broadcast charger status change:', e);
+    }
 
     return {
       ...updated,

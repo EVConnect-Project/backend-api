@@ -13,6 +13,7 @@ import { OwnerPaymentAccount } from './entities/owner-payment-account.entity';
 import { ChargerSocket } from './entities/charger-socket.entity';
 import { ChargingStation } from './entities/charging-station.entity';
 import { Station } from '../station/entities/station.entity';
+import { ChargerModule } from '../charger/charger.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { Station } from '../station/entities/station.entity';
       Station,
     ]),
     HttpModule,
+    ChargerModule,
   ],
   controllers: [OwnerController, OwnerPaymentAccountController],
   providers: [OwnerService, OwnerPaymentAccountService, IsChargerOwnerGuard],

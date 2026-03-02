@@ -74,7 +74,7 @@ export class ChargerService {
       SELECT c.*, cs.station_name AS "stationName"
       FROM chargers c
       LEFT JOIN charging_stations cs ON c.station_id = cs.id
-      WHERE c.verified = true AND c."isBanned" = false
+      WHERE c.verified = true AND c."isBanned" = false AND c.status != 'offline'
       ORDER BY c."createdAt" DESC
     `;
     return this.chargerRepository.query(query);
@@ -108,7 +108,7 @@ export class ChargerService {
             sin( radians(lat) ) 
           ) ) AS distance 
         FROM chargers
-        WHERE verified = true AND "isBanned" = false
+        WHERE verified = true AND "isBanned" = false AND status != 'offline'
       ) AS cwd
       LEFT JOIN charging_stations cs ON cwd.station_id = cs.id
       WHERE cwd.distance < $3 
