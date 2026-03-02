@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, UseGuards, Request, Inject, Patch, Delete } from '@nestjs/common';
+import { Controller, Post, Body, Get, UseGuards, Request, Inject, Patch, Delete, HttpCode, HttpStatus } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -38,6 +38,22 @@ export class AuthController {
         isAdmin: user.role === 'admin',
       },
     };
+  }
+
+  @Post('logout')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async logout(@Request() req) {
+    return this.authService.logout(req.user.userId);
+  }
+
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  async refresh(@Body() body: { refresh_token: string }) {
+    if (!body.refresh_token) {
+      return { statusCode: 400, message: 'refresh_token is required' };
+    }
+    return this.authService.refreshToken(body.refresh_token);
   }
 
   @Post('register')

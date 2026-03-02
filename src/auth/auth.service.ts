@@ -9,6 +9,8 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { OtpService } from './otp.service';
 import { SmsService } from './sms.service';
+import { Charger } from '../charger/entities/charger.entity';
+import { MechanicEntity } from '../mechanics/entities/mechanic.entity';
 
 @Injectable()
 export class AuthService {
@@ -26,11 +28,63 @@ export class AuthService {
   constructor(
     @InjectRepository(UserEntity)
     private userRepository: Repository<UserEntity>,
+    @InjectRepository(Charger)
+    private chargerRepository: Repository<Charger>,
+    @InjectRepository(MechanicEntity)
+    private mechanicRepository: Repository<MechanicEntity>,
     private jwtService: JwtService,
     private otpService: OtpService,
     private smsService: SmsService,
     private configService: ConfigService,
   ) {}
+
+  // ==================== TOKEN HELPERS ====================
+
+  private generateAccessToken(user: UserEntity): string {
+    const payload = {
+      sub: user.id,
+      phoneNumber: user.phoneNumber,
+      role: user.role,
+      tokenVersion: user.tokenVersion,
+      type: 'access',
+    };
+    return this.jwtService.sign(payload, {
+      expiresIn: (this.configService.get<string>('JWT_EXPIRES_IN') || '24h') as any,
+    });
+  }
+
+  private generateRefreshToken(user: UserEntity): string {
+    const refreshSecret = this.configService.get<string>('JWT_REFRESH_SECRET');
+    if (!refreshSecret) throw new Error('JWT_REFRESH_SECRET environment variable is not set');
+    const payload = {
+      sub: user.id,
+      tokenVersion: user.tokenVersion,
+      type: 'refresh',
+    };
+    return this.jwtService.sign(payload, {
+      secret: refreshSecret,
+      expiresIn: (this.configService.get<string>('JWT_REFRESH_EXPIRES_IN') || '30d') as any,
+    });
+  }
+
+  private async buildUserResponse(user: UserEntity) {
+    const chargerCount = await this.chargerRepository.count({ where: { ownerId: user.id } });
+    const mechanicProfile = await this.mechanicRepository.findOne({ where: { userId: user.id } });
+    const hasChargers = chargerCount > 0;
+    const hasMechanicProfile = mechanicProfile !== null;
+    return {
+      id: user.id,
+      phoneNumber: user.phoneNumber,
+      phone: user.phoneNumber,
+      name: user.name,
+      role: user.role,
+      countryCode: user.countryCode,
+      isVerified: user.isVerified,
+      isOwner: user.role === 'owner' || user.role === 'admin' || hasChargers,
+      isMechanic: user.role === 'mechanic' || hasMechanicProfile || user.role === 'admin',
+      isAdmin: user.role === 'admin',
+    };
+  }
 
   async register(registerDto: RegisterDto) {
     const { phoneNumber, password, name } = registerDto;
@@ -53,72 +107,34 @@ export class AuthService {
 
     await this.userRepository.save(user);
 
-    // Generate JWT token
-    const payload = { sub: user.id, phone: user.phoneNumber, role: user.role };
-    const access_token = this.jwtService.sign(payload);
-
     return {
-      access_token,
-      user: {
-        id: user.id,
-        phone: user.phoneNumber,
-        name: user.name,
-        role: user.role,
-      },
+      access_token: this.generateAccessToken(user),
+      refresh_token: this.generateRefreshToken(user),
+      user: await this.buildUserResponse(user),
     };
   }
 
   async login(loginDto: LoginDto) {
     try {
       const { phoneNumber, password } = loginDto;
-      
       console.log('[AUTH SERVICE] Login attempt for phoneNumber:', phoneNumber);
 
-      // Find user by phone number
-      const user = await this.userRepository.findOne({
-        where: { phoneNumber },
-      });
-      
+      const user = await this.userRepository.findOne({ where: { phoneNumber } });
       console.log('[AUTH SERVICE] User found:', user ? `YES (ID: ${user.id})` : 'NO');
 
-      if (!user) {
-        console.log('[AUTH SERVICE] User not found for:', phoneNumber);
-        throw new UnauthorizedException('Invalid credentials');
-      }
+      if (!user) throw new UnauthorizedException('Invalid credentials');
 
-      console.log('[AUTH SERVICE] Verifying password...');
-      // Verify password
+      if (user.isBanned) throw new UnauthorizedException('Your account has been banned');
+
       const isPasswordValid = await bcrypt.compare(password, user.password);
       console.log('[AUTH SERVICE] Password valid:', isPasswordValid);
-      
-      if (!isPasswordValid) {
-        console.log('[AUTH SERVICE] Invalid password for:', phoneNumber);
-        throw new UnauthorizedException('Invalid credentials');
-      }
+      if (!isPasswordValid) throw new UnauthorizedException('Invalid credentials');
 
-      console.log('[AUTH SERVICE] Generating JWT token...');
-      // Generate JWT token
-      const payload = { sub: user.id, phone: user.phoneNumber, role: user.role };
-      
-      let access_token: string;
-      try {
-        access_token = this.jwtService.sign(payload);
-        console.log('[AUTH SERVICE] JWT token generated successfully');
-      } catch (jwtError) {
-        console.error('[AUTH SERVICE] JWT signing error:', jwtError);
-        throw new UnauthorizedException('Failed to generate authentication token');
-      }
-      
       console.log('[AUTH SERVICE] Login successful for:', phoneNumber);
-
       return {
-        access_token,
-        user: {
-          id: user.id,
-          phone: user.phoneNumber,
-          name: user.name,
-          role: user.role,
-        },
+        access_token: this.generateAccessToken(user),
+        refresh_token: this.generateRefreshToken(user),
+        user: await this.buildUserResponse(user),
       };
     } catch (error) {
       console.error('[AUTH SERVICE] Login error:', error.message, error.stack);
@@ -133,47 +149,60 @@ export class AuthService {
   async adminLogin(loginDto: LoginDto) {
     const { phoneNumber, password } = loginDto;
 
-    // Find user by phone number
-    const user = await this.userRepository.findOne({
-      where: { phoneNumber },
-    });
+    const user = await this.userRepository.findOne({ where: { phoneNumber } });
     console.log('Admin login attempt:', { phoneNumber, userFound: !!user });
-    if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
+    if (!user) throw new UnauthorizedException('Invalid credentials');
 
     console.log('User details:', { id: user.id, role: user.role, hasPassword: !!user.password });
 
-    // Check if user is admin
-    if (user.role !== 'admin') {
-      throw new UnauthorizedException('Access denied. Admin role required.');
-    }
+    if (user.role !== 'admin') throw new UnauthorizedException('Access denied. Admin role required.');
+    if (user.isBanned) throw new UnauthorizedException('Your account has been banned');
 
-    // Check if user is banned
-    if (user.isBanned) {
-      throw new UnauthorizedException('Your account has been banned');
-    }
-
-    // Verify password
     const isPasswordValid = await bcrypt.compare(password, user.password);
     console.log('Password validation:', { isPasswordValid });
-    if (!isPasswordValid) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
-
-    // Generate JWT token with role
-    const payload = { sub: user.id, phone: user.phoneNumber, role: user.role };
-    const access_token = this.jwtService.sign(payload);
+    if (!isPasswordValid) throw new UnauthorizedException('Invalid credentials');
 
     return {
-      access_token,
-      user: {
-        id: user.id,
-        phone: user.phoneNumber,
-        name: user.name,
-        role: user.role,
-      },
+      access_token: this.generateAccessToken(user),
+      refresh_token: this.generateRefreshToken(user),
+      user: await this.buildUserResponse(user),
     };
+  }
+
+  async refreshToken(refreshTokenStr: string) {
+    const refreshSecret = this.configService.get<string>('JWT_REFRESH_SECRET');
+    if (!refreshSecret) throw new Error('JWT_REFRESH_SECRET is not set');
+
+    let payload: any;
+    try {
+      payload = this.jwtService.verify(refreshTokenStr, { secret: refreshSecret });
+    } catch (e) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    if (payload.type !== 'refresh') {
+      throw new UnauthorizedException('Invalid token type');
+    }
+
+    const user = await this.userRepository.findOne({ where: { id: payload.sub } });
+    if (!user) throw new UnauthorizedException('User not found');
+    if (user.isBanned) throw new UnauthorizedException('User account is banned');
+
+    // Validate token version — reject tokens issued before last logout
+    if (payload.tokenVersion !== user.tokenVersion) {
+      throw new UnauthorizedException('Refresh token has been invalidated. Please login again.');
+    }
+
+    return {
+      access_token: this.generateAccessToken(user),
+      refresh_token: this.generateRefreshToken(user),
+    };
+  }
+
+  async logout(userId: string) {
+    // Increment tokenVersion to invalidate all existing access + refresh tokens
+    await this.userRepository.increment({ id: userId }, 'tokenVersion', 1);
+    return { success: true, message: 'Logged out successfully' };
   }
 
   async changePassword(userId: string, currentPassword: string, newPassword: string) {
@@ -230,11 +259,12 @@ export class AuthService {
     // Send OTP via SMS
     await this.smsService.sendOTP(phoneNumber, otp);
 
+    const isDev = this.configService.get<string>('NODE_ENV') !== 'production';
     return {
       success: true,
       message: 'OTP sent successfully',
       expiresIn: 300, // 5 minutes in seconds
-      otp, // For testing - remove in production
+      ...(isDev && { otp }), // Only include OTP in development
     };
   }
 
@@ -292,21 +322,10 @@ export class AuthService {
     // Send welcome SMS
     await this.smsService.sendWelcomeSMS(phoneNumber, user.name);
 
-    // Generate JWT tokens
-    const payload = { sub: user.id, phoneNumber: user.phoneNumber, role: user.role };
-    const access_token = this.jwtService.sign(payload, { expiresIn: '24h' });
-    const refresh_token = this.jwtService.sign(payload, { expiresIn: '30d' });
-
     return {
-      access_token,
-      refresh_token,
-      user: {
-        id: user.id,
-        phoneNumber: user.phoneNumber,
-        name: user.name,
-        role: user.role,
-        isVerified: user.isVerified,
-      },
+      access_token: this.generateAccessToken(user),
+      refresh_token: this.generateRefreshToken(user),
+      user: await this.buildUserResponse(user),
     };
   }
 
@@ -343,22 +362,11 @@ export class AuthService {
       }
 
       console.log('[loginWithPhone] Generating tokens...');
-      // Generate JWT tokens
-      const payload = { sub: user.id, phoneNumber: user.phoneNumber, role: user.role };
-      const access_token = this.jwtService.sign(payload, { expiresIn: '24h' });
-      const refresh_token = this.jwtService.sign(payload, { expiresIn: '30d' });
-
       console.log('[loginWithPhone] Login successful');
       return {
-        access_token,
-        refresh_token,
-        user: {
-          id: user.id,
-          phoneNumber: user.phoneNumber,
-          name: user.name,
-          role: user.role,
-          isVerified: user.isVerified,
-        },
+        access_token: this.generateAccessToken(user),
+        refresh_token: this.generateRefreshToken(user),
+        user: await this.buildUserResponse(user),
       };
     } catch (error) {
       console.error('[loginWithPhone] Error:', error.message, error.stack);
@@ -388,11 +396,12 @@ export class AuthService {
     // Send OTP via SMS
     await this.smsService.sendOTP(phoneNumber, otp);
 
+    const isDev = this.configService.get<string>('NODE_ENV') !== 'production';
     return {
       success: true,
       message: 'Password reset OTP sent successfully',
       expiresIn: 300, // 5 minutes in seconds
-      otp, // For testing - remove in production
+      ...(isDev && { otp }), // Only include OTP in development
     };
   }
 

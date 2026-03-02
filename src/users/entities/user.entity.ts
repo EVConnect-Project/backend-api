@@ -57,6 +57,10 @@ export class UserEntity {
   @Column({ name: 'terms_accepted_at', type: 'timestamp', nullable: true })
   termsAcceptedAt: Date;
 
+  // Token version for logout invalidation - incremented on logout to invalidate all existing tokens
+  @Column({ name: 'token_version', default: 0 })
+  tokenVersion: number;
+
   @OneToMany('MarketplaceListing', 'seller')
   marketplaceListings: any[];
 

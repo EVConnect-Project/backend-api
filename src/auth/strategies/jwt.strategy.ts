@@ -13,14 +13,21 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     @InjectRepository(UserEntity)
     private readonly userRepository: Repository<UserEntity>,
   ) {
+    const secret = configService.get<string>('JWT_SECRET');
+    if (!secret) throw new Error('JWT_SECRET environment variable is not set');
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: configService.get('JWT_SECRET') || 'your-secret-key-change-in-production',
+      secretOrKey: secret,
     });
   }
 
   async validate(payload: any) {
+    // Reject refresh tokens being used as access tokens
+    if (payload.type === 'refresh') {
+      throw new UnauthorizedException('Refresh token cannot be used as access token');
+    }
+
     // Verify the user still exists in the database
     const user = await this.userRepository.findOne({
       where: { id: payload.sub },
@@ -34,11 +41,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('User account is banned');
     }
 
+    // Validate token version — invalidates tokens issued before logout
+    if (payload.tokenVersion !== undefined && payload.tokenVersion !== user.tokenVersion) {
+      throw new UnauthorizedException('Token has been invalidated. Please login again.');
+    }
+
     return { 
       userId: user.id, 
       phoneNumber: user.phoneNumber,
       role: user.role,
       isBanned: user.isBanned,
+      tokenVersion: user.tokenVersion,
     };
   }
 }

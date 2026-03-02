@@ -46,6 +46,7 @@ export class OwnerService {
    */
   /**
    * Get all chargers owned by a user
+   * Returns BOTH verified and unverified chargers so owner can see pending approvals
    */
   async getMyChargers(ownerId: string) {
     try {
@@ -55,10 +56,13 @@ export class OwnerService {
       const chargers = await this.chargerRepository.find({
         where: { ownerId },
         relations: ['sockets'],
-        order: { createdAt: 'DESC' },
+        order: { 
+          verified: 'DESC',  // Verified chargers first
+          createdAt: 'DESC'  // Then newest first
+        },
       });
 
-      console.log(`[OwnerService] Found ${chargers.length} chargers.`);
+      console.log(`[OwnerService] Found ${chargers.length} chargers for owner ${ownerId}.`);
 
       if (chargers.length === 0) {
         console.log('[OwnerService] No chargers found, returning empty array.');
@@ -129,7 +133,8 @@ export class OwnerService {
       });
 
       console.log(
-        '[OwnerService] Successfully processed chargers with stats.',
+        '[OwnerService] Successfully processed chargers with stats. Verified count:',
+        chargersWithStats.filter(c => c.verified).length,
       );
       return chargersWithStats;
     } catch (error) {
@@ -427,51 +432,63 @@ export class OwnerService {
     startDate?: string,
     endDate?: string,
   ) {
-    const myChargers = await this.chargerRepository.find({
-      where: { ownerId },
-      select: ['id'],
-    });
-
-    const chargerIds = myChargers.map((c) => c.id);
-
-    if (chargerIds.length === 0) {
-      return {
-        totalRevenue: 0,
-        completedBookingsRevenue: 0,
-        pendingRevenue: 0,
-      };
-    }
-
-    let query = this.bookingRepository
-      .createQueryBuilder('booking')
-      .where('booking.chargerId IN (:...chargerIds)', { chargerIds });
-
-    if (startDate && endDate) {
-      query = query.andWhere('booking.createdAt BETWEEN :startDate AND :endDate', {
-        startDate: new Date(startDate),
-        endDate: new Date(endDate),
+    try {
+      const myChargers = await this.chargerRepository.find({
+        where: { ownerId },
+        select: ['id'],
       });
+
+      const chargerIds = myChargers.map((c) => c.id);
+
+      if (chargerIds.length === 0) {
+        return {
+          totalRevenue: 0,
+          completedBookingsRevenue: 0,
+          pendingRevenue: 0,
+        };
+      }
+
+      // Helper function to build base query
+      const buildBaseQuery = () => {
+        let query = this.bookingRepository
+          .createQueryBuilder('booking')
+          .where('booking.chargerId IN (:...chargerIds)', { chargerIds });
+
+        if (startDate && endDate) {
+          query = query.andWhere('booking.createdAt BETWEEN :startDate AND :endDate', {
+            startDate: new Date(startDate),
+            endDate: new Date(endDate),
+          });
+        }
+        return query;
+      };
+
+      // Get total revenue (all bookings)
+      const totalRevenue = await buildBaseQuery()
+        .select('SUM(booking.price)', 'total')
+        .getRawOne();
+
+      // Get completed revenue
+      const completedRevenue = await buildBaseQuery()
+        .andWhere('booking.status = :status', { status: 'completed' })
+        .select('SUM(booking.price)', 'total')
+        .getRawOne();
+
+      // Get pending revenue
+      const pendingRevenue = await buildBaseQuery()
+        .andWhere('booking.status = :status', { status: 'pending' })
+        .select('SUM(booking.price)', 'total')
+        .getRawOne();
+
+      return {
+        totalRevenue: parseFloat(totalRevenue?.total || '0'),
+        completedBookingsRevenue: parseFloat(completedRevenue?.total || '0'),
+        pendingRevenue: parseFloat(pendingRevenue?.total || '0'),
+      };
+    } catch (error) {
+      console.error('[OwnerService] Error in getRevenueStats:', error.message, error.stack);
+      throw error;
     }
-
-    const totalRevenue = await query
-      .select('SUM(booking.price)', 'total')
-      .getRawOne();
-
-    const completedRevenue = await query
-      .andWhere('booking.status = :status', { status: 'completed' })
-      .select('SUM(booking.price)', 'total')
-      .getRawOne();
-
-    const pendingRevenue = await query
-      .andWhere('booking.status = :status', { status: 'pending' })
-      .select('SUM(booking.price)', 'total')
-      .getRawOne();
-
-    return {
-      totalRevenue: parseFloat(totalRevenue?.total || '0'),
-      completedBookingsRevenue: parseFloat(completedRevenue?.total || '0'),
-      pendingRevenue: parseFloat(pendingRevenue?.total || '0'),
-    };
   }
 
   /**

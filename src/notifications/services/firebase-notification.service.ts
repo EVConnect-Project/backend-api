@@ -25,22 +25,37 @@ export class FirebaseNotificationService implements OnModuleInit {
 
   async onModuleInit(): Promise<void> {
     try {
-      // Initialize Firebase Admin SDK
-      const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
-      
-      if (!serviceAccount) {
-        this.logger.warn('Firebase service account path not configured. Push notifications will be disabled.');
+      // If Firebase is already initialized by another service, reuse it
+      if (admin.apps.length) {
+        this.firebaseApp = admin.app();
+        this.logger.log('Firebase Admin SDK reused from existing instance');
         return;
       }
 
-      if (!admin.apps.length) {
+      // Try individual credentials first (recommended approach)
+      const projectId = process.env.FIREBASE_PROJECT_ID;
+      const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+      const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+
+      if (projectId && privateKey && clientEmail) {
         this.firebaseApp = admin.initializeApp({
-          credential: admin.credential.cert(serviceAccount),
+          credential: admin.credential.cert({ projectId, privateKey, clientEmail }),
         });
         this.logger.log('Firebase Admin SDK initialized successfully');
-      } else {
-        this.firebaseApp = admin.app();
+        return;
       }
+
+      // Fallback: service account file path
+      const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
+      if (serviceAccountPath) {
+        this.firebaseApp = admin.initializeApp({
+          credential: admin.credential.cert(serviceAccountPath),
+        });
+        this.logger.log('Firebase Admin SDK initialized via service account file');
+        return;
+      }
+
+      this.logger.warn('Firebase credentials not configured. Push notifications will be disabled.');
     } catch (error) {
       this.logger.error('Failed to initialize Firebase Admin SDK', error);
     }

@@ -73,7 +73,7 @@ export class ChargerService {
     const query = `
       SELECT c.*, cs.station_name AS "stationName"
       FROM chargers c
-      LEFT JOIN charging_stations cs ON c."stationId" = cs.id
+      LEFT JOIN charging_stations cs ON c.station_id = cs.id
       WHERE c.verified = true AND c."isBanned" = false
       ORDER BY c."createdAt" DESC
     `;
@@ -110,7 +110,7 @@ export class ChargerService {
         FROM chargers
         WHERE verified = true AND "isBanned" = false
       ) AS cwd
-      LEFT JOIN charging_stations cs ON cwd."stationId" = cs.id
+      LEFT JOIN charging_stations cs ON cwd.station_id = cs.id
       WHERE cwd.distance < $3 
       ORDER BY cwd.distance
     `;

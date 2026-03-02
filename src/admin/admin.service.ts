@@ -498,26 +498,54 @@ export class AdminService {
   }
 
   async approveCharger(id: string) {
+    console.log(`✅ [AdminService] Approving charger: ${id}`);
+    
     const charger = await this.chargerRepository.findOne({ 
       where: { id },
       relations: ['owner']
     });
     if (!charger) {
+      console.error(`❌ [AdminService] Charger not found: ${id}`);
       throw new NotFoundException('Charger not found');
     }
+    
+    console.log(`📝 [AdminService] Current charger state:`, {
+      id: charger.id,
+      name: charger.name,
+      verified: charger.verified,
+      status: charger.status,
+      ownerId: charger.ownerId,
+    });
+    
     charger.verified = true;
     charger.status = 'available'; // Make charger available when approved
     const updatedCharger = await this.chargerRepository.save(charger);
     
+    console.log(`✅ [AdminService] Charger updated:`, {
+      id: updatedCharger.id,
+      verified: updatedCharger.verified,
+      status: updatedCharger.status,
+    });
+
+    // Promote the owner's role to 'owner' so they can access the Owner Dashboard
+    const owner = charger.owner ?? await this.userRepository.findOne({ where: { id: charger.ownerId } });
+    if (owner && owner.role !== 'owner' && owner.role !== 'admin') {
+      owner.role = 'owner';
+      await this.userRepository.save(owner);
+      console.log(`✅ [AdminService] User ${owner.phoneNumber} promoted to 'owner' role`);
+    }
+    
     // Send approval notification to owner
     try {
+      console.log(`📧 [AdminService] Sending approval notification to owner: ${charger.ownerId}`);
       await this.notificationsService.sendChargerApproved(
         charger.ownerId,
         charger.name || 'Your Charger',
         charger.id,
       );
+      console.log(`✅ [AdminService] Notification sent successfully`);
     } catch (error) {
-      console.error('Failed to send charger approval notification:', error);
+      console.error('❌ Failed to send charger approval notification:', error);
     }
     
     return {
