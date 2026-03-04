@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsNumber, IsOptional, IsString, Min, Max, IsUUID, ValidateIf, IsEnum } from 'class-validator';
+import { IsNotEmpty, IsNumber, IsOptional, IsString, Min, Max, IsUUID, ValidateIf, IsEnum, IsArray } from 'class-validator';
 import { BookingMode } from '../enums/booking-mode.enum';
 
 export class CreateChargerDto {
@@ -35,6 +35,14 @@ export class CreateChargerDto {
   @IsString()
   @IsOptional()
   description?: string;
+
+  @IsString()
+  @IsOptional()
+  phoneNumber?: string;
+
+  @IsString()
+  @IsOptional()
+  chargerType?: 'ac' | 'dc';
 
   @IsString()
   @IsOptional()
@@ -76,4 +84,8 @@ export class CreateChargerDto {
   @Min(0)
   @Max(1)
   reliabilityScore?: number;
+
+  @IsArray()
+  @IsOptional()
+  images?: string[];
 }

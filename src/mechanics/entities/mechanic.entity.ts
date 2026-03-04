@@ -1,5 +1,6 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, OneToMany, JoinColumn } from 'typeorm';
 import { UserEntity } from '../../users/entities/user.entity';
+import { MechanicExpertiseEntity } from './mechanic-expertise.entity';
 
 @Entity('mechanics')
 export class MechanicEntity {
@@ -78,4 +79,7 @@ export class MechanicEntity {
 
   @UpdateDateColumn({ name: 'updatedAt' })
   updatedAt: Date;
+
+  @OneToMany(() => MechanicExpertiseEntity, expertise => expertise.mechanic)
+  expertise: MechanicExpertiseEntity[];
 }

@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { MechanicsService } from './mechanics.service';
 import { MechanicsController } from './mechanics.controller';
 import { MechanicEntity } from './entities/mechanic.entity';
+import { MechanicExpertiseEntity } from './entities/mechanic-expertise.entity';
 import { UserEntity } from '../users/entities/user.entity';
 import { MechanicApplication } from '../mechanic/entities/mechanic-application.entity';
 import { Charger } from '../charger/entities/charger.entity';
@@ -16,7 +17,7 @@ import { ChatModule } from '../chat/chat.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([MechanicEntity, UserEntity, MechanicApplication, Charger]),
+    TypeOrmModule.forFeature([MechanicEntity, MechanicExpertiseEntity, UserEntity, MechanicApplication, Charger]),
     NotificationsModule,
     forwardRef(() => EmergencyModule),
     ChatModule,

@@ -47,16 +47,44 @@ export class MechanicAvailabilityGateway implements OnGatewayConnection, OnGatew
     this.logger.log(`Client connected: ${client.id}`);
   }
 
-  handleDisconnect(client: Socket) {
+  async handleDisconnect(client: Socket) {
     this.logger.log(`Client disconnected: ${client.id}`);
     
-    // Remove from maps
-    this.connectedMechanics.forEach((value, key) => {
+    // Remove from maps and mark mechanic as unavailable in DB
+    for (const [mechanicId, value] of this.connectedMechanics.entries()) {
       if (value.socketId === client.id) {
-        this.connectedMechanics.delete(key);
-        this.logger.log(`Mechanic ${key} disconnected`);
+        this.connectedMechanics.delete(mechanicId);
+        this.logger.log(`Mechanic ${mechanicId} disconnected — marking unavailable`);
+
+        // Mark unavailable in the database so they don't appear in public searches
+        try {
+          await this.mechanicRepository.update(mechanicId, {
+            available: false,
+            lastOnlineAt: new Date(),
+          });
+          this.logger.log(`✅ Mechanic ${mechanicId} marked unavailable in DB`);
+
+          // Broadcast to subscribed users so their map updates in real time
+          const mechanic = await this.mechanicRepository.findOne({ where: { id: mechanicId } });
+          if (mechanic?.currentLocationLat && mechanic?.currentLocationLng) {
+            const room = this.getGeoRoom(
+              parseFloat(mechanic.currentLocationLat.toString()),
+              parseFloat(mechanic.currentLocationLng.toString()),
+            );
+            this.server.to(room).emit('mechanic:availability_changed', {
+              mechanicId,
+              available: false,
+              isOnJob: false,
+              timestamp: new Date(),
+            });
+          }
+        } catch (err) {
+          this.logger.error(`Failed to mark mechanic ${mechanicId} unavailable: ${err.message}`);
+        }
+
+        break;
       }
-    });
+    }
     
     this.connectedUsers.forEach((value, socketId) => {
       if (socketId === client.id) {

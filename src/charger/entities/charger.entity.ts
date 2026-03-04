@@ -228,6 +228,14 @@ export class Charger {
   })
   reliabilityScore: number;
 
+  // Photos/Images
+  @Column({
+    type: "jsonb",
+    nullable: true,
+    default: null,
+  })
+  images: string[] | null;
+
   // Socket Relations
   @OneToMany(() => ChargerSocket, (socket) => socket.charger, { cascade: true })
   sockets: ChargerSocket[];

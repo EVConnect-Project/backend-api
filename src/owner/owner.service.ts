@@ -214,6 +214,13 @@ export class OwnerService {
     }
 
     Object.assign(charger, updateChargerDto);
+    
+    // Handle virtual powerKw field mapping to maxPowerKw
+    // Object.assign doesn't properly invoke setters for virtual properties
+    if ('powerKw' in updateChargerDto && updateChargerDto.powerKw !== undefined) {
+      charger.maxPowerKw = updateChargerDto.powerKw;
+    }
+    
     return this.chargerRepository.save(charger);
   }
 

@@ -14,6 +14,8 @@ import { MechanicResponseEntity } from './mechanic-response.entity';
 
 export type EmergencyStatus = 'pending' | 'accepted' | 'in_progress' | 'completed' | 'cancelled';
 export type UrgencyLevel = 'low' | 'medium' | 'high' | 'critical';
+export type ProblemType = 'battery_dead' | 'flat_tire' | 'engine_issues' | 'out_of_charge' | 
+  'overheating' | 'accident' | 'locked_out' | 'other';
 
 @Entity('emergency_requests')
 export class EmergencyRequestEntity {
@@ -35,6 +37,9 @@ export class EmergencyRequestEntity {
 
   @Column({ type: 'text', nullable: true })
   problemDescription: string;
+
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  problemType: ProblemType;
 
   @Column({ type: 'jsonb', nullable: true })
   vehicleDetails: any;
@@ -69,4 +74,14 @@ export class EmergencyRequestEntity {
 
   @Column({ type: 'timestamp', nullable: true })
   cancelledAt: Date;
+
+  // Resolution tracking fields
+  @Column({ type: 'int', nullable: true })
+  resolutionTimeMinutes: number;
+
+  @Column({ type: 'decimal', precision: 3, scale: 2, nullable: true })
+  userSatisfactionRating: number;
+
+  @Column({ type: 'text', nullable: true })
+  mechanicFeedback: string;
 }

@@ -111,6 +111,11 @@ export class ChargerController {
     return this.chargerService.findByOwner(req.user.userId);
   }
 
+  @Get('stations/:stationId')
+  getStation(@Param('stationId') stationId: string) {
+    return this.chargerService.getStationWithChargers(stationId);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.chargerService.findOne(id);

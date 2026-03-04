@@ -101,6 +101,17 @@ export class MechanicsController {
     return this.mechanicsService.updateMyAvailability(req.user.userId, available);
   }
 
+  @Put('me/location')
+  @UseGuards(JwtAuthGuard)
+  async updateMyLocation(
+    @Request() req,
+    @Body('lat') lat: number,
+    @Body('lng') lng: number,
+  ) {
+    console.log('📍 Mechanic location update:', req.user.phoneNumber, '-> lat:', lat, 'lng:', lng);
+    return this.mechanicsService.updateMyLocation(req.user.userId, lat, lng);
+  }
+
   @Delete('me/resign')
   @UseGuards(JwtAuthGuard)
   async resignMechanicRole(@Request() req) {
