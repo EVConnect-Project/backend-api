@@ -22,6 +22,32 @@ export class ChargerController {
     return this.chargerService.findAll();
   }
 
+  /**
+   * Vehicle-compatible stations endpoint.
+   * Returns stations annotated with compatibility info for the user's primary vehicle
+   * (or a specific vehicle if vehicleId is provided).
+   * Each station/charger/socket gets a `compatibility` object with:
+   *   isCompatible, effectiveChargingPowerKw, estimatedChargeTimeMinutes, matchedConnectorTypes
+   */
+  @Get('compatible-stations')
+  @UseGuards(JwtAuthGuard)
+  getCompatibleStations(@Query() query: any, @Request() req) {
+    return this.chargerService.getCompatibleStations(
+      req.user.userId,
+      query.vehicleId || null,
+      {
+        lat: query.lat ? parseFloat(query.lat) : undefined,
+        lng: query.lng ? parseFloat(query.lng) : undefined,
+        radius: query.radius ? parseFloat(query.radius) : undefined,
+        availableNow: query.availableNow === 'true',
+        sortBy: query.sortBy || 'distance',
+        sortOrder: query.sortOrder || 'asc',
+        limit: query.limit ? parseInt(query.limit) : 100,
+        offset: query.offset ? parseInt(query.offset) : 0,
+      },
+    );
+  }
+
   @Get('filter')
   filterChargers(@Query() filters: any) {
     // Convert string query params to proper types

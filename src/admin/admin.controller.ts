@@ -68,6 +68,11 @@ export class AdminController {
     return this.adminService.getBookingStats();
   }
 
+  @Get('analytics/vehicles')
+  async getVehicleAnalytics() {
+    return this.adminService.getVehicleAnalytics();
+  }
+
   // User Management
   @Get('users')
   async getUsers(

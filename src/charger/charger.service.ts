@@ -13,6 +13,8 @@ import { UpdateBookingModeDto } from './dto/update-booking-mode.dto';
 import { UpdateChargerStatusDto } from './dto/update-charger-status.dto';
 import { DEFAULT_BOOKING_SETTINGS } from './interfaces/booking-settings.interface';
 import { ChargingStation } from '../owner/entities/charging-station.entity';
+import { VehicleProfileService } from '../auth/vehicle-profile.service';
+import { VehicleProfile } from '../auth/entities/vehicle-profile.entity';
 
 @Injectable()
 export class ChargerService {
@@ -25,6 +27,7 @@ export class ChargerService {
     private integrationService: ChargerIntegrationService,
     @Inject(forwardRef(() => ChargersGateway))
     private chargersGateway: ChargersGateway,
+    private vehicleProfileService: VehicleProfileService,
   ) {}
 
   async create(createChargerDto: CreateChargerDto, ownerId: string): Promise<any> {
@@ -904,5 +907,225 @@ export class ChargerService {
     }
 
     return queryBuilder.getMany();
+  }
+
+  // ==================== VEHICLE COMPATIBILITY ====================
+
+  /**
+   * Connector compatibility matrix — which charger connectors work with which vehicle connectors.
+   * A CCS2 vehicle can plug into a CCS2 socket (DC) and also into a Type 2 socket (AC).
+   * A Tesla vehicle can use tesla sockets and, with adapters, CCS2 sockets.
+   */
+  private static readonly CONNECTOR_COMPAT: Record<string, string[]> = {
+    type2: ['type2', 'three_phase_type2'],
+    ccs2: ['ccs2', 'type2', 'three_phase_type2'], // CCS2 plug includes Type 2 AC
+    chademo: ['chademo'],
+    type1: ['type1', 'type1_j1772'],
+    ccs1: ['ccs1', 'type1', 'type1_j1772'], // CCS1 plug includes Type 1 AC
+    tesla: ['tesla', 'tesla_nacs'],
+    gb_t_ac: ['gb_t_ac'],
+    gb_t_dc: ['gb_t_dc'],
+    three_phase_type2: ['three_phase_type2', 'type2'],
+  };
+
+  /**
+   * Normalize a single charger connector type string to the canonical mobile enum values.
+   * Maps backend values like type1_j1772 → type1, tesla_nacs → tesla.
+   */
+  private normalizeChargerConnector(raw: string | null): string {
+    if (!raw) return '';
+    const lower = raw.toLowerCase().trim();
+    const map: Record<string, string> = {
+      type1_j1772: 'type1',
+      tesla_nacs: 'tesla',
+    };
+    return map[lower] || lower;
+  }
+
+  /**
+   * Check if a single vehicle connector type is compatible with a charger socket's connector type.
+   */
+  private isConnectorCompatibleWith(vehicleConn: string, chargerConn: string): boolean {
+    const normalizedCharger = this.normalizeChargerConnector(chargerConn);
+    const compatList = ChargerService.CONNECTOR_COMPAT[vehicleConn] || [vehicleConn];
+    return compatList.includes(normalizedCharger);
+  }
+
+  /**
+   * Determine the effective charging power (min of vehicle max and charger max).
+   */
+  private getEffectiveChargingPower(
+    vehicle: VehicleProfile,
+    chargerType: string,
+    chargerMaxPower: number,
+  ): number {
+    const isAc = chargerType === 'ac' || chargerMaxPower <= 22;
+    const vehicleMax = isAc
+      ? (vehicle.maxAcChargingPower ? Number(vehicle.maxAcChargingPower) : 11)
+      : (vehicle.maxDcChargingPower ? Number(vehicle.maxDcChargingPower) : 50);
+    return Math.min(vehicleMax, chargerMaxPower);
+  }
+
+  /**
+   * Estimate charge time in minutes from currentSoc% to targetSoc%.
+   * Simple linear model; override with chargingCurve if available.
+   */
+  private estimateChargeTime(
+    batteryCapacityKwh: number,
+    effectivePowerKw: number,
+    fromSoc: number = 20,
+    toSoc: number = 80,
+  ): number {
+    if (effectivePowerKw <= 0) return 0;
+    const energyNeeded = batteryCapacityKwh * ((toSoc - fromSoc) / 100);
+    return Math.round((energyNeeded / effectivePowerKw) * 60);
+  }
+
+  /**
+   * Get compatible stations for a user's vehicle (primary vehicle or specified vehicleId).
+   * Returns stations with compatibility metadata per socket.
+   */
+  async getCompatibleStations(
+    userId: string,
+    vehicleId: string | null,
+    filters: {
+      lat?: number;
+      lng?: number;
+      radius?: number;
+      availableNow?: boolean;
+      sortBy?: string;
+      sortOrder?: string;
+      limit?: number;
+      offset?: number;
+    },
+  ): Promise<any> {
+    // 1. Get the vehicle
+    let vehicle: VehicleProfile | null = null;
+    if (vehicleId) {
+      vehicle = await this.vehicleProfileService.findOne(vehicleId, userId);
+    } else {
+      vehicle = await this.vehicleProfileService.findPrimaryByUser(userId);
+    }
+
+    if (!vehicle) {
+      // No vehicle → fall back to unfiltered station list
+      return this.filterStations(filters);
+    }
+
+    // 2. Determine vehicle connector types
+    const vehicleConnectors: string[] =
+      vehicle.connectorTypes && vehicle.connectorTypes.length > 0
+        ? vehicle.connectorTypes
+        : vehicle.connectorType
+          ? vehicle.connectorType.split(',').map(s => s.trim().toLowerCase())
+          : [];
+
+    // 3. Fetch all stations (reuse filterStations)
+    const stationsResult = await this.filterStations({
+      ...filters,
+      limit: filters.limit || 100,
+    });
+
+    const allStations: any[] = stationsResult.data || [];
+
+    // 4. Annotate each station with compatibility info
+    const annotated = allStations.map(station => {
+      let hasCompatibleSocket = false;
+      let bestEffectivePower = 0;
+      let bestEstimatedChargeMin = 0;
+      let matchedConnectorTypes: string[] = [];
+
+      const annotatedChargers = (station.chargers || []).map((charger: any) => {
+        const annotatedSockets = (charger.sockets || []).map((socket: any) => {
+          const normalizedSocketConn = this.normalizeChargerConnector(socket.connectorType);
+          let isCompatible = false;
+          let matchedVehicleConnector: string | null = null;
+
+          for (const vc of vehicleConnectors) {
+            if (this.isConnectorCompatibleWith(vc, socket.connectorType)) {
+              isCompatible = true;
+              matchedVehicleConnector = vc;
+              break;
+            }
+          }
+
+          const socketPower = parseFloat(socket.maxPowerKw || '0');
+          const effectivePower = isCompatible
+            ? this.getEffectiveChargingPower(vehicle!, charger.chargerType || 'ac', socketPower)
+            : 0;
+          const estimatedChargeMin = isCompatible
+            ? this.estimateChargeTime(Number(vehicle!.batteryCapacity), effectivePower)
+            : 0;
+
+          if (isCompatible) {
+            hasCompatibleSocket = true;
+            if (effectivePower > bestEffectivePower) {
+              bestEffectivePower = effectivePower;
+              bestEstimatedChargeMin = estimatedChargeMin;
+            }
+            if (!matchedConnectorTypes.includes(normalizedSocketConn)) {
+              matchedConnectorTypes.push(normalizedSocketConn);
+            }
+          }
+
+          return {
+            ...socket,
+            compatibility: {
+              isCompatible,
+              matchedVehicleConnector,
+              effectiveChargingPowerKw: Math.round(effectivePower * 10) / 10,
+              estimatedChargeTimeMinutes: estimatedChargeMin,
+            },
+          };
+        });
+
+        // Charger-level compatibility = any socket compatible
+        const chargerCompatible = annotatedSockets.some((s: any) => s.compatibility.isCompatible);
+
+        return {
+          ...charger,
+          sockets: annotatedSockets,
+          compatibility: {
+            isCompatible: chargerCompatible,
+          },
+        };
+      });
+
+      return {
+        ...station,
+        chargers: annotatedChargers,
+        compatibility: {
+          isCompatible: hasCompatibleSocket,
+          bestEffectiveChargingPowerKw: Math.round(bestEffectivePower * 10) / 10,
+          bestEstimatedChargeTimeMinutes: bestEstimatedChargeMin,
+          matchedConnectorTypes,
+          vehicleName: `${vehicle!.year} ${vehicle!.make} ${vehicle!.model}`,
+          vehicleId: vehicle!.id,
+        },
+      };
+    });
+
+    // 5. Sort: compatible first, then by distance
+    annotated.sort((a: any, b: any) => {
+      // Compatible first
+      if (a.compatibility.isCompatible && !b.compatibility.isCompatible) return -1;
+      if (!a.compatibility.isCompatible && b.compatibility.isCompatible) return 1;
+      // Then by distance if available
+      if (a.distance != null && b.distance != null) return a.distance - b.distance;
+      return 0;
+    });
+
+    return {
+      data: annotated,
+      total: annotated.length,
+      vehicle: {
+        id: vehicle.id,
+        name: `${vehicle.year} ${vehicle.make} ${vehicle.model}`,
+        connectorTypes: vehicleConnectors,
+        batteryCapacityKwh: Number(vehicle.batteryCapacity),
+        maxAcChargingPowerKw: vehicle.maxAcChargingPower ? Number(vehicle.maxAcChargingPower) : null,
+        maxDcChargingPowerKw: vehicle.maxDcChargingPower ? Number(vehicle.maxDcChargingPower) : null,
+      },
+    };
   }
 }

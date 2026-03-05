@@ -580,6 +580,60 @@ export class NotificationsService implements OnModuleInit {
   }
 
   /**
+   * Send vehicle-compatible station alert
+   * Notifies user when a new compatible charger is available near them
+   */
+  async sendVehicleCompatibleStation(
+    userId: string,
+    stationName: string,
+    stationId: string,
+    vehicleName: string,
+    connectorType: string,
+    maxPowerKw: number,
+    distance: number,
+  ): Promise<void> {
+    await this.sendToUser(userId, NotificationType.VEHICLE_COMPATIBLE_STATION, {
+      title: '🔌 Compatible Charger Found',
+      body: `${stationName} supports your ${vehicleName} (${connectorType}, ${maxPowerKw} kW) — ${distance.toFixed(1)} km away`,
+      data: {
+        stationId,
+        vehicleName,
+        connectorType,
+        maxPowerKw,
+        distance,
+        navigate: `/chargers/station/${stationId}`,
+      },
+    });
+  }
+
+  /**
+   * Send vehicle fast-charger nearby alert
+   * Notifies user when a high-power compatible charger is nearby
+   */
+  async sendVehicleFastChargerNearby(
+    userId: string,
+    stationName: string,
+    stationId: string,
+    vehicleName: string,
+    powerKw: number,
+    estimatedMinutes: number,
+    distance: number,
+  ): Promise<void> {
+    await this.sendToUser(userId, NotificationType.VEHICLE_FAST_CHARGER_NEARBY, {
+      title: '⚡ Fast Charger Nearby',
+      body: `${stationName} can charge your ${vehicleName} in ~${estimatedMinutes} min (${powerKw} kW) — ${distance.toFixed(1)} km away`,
+      data: {
+        stationId,
+        vehicleName,
+        powerKw,
+        estimatedMinutes,
+        distance,
+        navigate: `/chargers/station/${stationId}`,
+      },
+    });
+  }
+
+  /**
    * Update user's FCM token (for Firebase notification integration)
    */
   async updateUserFcmToken(userId: string, fcmToken: string): Promise<void> {

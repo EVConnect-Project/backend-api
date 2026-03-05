@@ -16,6 +16,7 @@ import { AdminAction } from './entities/admin-action.entity';
 import { OwnerPaymentAccount } from '../owner/entities/owner-payment-account.entity';
 import { ChargingStation } from '../owner/entities/charging-station.entity';
 import { ChargerSocket } from '../owner/entities/charger-socket.entity';
+import { VehicleProfile } from '../auth/entities/vehicle-profile.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { ChargingModule } from '../charging/charging.module';
 
@@ -34,6 +35,7 @@ import { ChargingModule } from '../charging/charging.module';
       OwnerPaymentAccount,
       ChargingStation,
       ChargerSocket,
+      VehicleProfile,
     ]),
     NotificationsModule,
     ChargingModule,

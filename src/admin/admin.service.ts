@@ -11,6 +11,7 @@ import { MechanicApplication, ApplicationStatus } from '../mechanic/entities/mec
 import { MechanicEntity } from '../mechanics/entities/mechanic.entity';
 import { MarketplaceListing } from '../marketplace/entities/marketplace-listing.entity';
 import { OwnerPaymentAccount } from '../owner/entities/owner-payment-account.entity';
+import { VehicleProfile } from '../auth/entities/vehicle-profile.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/types/notification-types';
 
@@ -35,6 +36,8 @@ export class AdminService {
     private chargingStationRepository: Repository<ChargingStation>,
     @InjectRepository(ChargerSocket)
     private chargerSocketRepository: Repository<ChargerSocket>,
+    @InjectRepository(VehicleProfile)
+    private vehicleProfileRepository: Repository<VehicleProfile>,
     private notificationsService: NotificationsService,
     private chargingService: ChargingService,
   ) {}
@@ -182,6 +185,102 @@ export class AdminService {
       completedBookings,
       cancelledBookings,
       activeBookings,
+    };
+  }
+
+  // Vehicle Analytics
+  async getVehicleAnalytics() {
+    const vehicles = await this.vehicleProfileRepository.find();
+    const totalVehicles = vehicles.length;
+
+    // Vehicle type distribution (make-based)
+    const makeCount: Record<string, number> = {};
+    vehicles.forEach(v => {
+      const make = (v.make || 'Unknown').toLowerCase();
+      makeCount[make] = (makeCount[make] || 0) + 1;
+    });
+    const vehicleTypeDistribution = Object.entries(makeCount)
+      .map(([name, count]) => ({ name, count, percentage: totalVehicles > 0 ? Math.round((count / totalVehicles) * 100) : 0 }))
+      .sort((a, b) => b.count - a.count);
+
+    // Connector type distribution across all vehicles
+    const connectorCount: Record<string, number> = {};
+    vehicles.forEach(v => {
+      const connectors: string[] = v.connectorTypes || [];
+      connectors.forEach(c => {
+        connectorCount[c] = (connectorCount[c] || 0) + 1;
+      });
+    });
+    const connectorTypeDistribution = Object.entries(connectorCount)
+      .map(([name, count]) => ({ name, count, percentage: totalVehicles > 0 ? Math.round((count / totalVehicles) * 100) : 0 }))
+      .sort((a, b) => b.count - a.count);
+
+    // Available charger connector types from sockets
+    const chargerSockets = await this.chargerSocketRepository
+      .createQueryBuilder('socket')
+      .select('LOWER(socket.connectorType)', 'connectorType')
+      .addSelect('COUNT(*)', 'count')
+      .groupBy('LOWER(socket.connectorType)')
+      .getRawMany();
+
+    // Compatibility match rate: % of vehicles that have at least one matching charger connector
+    const chargerConnectors = new Set(chargerSockets.map(s => s.connectorType?.toLowerCase()));
+    let matchedVehicles = 0;
+    vehicles.forEach(v => {
+      const vehicleConnectors: string[] = v.connectorTypes || [];
+      if (vehicleConnectors.some(vc => chargerConnectors.has(vc.toLowerCase()))) {
+        matchedVehicles++;
+      }
+    });
+    const compatibilityMatchRate = totalVehicles > 0 ? Math.round((matchedVehicles / totalVehicles) * 100) : 0;
+
+    // Power distribution
+    const powerBuckets = {
+      'Under 7 kW': 0,
+      '7-22 kW': 0,
+      '22-50 kW': 0,
+      '50-150 kW': 0,
+      '150+ kW': 0,
+    };
+    vehicles.forEach(v => {
+      const maxPower = Math.max(
+        Number(v.maxAcChargingPower) || 0,
+        Number(v.maxDcChargingPower) || 0,
+      );
+      if (maxPower < 7) powerBuckets['Under 7 kW']++;
+      else if (maxPower < 22) powerBuckets['7-22 kW']++;
+      else if (maxPower < 50) powerBuckets['22-50 kW']++;
+      else if (maxPower < 150) powerBuckets['50-150 kW']++;
+      else powerBuckets['150+ kW']++;
+    });
+    const powerDistribution = Object.entries(powerBuckets)
+      .map(([name, count]) => ({ name, count }));
+
+    // Vehicles registered over time (monthly)
+    const vehicleGrowth = await this.vehicleProfileRepository
+      .createQueryBuilder('vp')
+      .select("TO_CHAR(vp.createdAt, 'YYYY-MM')", 'month')
+      .addSelect('COUNT(*)', 'count')
+      .groupBy("TO_CHAR(vp.createdAt, 'YYYY-MM')")
+      .orderBy("TO_CHAR(vp.createdAt, 'YYYY-MM')", 'ASC')
+      .getRawMany();
+
+    return {
+      totalVehicles,
+      vehicleTypeDistribution,
+      connectorTypeDistribution,
+      compatibilityMatchRate,
+      matchedVehicles,
+      totalChargerConnectors: chargerSockets.length,
+      chargerConnectorDistribution: chargerSockets.map(s => ({
+        name: s.connectorType,
+        count: parseInt(s.count),
+      })),
+      powerDistribution,
+      vehicleGrowth: vehicleGrowth.map(g => ({
+        month: g.month,
+        count: parseInt(g.count),
+      })),
     };
   }
 
