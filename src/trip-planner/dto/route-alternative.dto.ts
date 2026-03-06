@@ -17,10 +17,11 @@ export interface ChargerStopDto {
   estimatedCostLkr: number;
   connectorType: string;
   reliabilityScore: number;
+  chargerType: 'ac' | 'dc';
 }
 
 export interface SafetyWarningDto {
-  type: 'low_battery' | 'no_chargers' | 'many_stops' | 'weather' | 'long_gap';
+  type: 'low_battery' | 'no_chargers' | 'many_stops' | 'weather' | 'long_gap' | 'traffic';
   severity: 'low' | 'medium' | 'high';
   message: string;
 }
@@ -29,6 +30,9 @@ export class RouteAlternativeDto {
   routeNumber: number;
   totalDistanceKm: number;
   totalDurationMinutes: number;
+  drivingDurationMinutes: number; // driving time only (no charging)
+  totalChargingTimeMinutes: number;
+  totalChargingCostLkr: number;
   estimatedArrivalTime: string; // ISO string
   chargingStops: ChargerStopDto[];
   routeScore: number; // Lower is better
@@ -36,4 +40,6 @@ export class RouteAlternativeDto {
   routeSummary: string; // e.g., "Route via A1 Highway"
   isRecommended: boolean;
   safetyWarnings: SafetyWarningDto[];
+  drivingMode: string;
+  arrivalBatteryPercent: number;
 }

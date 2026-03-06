@@ -4,6 +4,7 @@ import { Repository, LessThan } from 'typeorm';
 import { BookingEntity } from './entities/booking.entity';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { Charger } from '../charger/entities/charger.entity';
+import { ChargerSocket } from '../owner/entities/charger-socket.entity';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { NotificationsService } from '../notifications/notifications.service';
 import { BookingMode } from '../charger/enums/booking-mode.enum';
@@ -35,6 +36,8 @@ export class BookingsService {
     private bookingRepository: Repository<BookingEntity>,
     @InjectRepository(Charger)
     private chargerRepository: Repository<Charger>,
+    @InjectRepository(ChargerSocket)
+    private socketRepository: Repository<ChargerSocket>,
     private notificationsService: NotificationsService,
   ) {}
 
@@ -501,6 +504,26 @@ export class BookingsService {
       );
     }
 
+    // Socket-level validation if socketId provided
+    let socket: ChargerSocket | null = null;
+    if (dto.socketId) {
+      socket = await this.socketRepository.findOne({
+        where: { id: dto.socketId, chargerId: dto.chargerId },
+      });
+      if (!socket) {
+        throw new NotFoundException(`Socket with ID ${dto.socketId} not found on this charger`);
+      }
+      // Validate socket-level booking mode
+      if (socket.bookingMode === BookingMode.PRE_BOOKING) {
+        throw new BadRequestException(
+          'This socket only accepts pre-bookings. Please select a different socket or make a reservation.'
+        );
+      }
+      if (socket.status !== 'available') {
+        throw new BadRequestException(`Socket is currently ${socket.status}. Please try another socket.`);
+      }
+    }
+
     // Check charger status
     if (charger.currentStatus !== ChargerStatus.AVAILABLE) {
       throw new BadRequestException(
@@ -512,14 +535,20 @@ export class BookingsService {
     const now = new Date();
     const endTime = new Date(dto.endTime);
 
-    const activePreBooking = await this.bookingRepository
+    const overlapQuery = this.bookingRepository
       .createQueryBuilder('booking')
       .where('booking.chargerId = :chargerId', { chargerId: dto.chargerId })
       .andWhere('booking.bookingType = :bookingType', { bookingType: BookingType.PRE_BOOKING })
       .andWhere('booking.status IN (:...statuses)', { statuses: ['confirmed', 'pending'] })
       .andWhere('booking.startTime <= :endTime', { endTime })
-      .andWhere('booking.endTime > :now', { now })
-      .getOne();
+      .andWhere('booking.endTime > :now', { now });
+
+    // Filter by socket if provided
+    if (dto.socketId) {
+      overlapQuery.andWhere('booking.socketId = :socketId', { socketId: dto.socketId });
+    }
+
+    const activePreBooking = await overlapQuery.getOne();
 
     if (activePreBooking) {
       throw new BadRequestException(
@@ -537,6 +566,7 @@ export class BookingsService {
     const booking = this.bookingRepository.create({
       userId,
       chargerId: dto.chargerId,
+      socketId: dto.socketId || null,
       startTime: now,
       endTime,
       price,
@@ -551,6 +581,13 @@ export class BookingsService {
     charger.currentStatus = ChargerStatus.OCCUPIED;
     charger.lastStatusUpdate = now;
     await this.chargerRepository.save(charger);
+
+    // Update socket status if applicable
+    if (socket) {
+      socket.status = 'in_use';
+      socket.occupiedBy = userId;
+      await this.socketRepository.save(socket);
+    }
 
     this.logger.log(`Walk-in booking created: ${savedBooking.id} for charger ${dto.chargerId}`);
 
@@ -602,6 +639,22 @@ export class BookingsService {
       );
     }
 
+    // Socket-level validation if socketId provided
+    let socket: ChargerSocket | null = null;
+    if (dto.socketId) {
+      socket = await this.socketRepository.findOne({
+        where: { id: dto.socketId, chargerId: dto.chargerId },
+      });
+      if (!socket) {
+        throw new NotFoundException(`Socket with ID ${dto.socketId} not found on this charger`);
+      }
+      if (socket.bookingMode === BookingMode.WALK_IN) {
+        throw new BadRequestException(
+          'This socket only accepts walk-in charging. Please select a different socket.'
+        );
+      }
+    }
+
     const startTime = new Date(dto.startTime);
     const endTime = new Date(dto.endTime);
     const now = new Date();
@@ -640,13 +693,19 @@ export class BookingsService {
     }
 
     // Check for overlapping bookings
-    const overlapping = await this.bookingRepository
+    const overlapQuery = this.bookingRepository
       .createQueryBuilder('booking')
       .where('booking.chargerId = :chargerId', { chargerId: dto.chargerId })
       .andWhere('booking.status NOT IN (:...statuses)', { statuses: ['cancelled', 'completed', 'no_show'] })
       .andWhere('booking.startTime < :endTime', { endTime })
-      .andWhere('booking.endTime > :startTime', { startTime })
-      .getOne();
+      .andWhere('booking.endTime > :startTime', { startTime });
+
+    // Filter by socket if provided (allows parallel bookings on different sockets)
+    if (dto.socketId) {
+      overlapQuery.andWhere('booking.socketId = :socketId', { socketId: dto.socketId });
+    }
+
+    const overlapping = await overlapQuery.getOne();
 
     if (overlapping) {
       throw new BadRequestException(
@@ -667,6 +726,7 @@ export class BookingsService {
     const booking = this.bookingRepository.create({
       userId,
       chargerId: dto.chargerId,
+      socketId: dto.socketId || null,
       startTime,
       endTime,
       price,
@@ -681,6 +741,12 @@ export class BookingsService {
     charger.currentStatus = ChargerStatus.RESERVED;
     charger.lastStatusUpdate = now;
     await this.chargerRepository.save(charger);
+
+    // Update socket status if applicable
+    if (socket) {
+      socket.status = 'reserved';
+      await this.socketRepository.save(socket);
+    }
 
     this.logger.log(`Pre-booking created: ${savedBooking.id} for charger ${dto.chargerId}`);
 

@@ -6,10 +6,11 @@ import { TripPlannerService } from './trip-planner.service';
 import { SmartTripPlannerService } from './services/smart-trip-planner.service';
 import { Charger } from '../charger/entities/charger.entity';
 import { VehicleProfile } from '../auth/entities/vehicle-profile.entity';
+import { TripPlanEntity } from './entities/trip-plan.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Charger, VehicleProfile]),
+    TypeOrmModule.forFeature([Charger, VehicleProfile, TripPlanEntity]),
     HttpModule,
   ],
   controllers: [TripPlannerController],

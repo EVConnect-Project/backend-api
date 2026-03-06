@@ -1,4 +1,27 @@
-import { IsNotEmpty, IsNumber, IsOptional, IsString, Min, Max } from 'class-validator';
+import { IsNotEmpty, IsNumber, IsOptional, IsString, IsArray, IsEnum, ValidateNested, Min, Max } from 'class-validator';
+import { Type } from 'class-transformer';
+
+export enum DrivingMode {
+  ECO = 'eco',
+  NORMAL = 'normal',
+  SPORT = 'sport',
+}
+
+export class WaypointDto {
+  @IsNumber()
+  @Min(-90)
+  @Max(90)
+  lat: number;
+
+  @IsNumber()
+  @Min(-180)
+  @Max(180)
+  lng: number;
+
+  @IsString()
+  @IsOptional()
+  address?: string;
+}
 
 export class SmartTripPlanDto {
   @IsNumber()
@@ -42,4 +65,20 @@ export class SmartTripPlanDto {
   @IsString()
   @IsOptional()
   destAddress?: string;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => WaypointDto)
+  @IsOptional()
+  waypoints?: WaypointDto[];
+
+  @IsEnum(DrivingMode)
+  @IsOptional()
+  drivingMode?: DrivingMode = DrivingMode.NORMAL;
+
+  @IsNumber()
+  @IsOptional()
+  @Min(50)
+  @Max(100)
+  targetBatteryPercent?: number = 80;
 }
