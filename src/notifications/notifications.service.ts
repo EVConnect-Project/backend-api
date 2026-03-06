@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
@@ -7,6 +7,7 @@ import { FcmTokenEntity } from './entities/fcm-token.entity';
 import { NotificationLogEntity } from './entities/notification-log.entity';
 import { NotificationPreferenceEntity } from './entities/notification-preference.entity';
 import { NotificationType, NotificationPayload } from './types/notification-types';
+import { NotificationsGateway } from './notifications.gateway';
 
 @Injectable()
 export class NotificationsService implements OnModuleInit {
@@ -21,6 +22,8 @@ export class NotificationsService implements OnModuleInit {
     @InjectRepository(NotificationPreferenceEntity)
     private notificationPreferenceRepository: Repository<NotificationPreferenceEntity>,
     private configService: ConfigService,
+    @Inject(forwardRef(() => NotificationsGateway))
+    private notificationsGateway: NotificationsGateway,
   ) {}
 
   onModuleInit() {
@@ -29,6 +32,13 @@ export class NotificationsService implements OnModuleInit {
 
   private initializeFirebase() {
     try {
+      // If Firebase is already initialized by another service, reuse it
+      if (admin.apps.length) {
+        this.firebaseApp = admin.app();
+        this.logger.log('Firebase Admin SDK reused from existing instance');
+        return;
+      }
+
       const projectId = this.configService.get('FIREBASE_PROJECT_ID');
       const privateKey = this.configService.get('FIREBASE_PRIVATE_KEY')?.replace(/\\n/g, '\n');
       const clientEmail = this.configService.get('FIREBASE_CLIENT_EMAIL');
@@ -149,6 +159,21 @@ export class NotificationsService implements OnModuleInit {
       log.sentAt = new Date();
       await this.notificationLogRepository.save(log);
       this.logger.log(`✅ Notification sent to user ${userId} (${tokens.length} devices)`);
+
+      // Emit via WebSocket for real-time delivery
+      try {
+        this.notificationsGateway.sendNotificationToUser(userId, {
+          id: log.id,
+          type: log.type,
+          title: log.title,
+          body: log.body,
+          data: log.data,
+          status: log.status,
+          createdAt: log.createdAt,
+        });
+      } catch (wsError) {
+        this.logger.warn(`WebSocket emit failed for user ${userId}: ${wsError}`);
+      }
     } catch (error) {
       log.status = 'failed';
       await this.notificationLogRepository.save(log);
@@ -462,17 +487,53 @@ export class NotificationsService implements OnModuleInit {
   }
 
   /**
-   * Get notification history for a user
+   * Get notification history for a user with pagination
    */
   async getNotificationHistory(
     userId: string,
-    limit: number = 50,
-  ): Promise<NotificationLogEntity[]> {
-    return this.notificationLogRepository.find({
+    limit: number = 20,
+    offset: number = 0,
+  ): Promise<{ notifications: NotificationLogEntity[]; total: number; hasMore: boolean }> {
+    const [notifications, total] = await this.notificationLogRepository.findAndCount({
       where: { userId },
       order: { createdAt: 'DESC' },
       take: limit,
+      skip: offset,
     });
+
+    return {
+      notifications,
+      total,
+      hasMore: offset + notifications.length < total,
+    };
+  }
+
+  /**
+   * Get unread notification count for a user
+   */
+  async getUnreadCount(userId: string): Promise<number> {
+    return this.notificationLogRepository.count({
+      where: { userId, status: 'sent' },
+    });
+  }
+
+  /**
+   * Delete a single notification
+   */
+  async deleteNotification(userId: string, notificationId: string): Promise<boolean> {
+    const result = await this.notificationLogRepository.delete({
+      id: notificationId,
+      userId,
+    });
+    return (result.affected || 0) > 0;
+  }
+
+  /**
+   * Clear all notifications for a user
+   */
+  async clearAllNotifications(userId: string): Promise<number> {
+    const result = await this.notificationLogRepository.delete({ userId });
+    return result.affected || 0;
   }
 
   /**
@@ -483,6 +544,17 @@ export class NotificationsService implements OnModuleInit {
       { id: notificationId },
       { status: 'read', readAt: new Date() },
     );
+  }
+
+  /**
+   * Mark all notifications as read for a user
+   */
+  async markAllAsRead(userId: string): Promise<number> {
+    const result = await this.notificationLogRepository.update(
+      { userId, status: 'sent' },
+      { status: 'read', readAt: new Date() },
+    );
+    return result.affected || 0;
   }
 
   /**
@@ -636,10 +708,8 @@ export class NotificationsService implements OnModuleInit {
   /**
    * Update user's FCM token (for Firebase notification integration)
    */
-  async updateUserFcmToken(userId: string, fcmToken: string): Promise<void> {
-    // This would need a User entity with fcm_token column
-    // For now, use the existing saveFcmToken method
-    await this.saveFcmToken(userId, fcmToken, 'android');
+  async updateUserFcmToken(userId: string, fcmToken: string, platform?: 'ios' | 'android' | 'web'): Promise<void> {
+    await this.saveFcmToken(userId, fcmToken, platform || 'android');
   }
 
   /**

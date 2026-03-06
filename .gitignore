@@ -149,3 +149,6 @@ PERMISSION_SYSTEM.md
 backend.log
 server.log
 *.http
+
+# Firebase service account (private key)
+firebase-service-account.json

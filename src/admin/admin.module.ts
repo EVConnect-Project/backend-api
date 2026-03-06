@@ -18,6 +18,7 @@ import { ChargingStation } from '../owner/entities/charging-station.entity';
 import { ChargerSocket } from '../owner/entities/charger-socket.entity';
 import { VehicleProfile } from '../auth/entities/vehicle-profile.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { NotificationLogEntity } from '../notifications/entities/notification-log.entity';
 import { ChargingModule } from '../charging/charging.module';
 
 @Module({
@@ -36,6 +37,7 @@ import { ChargingModule } from '../charging/charging.module';
       ChargingStation,
       ChargerSocket,
       VehicleProfile,
+      NotificationLogEntity,
     ]),
     NotificationsModule,
     ChargingModule,

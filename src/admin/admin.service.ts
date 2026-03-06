@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException, HttpException, HttpStatus } from '@nestjs/common';
 import { ChargingService } from '../charging/charging.service';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In, Like } from 'typeorm';
+import { Repository, In, Like, ILike } from 'typeorm';
 import { UserEntity } from '../users/entities/user.entity';
 import { Charger } from '../charger/entities/charger.entity';
 import { ChargingStation } from '../owner/entities/charging-station.entity';
@@ -14,6 +14,7 @@ import { OwnerPaymentAccount } from '../owner/entities/owner-payment-account.ent
 import { VehicleProfile } from '../auth/entities/vehicle-profile.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/types/notification-types';
+import { NotificationLogEntity } from '../notifications/entities/notification-log.entity';
 
 @Injectable()
 export class AdminService {
@@ -38,6 +39,8 @@ export class AdminService {
     private chargerSocketRepository: Repository<ChargerSocket>,
     @InjectRepository(VehicleProfile)
     private vehicleProfileRepository: Repository<VehicleProfile>,
+    @InjectRepository(NotificationLogEntity)
+    private notificationLogRepository: Repository<NotificationLogEntity>,
     private notificationsService: NotificationsService,
     private chargingService: ChargingService,
   ) {}
@@ -2364,5 +2367,157 @@ export class AdminService {
 
   async ocppGetConnectedChargers() {
     return this.chargingService.getConnectedChargers();
+  }
+
+  // ==================== NOTIFICATIONS ====================
+
+  async getNotificationLogs(params: {
+    page: number;
+    limit: number;
+    search?: string;
+    type?: string;
+    status?: string;
+  }) {
+    const { page, limit, search, type, status } = params;
+    const skip = (page - 1) * limit;
+
+    const qb = this.notificationLogRepository
+      .createQueryBuilder('log')
+      .leftJoinAndSelect('log.user', 'user')
+      .orderBy('log.createdAt', 'DESC')
+      .skip(skip)
+      .take(limit);
+
+    if (search) {
+      qb.andWhere(
+        '(log.title ILIKE :search OR log.body ILIKE :search OR user.name ILIKE :search OR user.phone ILIKE :search)',
+        { search: `%${search}%` },
+      );
+    }
+
+    if (type) {
+      qb.andWhere('log.type = :type', { type });
+    }
+
+    if (status) {
+      qb.andWhere('log.status = :status', { status });
+    }
+
+    const [notifications, total] = await qb.getManyAndCount();
+
+    return {
+      notifications: notifications.map((n) => ({
+        id: n.id,
+        userId: n.userId,
+        userName: (n as any).user?.name || 'Unknown',
+        userPhone: (n as any).user?.phoneNumber || '',
+        type: n.type,
+        title: n.title,
+        body: n.body,
+        data: n.data,
+        status: n.status,
+        sentAt: n.sentAt,
+        readAt: n.readAt,
+        createdAt: n.createdAt,
+      })),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async getNotificationStats() {
+    const total = await this.notificationLogRepository.count();
+    const sent = await this.notificationLogRepository.count({
+      where: { status: 'sent' },
+    });
+    const read = await this.notificationLogRepository.count({
+      where: { status: 'read' },
+    });
+    const failed = await this.notificationLogRepository.count({
+      where: { status: 'failed' },
+    });
+    const pending = await this.notificationLogRepository.count({
+      where: { status: 'pending' },
+    });
+
+    // Recent 24h count
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const recentCount = await this.notificationLogRepository
+      .createQueryBuilder('log')
+      .where('log.createdAt >= :oneDayAgo', { oneDayAgo })
+      .getCount();
+
+    return { total, sent, read, failed, pending, recentCount };
+  }
+
+  async sendNotificationToUser(
+    userId: string,
+    title: string,
+    body: string,
+    type?: string,
+  ) {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException(`User ${userId} not found`);
+    }
+
+    const notificationType =
+      (type as NotificationType) || NotificationType.ADMIN_ANNOUNCEMENT;
+
+    await this.notificationsService.sendToUser(userId, notificationType, {
+      title,
+      body,
+      data: { source: 'admin', type: notificationType },
+    });
+
+    return { success: true, message: `Notification sent to ${user.name || user.phoneNumber}` };
+  }
+
+  async broadcastNotification(title: string, body: string) {
+    const users = await this.userRepository.find({
+      where: { isBanned: false },
+      select: ['id'],
+    });
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const user of users) {
+      try {
+        await this.notificationsService.sendToUser(
+          user.id,
+          NotificationType.ADMIN_ANNOUNCEMENT,
+          {
+            title,
+            body,
+            data: { source: 'admin_broadcast' },
+          },
+        );
+        successCount++;
+      } catch (err) {
+        failCount++;
+      }
+    }
+
+    return {
+      success: true,
+      message: `Broadcast sent to ${successCount} users (${failCount} failed)`,
+      totalUsers: users.length,
+      successCount,
+      failCount,
+    };
+  }
+
+  async deleteNotificationLog(id: string) {
+    const log = await this.notificationLogRepository.findOne({
+      where: { id },
+    });
+    if (!log) {
+      throw new NotFoundException(`Notification log ${id} not found`);
+    }
+    await this.notificationLogRepository.remove(log);
+    return { success: true, message: 'Notification log deleted' };
   }
 }

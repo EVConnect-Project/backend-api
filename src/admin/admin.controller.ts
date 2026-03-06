@@ -1085,6 +1085,111 @@ export class AdminController {
     return { success: true, mechanic, message: 'Mechanic released successfully' };
   }
 
+  // ==================== NOTIFICATIONS ====================
+
+  /**
+   * Get all notification logs (paginated)
+   */
+  @Get('notifications')
+  async getNotificationLogs(
+    @Query('page') page: string,
+    @Query('limit') limit: string,
+    @Query('search') search: string,
+    @Query('type') type: string,
+    @Query('status') status: string,
+  ) {
+    return this.adminService.getNotificationLogs({
+      page: page ? parseInt(page) : 1,
+      limit: limit ? parseInt(limit) : 20,
+      search,
+      type,
+      status,
+    });
+  }
+
+  /**
+   * Get notification statistics
+   */
+  @Get('notifications/stats')
+  async getNotificationStats() {
+    return this.adminService.getNotificationStats();
+  }
+
+  /**
+   * Send notification to a specific user
+   */
+  @Post('notifications/send')
+  async sendNotificationToUser(
+    @Body() body: { userId: string; title: string; body: string; type?: string },
+    @Request() req,
+    @Ip() ip: string,
+  ) {
+    const result = await this.adminService.sendNotificationToUser(
+      body.userId,
+      body.title,
+      body.body,
+      body.type,
+    );
+    // Audit log
+    await this.adminAuditService.logAction(
+      req.user.userId,
+      'SEND_NOTIFICATION',
+      'user',
+      body.userId,
+      { title: body.title, type: body.type },
+      `Sent notification to user ${body.userId}`,
+      ip,
+    );
+    return result;
+  }
+
+  /**
+   * Broadcast notification to all users
+   */
+  @Post('notifications/broadcast')
+  async broadcastNotification(
+    @Body() body: { title: string; body: string },
+    @Request() req,
+    @Ip() ip: string,
+  ) {
+    const result = await this.adminService.broadcastNotification(
+      body.title,
+      body.body,
+    );
+    await this.adminAuditService.logAction(
+      req.user.userId,
+      'BROADCAST_NOTIFICATION',
+      'system',
+      'all_users',
+      { title: body.title },
+      `Broadcast notification to all users`,
+      ip,
+    );
+    return result;
+  }
+
+  /**
+   * Delete a notification log entry
+   */
+  @Delete('notifications/:id')
+  async deleteNotificationLog(
+    @Param('id') id: string,
+    @Request() req,
+    @Ip() ip: string,
+  ) {
+    const result = await this.adminService.deleteNotificationLog(id);
+    await this.adminAuditService.logAction(
+      req.user.userId,
+      'DELETE_NOTIFICATION',
+      'notification',
+      id,
+      {},
+      `Deleted notification log ${id}`,
+      ip,
+    );
+    return result;
+  }
+
   // ==================== AUDIT LOG ====================
 
   /**

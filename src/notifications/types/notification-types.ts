@@ -44,6 +44,9 @@ export enum NotificationType {
   // Vehicle Compatibility (NEW)
   VEHICLE_COMPATIBLE_STATION = 'vehicle_compatible_station',
   VEHICLE_FAST_CHARGER_NEARBY = 'vehicle_fast_charger_nearby',
+
+  // Admin
+  ADMIN_ANNOUNCEMENT = 'admin_announcement',
 }
 
 export interface NotificationPayload {
