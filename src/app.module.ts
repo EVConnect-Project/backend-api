@@ -31,6 +31,7 @@ import { EmergencyModule } from './emergency/emergency.module';
 import { FeedbackModule } from './feedback/feedback.module';
 import { PromotionsModule } from './promotions/promotions.module';
 import { StationModule } from './station/station.module';
+import { DirectionsModule } from './directions/directions.module';
 
 @Module({
   imports: [
@@ -81,6 +82,7 @@ import { StationModule } from './station/station.module';
     FeedbackModule,
     PromotionsModule,
     StationModule,
+    DirectionsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
