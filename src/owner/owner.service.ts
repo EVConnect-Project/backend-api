@@ -187,6 +187,7 @@ export class OwnerService {
 
     return {
       ...charger,
+      powerKw: charger.maxPowerKw, // Explicitly include powerKw for frontend compatibility
       stats: {
         totalBookings,
         completedBookings,
