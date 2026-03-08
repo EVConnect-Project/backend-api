@@ -14,7 +14,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Multer } from 'multer';
 
 // Allowed Cloudinary folder names (prevents arbitrary path injection)
-const ALLOWED_FOLDERS = ['marketplace', 'chargers/individual', 'chargers/stations'] as const;
+const ALLOWED_FOLDERS = ['marketplace', 'chargers/individual', 'chargers/stations', 'promotions'] as const;
 type AllowedFolder = typeof ALLOWED_FOLDERS[number];
 
 @Controller('cloudinary')
