@@ -15,6 +15,10 @@ export class CreateStationDto {
   @IsNotEmpty()
   locationUrl: string;
 
+  @IsString()
+  @IsNotEmpty()
+  city: string;
+
   @IsNumber()
   @IsOptional()
   @Min(1)

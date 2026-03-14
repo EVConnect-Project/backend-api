@@ -165,6 +165,10 @@ export class AppModule implements OnModuleInit {
       await queryRunner.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS accepted_terms BOOLEAN DEFAULT false`);
       await queryRunner.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS accepted_privacy_policy BOOLEAN DEFAULT false`);
       await queryRunner.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_accepted_at TIMESTAMP`);
+
+      // Charger/Station city fields for display-friendly location text
+      await queryRunner.query(`ALTER TABLE chargers ADD COLUMN IF NOT EXISTS city VARCHAR(120)`);
+      await queryRunner.query(`ALTER TABLE charging_stations ADD COLUMN IF NOT EXISTS city VARCHAR(120)`);
       
       // Create indexes
       await queryRunner.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_phone_users ON users(phone) WHERE phone IS NOT NULL`);

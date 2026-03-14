@@ -32,6 +32,9 @@ export class ChargingStation {
   @Column({ type: 'text' })
   address: string;
 
+  @Column({ name: 'city', type: 'varchar', length: 120, nullable: true })
+  city: string | null;
+
   @Column({ name: 'parking_capacity', type: 'int', nullable: true })
   parkingCapacity: number;
 

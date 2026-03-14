@@ -17,6 +17,10 @@ export class CreateIndividualChargerDto {
 
   @IsString()
   @IsNotEmpty()
+  city: string;
+
+  @IsString()
+  @IsNotEmpty()
   chargerType: 'ac' | 'dc';
 
   @IsNumber()

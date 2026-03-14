@@ -57,6 +57,9 @@ export class Charger {
   @Column({ nullable: true })
   address: string;
 
+  @Column({ type: "varchar", length: 120, nullable: true })
+  city: string | null;
+
   @Column({ nullable: true })
   description: string;
 
