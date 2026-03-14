@@ -41,8 +41,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('User account is banned');
     }
 
-    // Validate token version — invalidates tokens issued before logout
-    if (payload.tokenVersion !== undefined && payload.tokenVersion !== user.tokenVersion) {
+    // Validate token version when supported by the current schema.
+    if (
+      typeof payload.tokenVersion === 'number' &&
+      typeof user.tokenVersion === 'number' &&
+      payload.tokenVersion !== user.tokenVersion
+    ) {
       throw new UnauthorizedException('Token has been invalidated. Please login again.');
     }
 
