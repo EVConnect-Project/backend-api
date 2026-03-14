@@ -29,6 +29,11 @@ export class ChargingController {
     return this.chargingService.getConnectedChargers();
   }
 
+  @Get('chargers/by-identity/:identity')
+  async getChargerByIdentity(@Param('identity') identity: string) {
+    return this.chargingService.getChargerByIdentity(identity);
+  }
+
   @Get('chargers/:id')
   async getChargerDetails(@Param('id') chargerId: string) {
     return this.chargingService.getChargerDetails(chargerId);
@@ -39,10 +44,16 @@ export class ChargingController {
   async createSession(
     @Request() req,
     @Body('chargerId') chargerId: string,
+    @Body('chargeBoxIdentity') chargeBoxIdentity?: string,
     @Body('connectorId') connectorId?: number,
   ) {
     const userId = req.user.userId;
-    return this.chargingService.createSession(userId, chargerId, connectorId);
+    return this.chargingService.createSession(
+      userId,
+      chargerId,
+      connectorId,
+      chargeBoxIdentity,
+    );
   }
 
   @Post('sessions/:id/start')
@@ -139,6 +150,13 @@ export class ChargingController {
   @UseGuards(WebhookAuthGuard)
   @HttpCode(HttpStatus.OK)
   async handleSessionCompleted(@Body() payload: any) {
+    return this.chargingService.handleSessionCompletedWebhook(payload);
+  }
+
+  @Post('webhooks/session-completed-full')
+  @UseGuards(WebhookAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async handleSessionCompletedFull(@Body() payload: any) {
     return this.chargingService.handleSessionCompletedWebhook(payload);
   }
 }

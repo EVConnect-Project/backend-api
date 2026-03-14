@@ -27,16 +27,22 @@ export class PaymentMethodEntity {
   type: PaymentMethodType;
 
   @Column({ nullable: true })
+  stripePaymentMethodId: string; // Stripe payment method ID (legacy)
+
+  @Column({ nullable: true })
+  brand: string; // Card brand (legacy column - same as cardBrand)
+
+  @Column({ nullable: true })
   cardBrand: string; // visa, mastercard, amex
 
   @Column({ nullable: true })
   lastFour: string; // Last 4 digits of card
 
-  @Column({ nullable: true })
-  expiryMonth: string;
+  @Column({ type: 'integer', nullable: true })
+  expiryMonth: number;
 
-  @Column({ nullable: true })
-  expiryYear: string;
+  @Column({ type: 'integer', nullable: true })
+  expiryYear: number;
 
   @Column({ nullable: true })
   cardholderName: string;
@@ -48,17 +54,7 @@ export class PaymentMethodEntity {
   isDefault: boolean;
 
   @Column({ type: 'jsonb', nullable: true })
-  billingAddress: {
-    line1?: string;
-    line2?: string;
-    city?: string;
-    state?: string;
-    postalCode?: string;
-    country?: string;
-  };
-
-  @Column({ type: 'text', nullable: true })
-  metadata: string; // JSON string for additional details
+  metadata: any; // Additional details as JSON (can store billing address here)
 
   @CreateDateColumn()
   createdAt: Date;

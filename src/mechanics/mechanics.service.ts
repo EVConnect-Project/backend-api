@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/commo
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { MechanicEntity } from './entities/mechanic.entity';
+import { MechanicExpertiseEntity } from './entities/mechanic-expertise.entity';
 import { UserEntity } from '../users/entities/user.entity';
 import { MechanicApplication } from '../mechanic/entities/mechanic-application.entity';
 import { Charger } from '../charger/entities/charger.entity';
@@ -9,8 +10,11 @@ import { CreateMechanicDto } from './dto/create-mechanic.dto';
 import { UpdateMechanicDto } from './dto/update-mechanic.dto';
 import { EmergencyRequestDto } from './dto/emergency-request.dto';
 import { NotificationsService } from '../notifications/notifications.service';
+import { FirebaseNotificationService } from '../notifications/services/firebase-notification.service';
 import { NotificationType } from '../notifications/types/notification-types';
 import { EmergencyService } from '../emergency/emergency.service';
+import { TrafficService } from './services/traffic.service';
+import { ServiceMatcherService } from './services/service-matcher.service';
 import axios from 'axios';
 
 @Injectable()
@@ -18,6 +22,8 @@ export class MechanicsService {
   constructor(
     @InjectRepository(MechanicEntity)
     private mechanicRepository: Repository<MechanicEntity>,
+    @InjectRepository(MechanicExpertiseEntity)
+    private expertiseRepository: Repository<MechanicExpertiseEntity>,
     @InjectRepository(UserEntity)
     private userRepository: Repository<UserEntity>,
     @InjectRepository(MechanicApplication)
@@ -25,8 +31,11 @@ export class MechanicsService {
     @InjectRepository(Charger)
     private chargerRepository: Repository<Charger>,
     private notificationsService: NotificationsService,
+    private firebaseNotificationService: FirebaseNotificationService,
     @Inject(forwardRef(() => EmergencyService))
     private emergencyService: EmergencyService,
+    private trafficService: TrafficService,
+    private serviceMatcherService: ServiceMatcherService,
   ) {}
 
   async register(createMechanicDto: CreateMechanicDto): Promise<MechanicEntity> {
@@ -35,10 +44,21 @@ export class MechanicsService {
   }
 
   async findAll(): Promise<MechanicEntity[]> {
-    return this.mechanicRepository.find({
-      where: { available: true, isBanned: false },
-      order: { rating: 'DESC' },
-    });
+    try {
+      // Try with both filters first
+      const mechanics = await this.mechanicRepository.find({
+        where: { available: true, isBanned: false },
+        order: { rating: 'DESC' },
+      });
+      return mechanics;
+    } catch (error) {
+      console.error('Error fetching mechanics with isBanned filter:', error.message);
+      // Fallback: just filter by available
+      return this.mechanicRepository.find({
+        where: { available: true },
+        order: { rating: 'DESC' },
+      });
+    }
   }
 
   async findOne(id: string): Promise<MechanicEntity> {
@@ -53,9 +73,9 @@ export class MechanicsService {
 
   async findNearby(lat: number, lng: number, radiusKm: number = 10): Promise<any[]> {
     try {
-      // Get all available mechanics
+      // Get all available, non-banned mechanics
       const allMechanics = await this.mechanicRepository.find({
-        where: { available: true },
+        where: { available: true, isBanned: false },
         order: { rating: 'DESC' },
       });
       
@@ -70,13 +90,18 @@ export class MechanicsService {
           lng: parseFloat(mechanic.lng as any),
           rating: parseFloat(mechanic.rating as any),
           phone: mechanic.phone,
-          email: mechanic.email,
           description: mechanic.description,
           available: mechanic.available,
           pricePerHour: mechanic.pricePerHour ? parseFloat(mechanic.pricePerHour as any) : null,
+          serviceRadius: mechanic.serviceRadius ? parseFloat(mechanic.serviceRadius as any) : 5,
           distance: this.calculateDistance(lat, lng, parseFloat(mechanic.lat as any), parseFloat(mechanic.lng as any)),
         }))
-        .filter(m => m.distance <= radiusKm)
+        // Filter: Request must be within search radius AND within mechanic's service radius
+        .filter(m => {
+          const withinSearchRadius = m.distance <= radiusKm;
+          const withinMechanicServiceRadius = m.distance <= m.serviceRadius;
+          return withinSearchRadius && withinMechanicServiceRadius;
+        })
         .sort((a, b) => a.distance - b.distance);
 
       return mechanicsWithDistance;
@@ -144,6 +169,20 @@ export class MechanicsService {
     }
 
     mechanic.available = available;
+    return this.mechanicRepository.save(mechanic);
+  }
+
+  async updateMyLocation(userId: string, lat: number, lng: number): Promise<MechanicEntity> {
+    const mechanic = await this.mechanicRepository.findOne({
+      where: { userId },
+    });
+
+    if (!mechanic) {
+      throw new NotFoundException(`Mechanic profile not found for user ${userId}`);
+    }
+
+    mechanic.lat = lat;
+    mechanic.lng = lng;
     return this.mechanicRepository.save(mechanic);
   }
 
@@ -217,8 +256,9 @@ export class MechanicsService {
   async getAIRecommendations(request: EmergencyRequestDto, userId: string) {
     const radiusKm = request.radiusKm || 10;
     const urgencyMultiplier = this.getUrgencyMultiplier(request.urgencyLevel);
+    const problemType = request.problemType || 'general';
 
-    console.log(`🤖 AI Analysis for emergency at (${request.lat}, ${request.lng}), radius: ${radiusKm}km`);
+    console.log(`🤖 AI Analysis for emergency at (${request.lat}, ${request.lng}), radius: ${radiusKm}km, problem: ${problemType}`);
 
     // Get all available mechanics within radius
     const nearbyMechanics = await this.findNearby(request.lat, request.lng, radiusKm);
@@ -231,9 +271,24 @@ export class MechanicsService {
       };
     }
 
-    // Prepare features for AI model
+    // Fetch expertise data for all nearby mechanics for this problem type
+    const mechanicIds = nearbyMechanics.map(m => m.id);
+    const expertiseMap = await this.getExpertiseForMechanics(mechanicIds, problemType);
+
+    // Prepare features for AI model with enhanced expertise data
     const mechanicsForAI = nearbyMechanics.map(mechanic => {
       const serviceMatch = this.calculateServiceMatch(mechanic, request);
+      const expertise = expertiseMap.get(mechanic.id);
+      
+      // Calculate expertise-based features
+      const problemTypeExperience = expertise?.jobsCompleted ?? 0;
+      const successRate = (expertise && expertise.jobsCompleted > 0)
+        ? (expertise.jobsSuccessful / expertise.jobsCompleted) 
+        : 0.5; // Default to 50% if no history
+      const avgResolutionMinutes = expertise?.avgResolutionMinutes ?? 60; // Default 60 min
+      const satisfactionRating = expertise?.avgSatisfactionRating 
+        ? parseFloat(expertise.avgSatisfactionRating as any) 
+        : mechanic.rating; // Fall back to overall rating
       
       return {
         distance_km: mechanic.distance,
@@ -244,6 +299,11 @@ export class MechanicsService {
         years_experience: mechanic.yearsOfExperience || 0,
         urgency_level: this.getUrgencyNumber(request.urgencyLevel),
         price_per_hour: mechanic.pricePerHour || 50,
+        // New expertise-based features
+        problem_type_jobs: problemTypeExperience,
+        problem_type_success_rate: successRate,
+        avg_resolution_minutes: avgResolutionMinutes,
+        problem_type_rating: satisfactionRating,
       };
     });
 
@@ -271,18 +331,52 @@ export class MechanicsService {
       );
     }
 
-    // Combine AI scores with additional factors
+    // Get real-time traffic ETAs for top mechanics
+    const trafficETAs = await this.getTrafficETAs(request.lat, request.lng, nearbyMechanics.slice(0, 10));
+
+    // Combine AI scores with additional factors including traffic and expertise
     const scoredMechanics = nearbyMechanics.map((mechanic, idx) => {
       const baseScore = aiScores[idx] || 50;
-      const eta = this.estimateArrivalTime(mechanic.distance, urgencyMultiplier);
+      const trafficData = trafficETAs.get(mechanic.id);
+      const expertise = expertiseMap.get(mechanic.id);
+      
+      // Use traffic-aware ETA if available, otherwise estimate
+      const eta = trafficData 
+        ? trafficData.durationInTrafficMinutes 
+        : this.estimateArrivalTime(mechanic.distance, urgencyMultiplier);
+
+      // Adjust score based on traffic conditions
+      let adjustedScore = baseScore;
+      if (trafficData) {
+        // Penalize mechanics stuck in heavy traffic
+        if (trafficData.trafficLevel === 'heavy') adjustedScore -= 5;
+        if (trafficData.trafficLevel === 'severe') adjustedScore -= 10;
+      }
+
+      // Build expertise info for response
+      const expertiseInfo = expertise ? {
+        problemTypeJobsCompleted: expertise.jobsCompleted,
+        problemTypeSuccessRate: expertise.jobsCompleted > 0 
+          ? Math.round((expertise.jobsSuccessful / expertise.jobsCompleted) * 100) 
+          : null,
+        avgResolutionMinutes: expertise.avgResolutionMinutes,
+        problemTypeRating: expertise.avgSatisfactionRating 
+          ? parseFloat(expertise.avgSatisfactionRating as any) 
+          : null,
+        isExpert: expertise.jobsCompleted >= 10 && 
+          (expertise.jobsSuccessful / expertise.jobsCompleted) >= 0.9,
+      } : null;
 
       return {
         ...mechanic,
-        aiScore: baseScore,
+        aiScore: Math.max(0, adjustedScore),
         estimatedArrivalMinutes: eta,
-        recommendationTier: this.getRecommendationTier(baseScore),
-        matchReasons: this.getMatchReasons(mechanic, request, baseScore),
+        recommendationTier: this.getRecommendationTier(adjustedScore),
+        matchReasons: this.getMatchReasons(mechanic, request, adjustedScore, trafficData, expertise),
         usingMLModel: usingAI,
+        trafficConditions: trafficData?.trafficLevel || 'unknown',
+        routeSummary: trafficData?.routeSummary || null,
+        problemTypeExpertise: expertiseInfo,
       };
     });
 
@@ -300,15 +394,15 @@ export class MechanicsService {
   }
 
   private calculateServiceMatch(mechanic: any, request: EmergencyRequestDto): number {
-    if (!request.requiredServices || request.requiredServices.length === 0) {
-      return 0.5; // Neutral if no services specified
-    }
-
-    const matches = request.requiredServices.filter(s => 
-      mechanic.services.includes(s)
+    // Use enhanced service matcher with compatibility matrix
+    const score = this.serviceMatcherService.calculateServiceMatchScore(
+      mechanic.services,
+      request.requiredServices,
+      request.problemType,
     );
-
-    return matches.length / request.requiredServices.length;
+    
+    // Return as ratio (0-1) for AI model compatibility
+    return score / 100;
   }
 
   private getUrgencyNumber(urgencyLevel?: string): number {
@@ -324,16 +418,26 @@ export class MechanicsService {
   private calculateFallbackScore(features: any, urgencyMultiplier: number): number {
     let score = 0;
 
-    // Distance factor
-    score += (1 - Math.min(features.distance_km / 50, 1)) * 30;
-    // Rating factor
-    score += (features.rating / 5) * 25;
-    // Availability
-    score += features.available * 20;
-    // Service match
+    // Distance factor (0-25 points)
+    score += (1 - Math.min(features.distance_km / 50, 1)) * 25;
+    // Rating factor (0-20 points)
+    score += (features.rating / 5) * 20;
+    // Availability (0-15 points)
+    score += features.available * 15;
+    // Service match (0-15 points)
     score += features.service_match * 15;
-    // Experience
+    // General experience (0-10 points)
     score += (Math.min(features.completed_jobs, 200) / 200) * 10;
+
+    // Problem-type expertise factors (0-15 points total)
+    if (features.problem_type_jobs > 0) {
+      // Jobs completed for this problem type (0-5 points)
+      score += Math.min(features.problem_type_jobs / 20, 1) * 5;
+      // Success rate for this problem type (0-5 points)
+      score += features.problem_type_success_rate * 5;
+      // Problem-type rating bonus (0-5 points)
+      score += ((features.problem_type_rating || features.rating) / 5) * 5;
+    }
 
     // Urgency modifier
     if (urgencyMultiplier > 1) {
@@ -371,13 +475,175 @@ export class MechanicsService {
     return 'available';
   }
 
-  private getMatchReasons(mechanic: any, request: EmergencyRequestDto, score: number): string[] {
+  /**
+   * Get expertise data for multiple mechanics for a specific problem type
+   */
+  private async getExpertiseForMechanics(
+    mechanicIds: string[],
+    problemType: string,
+  ): Promise<Map<string, MechanicExpertiseEntity>> {
+    const expertiseMap = new Map<string, MechanicExpertiseEntity>();
+
+    if (mechanicIds.length === 0) {
+      return expertiseMap;
+    }
+
+    try {
+      const expertiseRecords = await this.expertiseRepository
+        .createQueryBuilder('expertise')
+        .where('expertise.mechanicId IN (:...mechanicIds)', { mechanicIds })
+        .andWhere('expertise.problemType = :problemType', { problemType })
+        .getMany();
+
+      for (const record of expertiseRecords) {
+        expertiseMap.set(record.mechanicId, record);
+      }
+    } catch (error) {
+      console.warn(`⚠️ Failed to fetch expertise data: ${error.message}`);
+    }
+
+    return expertiseMap;
+  }
+
+  /**
+   * Update mechanic expertise after job completion
+   */
+  async updateMechanicExpertise(
+    mechanicId: string,
+    problemType: string,
+    successful: boolean,
+    resolutionMinutes?: number,
+    satisfactionRating?: number,
+  ): Promise<MechanicExpertiseEntity> {
+    // Find or create expertise record
+    let expertise = await this.expertiseRepository.findOne({
+      where: { mechanicId, problemType },
+    });
+
+    if (!expertise) {
+      expertise = this.expertiseRepository.create({
+        mechanicId,
+        problemType,
+        jobsCompleted: 0,
+        jobsSuccessful: 0,
+      });
+    }
+
+    // Update counters
+    expertise.jobsCompleted += 1;
+    if (successful) {
+      expertise.jobsSuccessful += 1;
+    }
+    expertise.lastJobAt = new Date();
+
+    // Update rolling averages
+    if (resolutionMinutes !== undefined) {
+      if (expertise.avgResolutionMinutes) {
+        // Weighted average: new = (old * (n-1) + new) / n
+        expertise.avgResolutionMinutes = Math.round(
+          (expertise.avgResolutionMinutes * (expertise.jobsCompleted - 1) + resolutionMinutes) / 
+          expertise.jobsCompleted
+        );
+      } else {
+        expertise.avgResolutionMinutes = resolutionMinutes;
+      }
+    }
+
+    if (satisfactionRating !== undefined) {
+      if (expertise.avgSatisfactionRating) {
+        expertise.avgSatisfactionRating = parseFloat(
+          ((parseFloat(expertise.avgSatisfactionRating as any) * (expertise.jobsCompleted - 1) + satisfactionRating) / 
+          expertise.jobsCompleted).toFixed(2)
+        );
+      } else {
+        expertise.avgSatisfactionRating = satisfactionRating;
+      }
+    }
+
+    return this.expertiseRepository.save(expertise);
+  }
+
+  /**
+   * Get all expertise records for a mechanic
+   */
+  async getMechanicExpertise(mechanicId: string): Promise<MechanicExpertiseEntity[]> {
+    return this.expertiseRepository.find({
+      where: { mechanicId },
+      order: { jobsCompleted: 'DESC' },
+    });
+  }
+
+  /**
+   * Get real-time traffic ETAs for mechanics
+   */
+  private async getTrafficETAs(
+    userLat: number,
+    userLng: number,
+    mechanics: any[],
+  ): Promise<Map<string, any>> {
+    try {
+      const mechanicsWithLocation = mechanics
+        .filter(m => m.lat && m.lng)
+        .map(m => ({ id: m.id, lat: m.lat, lng: m.lng }));
+
+      if (mechanicsWithLocation.length === 0) {
+        return new Map();
+      }
+
+      return await this.trafficService.getBulkETAs(
+        userLat,
+        userLng,
+        mechanicsWithLocation,
+      );
+    } catch (error) {
+      console.warn('Traffic ETA calculation failed:', error.message);
+      return new Map();
+    }
+  }
+
+  private getMatchReasons(
+    mechanic: any, 
+    request: EmergencyRequestDto, 
+    score: number, 
+    trafficData?: any,
+    expertise?: MechanicExpertiseEntity | null,
+  ): string[] {
     const reasons: string[] = [];
+
+    // Expertise-based reasons (prioritize these)
+    if (expertise) {
+      const successRate = expertise.jobsCompleted > 0 
+        ? (expertise.jobsSuccessful / expertise.jobsCompleted) 
+        : 0;
+      
+      if (expertise.jobsCompleted >= 10 && successRate >= 0.9) {
+        reasons.push(`⭐ Expert in ${request.problemType?.replace('_', ' ') || 'this issue'}`);
+      } else if (expertise.jobsCompleted >= 5) {
+        reasons.push(`Experienced with ${request.problemType?.replace('_', ' ') || 'this issue'}`);
+      }
+
+      if (successRate >= 0.95 && expertise.jobsCompleted >= 5) {
+        reasons.push(`${Math.round(successRate * 100)}% success rate`);
+      }
+
+      if (expertise.avgResolutionMinutes && expertise.avgResolutionMinutes < 45) {
+        reasons.push('Fast problem resolver');
+      }
+    }
 
     if (mechanic.distance < 2) {
       reasons.push('Very close to your location');
     } else if (mechanic.distance < 5) {
       reasons.push('Nearby location');
+    }
+
+    // Add traffic-aware ETA reason
+    if (trafficData) {
+      if (trafficData.trafficLevel === 'low') {
+        reasons.push('Clear route - fast arrival');
+      } else if (trafficData.trafficLevel === 'moderate') {
+        reasons.push('Moderate traffic conditions');
+      }
     }
 
     if (mechanic.rating >= 4.5) {
@@ -388,6 +654,11 @@ export class MechanicsService {
 
     if (mechanic.completedJobs >= 50) {
       reasons.push('Experienced professional');
+    }
+
+    // Add response time reputation
+    if (mechanic.average_response_time_minutes && mechanic.average_response_time_minutes < 10) {
+      reasons.push('Fast response history');
     }
 
     if (request.requiredServices && request.requiredServices.length > 0) {
@@ -465,13 +736,12 @@ export class MechanicsService {
             NotificationType.MECHANIC_ASSIGNED,
             {
               title: '🚨 Emergency Breakdown Request',
-              body: `${user.name || user.email} needs urgent assistance at ${locationText}`,
+              body: `${user.name || user.phoneNumber} needs urgent assistance at ${locationText}`,
               data: {
                 type: 'emergency_request',
                 requestId: emergencyRequest.id,
                 userId,
-                userName: user.name || user.email,
-                userEmail: user.email,
+                userName: user.name || user.phoneNumber,
                 userPhone: user.phoneNumber,
                 location: locationText,
                 lat: userLocation.lat.toString(),
@@ -504,6 +774,68 @@ export class MechanicsService {
       console.error('❌ Error sending emergency alerts:', error);
       throw error;
     }
+  }
+
+  /**
+   * Get route with traffic information using TrafficService
+   */
+  async getRouteWithTraffic(
+    originLat: number,
+    originLng: number,
+    destLat: number,
+    destLng: number,
+  ): Promise<any> {
+    try {
+      // Get traffic-aware ETA
+      const trafficETA = await this.trafficService.getTrafficAwareETA(
+        originLat,
+        originLng,
+        destLat,
+        destLng,
+      );
+
+      // Calculate distance
+      const distance = this.calculateDistance(originLat, originLng, destLat, destLng);
+
+      // Get route polyline (simplified - in production use Google Maps Directions API)
+      const polyline = this.generateSimplePolyline(originLat, originLng, destLat, destLng);
+
+      return {
+        distance,
+        duration: trafficETA.durationMinutes,
+        trafficCondition: trafficETA.trafficLevel,
+        polyline,
+        routeSummary: trafficETA.routeSummary || `${distance.toFixed(1)} km`,
+      };
+    } catch (error) {
+      console.error('❌ Error getting route with traffic:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Generate simple polyline between two points
+   * In production, use Google Maps Directions API for actual route
+   */
+  private generateSimplePolyline(
+    startLat: number,
+    startLng: number,
+    endLat: number,
+    endLng: number,
+  ): Array<{ lat: number; lng: number }> {
+    // Simple straight line with 10 points
+    const points: Array<{ lat: number; lng: number }> = [];
+    const steps = 10;
+
+    for (let i = 0; i <= steps; i++) {
+      const ratio = i / steps;
+      points.push({
+        lat: startLat + (endLat - startLat) * ratio,
+        lng: startLng + (endLng - startLng) * ratio,
+      });
+    }
+
+    return points;
   }
 }
 

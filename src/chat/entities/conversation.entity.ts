@@ -23,8 +23,9 @@ export class Conversation {
   id: string;
 
   @Column({
-    type: 'enum',
-    enum: ConversationType,
+    type: 'varchar',
+    length: 50,
+    default: ConversationType.DIRECT,
   })
   type: ConversationType;
 

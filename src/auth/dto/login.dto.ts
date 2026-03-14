@@ -1,11 +1,9 @@
 import { IsNotEmpty, IsString } from 'class-validator';
-import { IsEmailOrPhone } from '../validators/email-or-phone.validator';
 
 export class LoginDto {
   @IsString()
   @IsNotEmpty()
-  @IsEmailOrPhone()
-  email: string; // Can be email or phone number
+  phoneNumber: string;
 
   @IsString()
   @IsNotEmpty()

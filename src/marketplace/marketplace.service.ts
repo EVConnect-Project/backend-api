@@ -70,7 +70,7 @@ export class MarketplaceService {
     return this.listingRepository
       .createQueryBuilder('listing')
       .leftJoin('listing.seller', 'seller')
-      .addSelect(['seller.id', 'seller.name', 'seller.email'])
+      .addSelect(['seller.id', 'seller.name', 'seller.phoneNumber'])
       .leftJoinAndSelect('listing.images', 'images')
       .where('listing.status = :status', { status: 'approved' })
       .andWhere('listing.isBanned = :isBanned', { isBanned: false })
@@ -83,7 +83,7 @@ export class MarketplaceService {
     const listing = await this.listingRepository
       .createQueryBuilder('listing')
       .leftJoin('listing.seller', 'seller')
-      .addSelect(['seller.id', 'seller.name', 'seller.email'])
+      .addSelect(['seller.id', 'seller.name', 'seller.phoneNumber'])
       .leftJoinAndSelect('listing.images', 'images')
       .where('listing.id = :id', { id })
       .getOne();
@@ -251,7 +251,7 @@ export class MarketplaceService {
     const listing = await this.listingRepository
       .createQueryBuilder('listing')
       .leftJoin('listing.seller', 'seller')
-      .addSelect(['seller.id', 'seller.name', 'seller.email'])
+      .addSelect(['seller.id', 'seller.name', 'seller.phoneNumber'])
       .leftJoinAndSelect('listing.images', 'images')
       .where('listing.id = :id', { id })
       .getOne();
@@ -279,7 +279,7 @@ export class MarketplaceService {
     const listing = await this.listingRepository
       .createQueryBuilder('listing')
       .leftJoin('listing.seller', 'seller')
-      .addSelect(['seller.id', 'seller.name', 'seller.email'])
+      .addSelect(['seller.id', 'seller.name', 'seller.phoneNumber'])
       .leftJoinAndSelect('listing.images', 'images')
       .where('listing.id = :id', { id })
       .getOne();
@@ -317,7 +317,7 @@ export class MarketplaceService {
     const queryBuilder = this.listingRepository
       .createQueryBuilder('listing')
       .leftJoin('listing.seller', 'seller')
-      .addSelect(['seller.id', 'seller.name', 'seller.email'])
+      .addSelect(['seller.id', 'seller.name', 'seller.phoneNumber'])
       .leftJoinAndSelect('listing.images', 'images');
 
     // Filter by status if provided (handle comma-separated statuses)
@@ -378,17 +378,23 @@ export class MarketplaceService {
     limit: number;
     totalPages: number;
   }> {
-    const page = dto.page || 1;
-    const limit = dto.limit || 10;
-    const skip = (page - 1) * limit;
+    try {
+      console.log('🛒 getMarketplaceFeed called with:', dto);
+      const page = dto.page || 1;
+      const limit = dto.limit || 10;
+      const skip = (page - 1) * limit;
 
-    // Build query
-    const queryBuilder = this.listingRepository
-      .createQueryBuilder('listing')
-      .leftJoin('listing.seller', 'seller')
-      .addSelect(['seller.id', 'seller.name', 'seller.email'])
-      .leftJoinAndSelect('listing.images', 'images')
-      .where('listing.status = :status', { status: 'approved' });
+      // Build query
+      const queryBuilder = this.listingRepository
+        .createQueryBuilder('listing')
+        .leftJoin('listing.seller', 'seller')
+        .addSelect(['seller.id', 'seller.name', 'seller.phoneNumber', 'seller.isBanned'])
+        .leftJoinAndSelect('listing.images', 'images')
+        .where('listing.status = :status', { status: 'approved' })
+        .andWhere('listing.isBanned = :isBanned', { isBanned: false })
+        .andWhere('(seller.isBanned IS NULL OR seller.isBanned = :sellerBanned)', { sellerBanned: false });
+      
+      console.log('📝 Query built successfully');
 
     // Apply filters
     if (dto.category) {
@@ -420,24 +426,33 @@ export class MarketplaceService {
       queryBuilder.andWhere('listing.title ILIKE :search', { search: `%${dto.search}%` });
     }
 
-    // Get total count
-    const total = await queryBuilder.getCount();
+      // Get total count
+      console.log('📊 Getting count...');
+      const total = await queryBuilder.getCount();
+      console.log(`📊 Total approved listings: ${total}`);
 
-    // Apply pagination and ordering
-    const listings = await queryBuilder
-      .orderBy('listing.createdAt', 'DESC')
-      .skip(skip)
-      .take(limit)
-      .getMany();
+      // Apply pagination and ordering
+      console.log('📝 Executing query...');
+      const listings = await queryBuilder
+        .orderBy('listing.createdAt', 'DESC')
+        .skip(skip)
+        .take(limit)
+        .getMany();
 
-    const totalPages = Math.ceil(total / limit);
+      console.log(`✅ Retrieved ${listings.length} listings`);
 
-    return {
-      listings,
-      total,
-      page,
-      limit,
-      totalPages,
-    };
+      const totalPages = Math.ceil(total / limit);
+
+      return {
+        listings,
+        total,
+        page,
+        limit,
+        totalPages,
+      };
+    } catch (error) {
+      console.error('❌ Error in getMarketplaceFeed:', error);
+      throw error;
+    }
   }
 }

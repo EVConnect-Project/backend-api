@@ -3,15 +3,29 @@ import { IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator
 export class CreateMechanicApplicationDto {
   @IsString()
   @IsNotEmpty()
-  fullName: string;
+  name: string;
 
   @IsString()
   @IsNotEmpty()
-  phoneNumber: string;
+  phone: string;
+
+  @IsString()
+  @IsOptional()
+  email?: string;
 
   @IsString()
   @IsNotEmpty()
-  skills: string;
+  address: string;
+
+  @IsNumber()
+  lat: number;
+
+  @IsNumber()
+  lng: number;
+
+  @IsString({ each: true })
+  @IsNotEmpty({ each: true })
+  services: string[];
 
   @IsNumber()
   @Min(0)
@@ -22,22 +36,13 @@ export class CreateMechanicApplicationDto {
   certifications?: string;
 
   @IsString()
-  @IsNotEmpty()
-  serviceArea: string;
+  @IsOptional()
+  description?: string;
 
   @IsNumber()
-  @IsOptional()
-  serviceLat?: number;
-
-  @IsNumber()
-  @IsOptional()
-  serviceLng?: number;
+  pricePerHour: number;
 
   @IsString()
   @IsOptional()
   licenseNumber?: string;
-
-  @IsString()
-  @IsOptional()
-  additionalInfo?: string;
 }

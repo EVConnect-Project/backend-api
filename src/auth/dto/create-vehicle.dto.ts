@@ -31,13 +31,30 @@ export class CreateVehicleDto {
   @IsNotEmpty()
   connectorType: string;
 
+  // Normalized array of connector types for compatibility matching
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  connectorTypes?: string[];
+
   @IsOptional()
   @IsString()
   vehicleType?: string;
 
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  maxAcChargingPower?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  maxDcChargingPower?: number;
+
+  @IsOptional()
   @IsNumber()
   @Min(1)
-  rangeKm: number;
+  rangeKm?: number;
 
   // Trip Planning Fields
   @IsOptional()

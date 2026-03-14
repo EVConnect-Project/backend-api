@@ -1,6 +1,7 @@
 import { 
   Controller, 
   Post, 
+  Query,
   UseGuards, 
   UseInterceptors, 
   UploadedFile, 
@@ -12,6 +13,10 @@ import { CloudinaryService } from './cloudinary.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Multer } from 'multer';
 
+// Allowed Cloudinary folder names (prevents arbitrary path injection)
+const ALLOWED_FOLDERS = ['marketplace', 'chargers/individual', 'chargers/stations', 'promotions'] as const;
+type AllowedFolder = typeof ALLOWED_FOLDERS[number];
+
 @Controller('cloudinary')
 @UseGuards(JwtAuthGuard)
 export class CloudinaryController {
@@ -19,12 +24,22 @@ export class CloudinaryController {
 
   /**
    * Upload single image
-   * POST /cloudinary/upload
+   * POST /cloudinary/upload?folder=marketplace  (default)
+   * POST /cloudinary/upload?folder=chargers/individual
+   * POST /cloudinary/upload?folder=chargers/stations
    */
   @Post('upload')
   @UseInterceptors(FileInterceptor('file'))
-  async uploadImage(@UploadedFile() file: Express.Multer.File) {
+  async uploadImage(
+    @UploadedFile() file: Express.Multer.File,
+    @Query('folder') folderParam?: string,
+  ) {
+    const folder: AllowedFolder = ALLOWED_FOLDERS.includes(folderParam as AllowedFolder)
+      ? (folderParam as AllowedFolder)
+      : 'marketplace';
+
     console.log('📸 Upload request received');
+    console.log('   Folder:', folder);
     console.log('   File:', file ? 'present' : 'MISSING');
     if (file) {
       console.log('   Filename:', file.originalname);
@@ -49,22 +64,30 @@ export class CloudinaryController {
       throw new BadRequestException('File size must not exceed 10MB');
     }
 
-    const secureUrl = await this.cloudinaryService.uploadImage(file, 'marketplace');
+    const secureUrl = await this.cloudinaryService.uploadImage(file, folder);
     
     return {
       success: true,
       url: secureUrl,
+      folder,
       message: 'Image uploaded successfully',
     };
   }
 
   /**
    * Upload multiple images (max 5 images)
-   * POST /cloudinary/upload-multiple
+   * POST /cloudinary/upload-multiple?folder=marketplace  (default)
    */
   @Post('upload-multiple')
   @UseInterceptors(FilesInterceptor('files', 5))
-  async uploadMultipleImages(@UploadedFiles() files: Express.Multer.File[]) {
+  async uploadMultipleImages(
+    @UploadedFiles() files: Express.Multer.File[],
+    @Query('folder') folderParam?: string,
+  ) {
+    const folder: AllowedFolder = ALLOWED_FOLDERS.includes(folderParam as AllowedFolder)
+      ? (folderParam as AllowedFolder)
+      : 'marketplace';
+
     if (!files || files.length === 0) {
       throw new BadRequestException('No files uploaded');
     }
@@ -82,11 +105,12 @@ export class CloudinaryController {
       }
     }
 
-    const secureUrls = await this.cloudinaryService.uploadMultipleImages(files, 'marketplace');
+    const secureUrls = await this.cloudinaryService.uploadMultipleImages(files, folder);
     
     return {
       success: true,
       urls: secureUrls,
+      folder,
       count: secureUrls.length,
       message: 'Images uploaded successfully',
     };

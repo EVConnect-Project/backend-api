@@ -11,7 +11,7 @@ export class UpdatePaymentSettingsDto {
 
   @IsBoolean()
   @IsOptional()
-  emailNotifications?: boolean;
+  appNotifications?: boolean;
 
   @IsBoolean()
   @IsOptional()

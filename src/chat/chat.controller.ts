@@ -86,7 +86,22 @@ export class ChatController {
    */
   @Get('unread-count')
   async getUnreadCount(@Request() req) {
-    const count = await this.chatService.getUnreadCount(req.user.userId);
-    return { count };
+    try {
+      console.log('🔍 [ChatController] getUnreadCount called for user:', req.user?.userId);
+      console.log('🔍 [ChatController] req.user object:', JSON.stringify(req.user, null, 2));
+      
+      if (!req.user?.userId) {
+        console.error('❌ [ChatController] No userId in request');
+        throw new Error('No user ID found in request');
+      }
+      
+      const count = await this.chatService.getUnreadCount(req.user.userId);
+      console.log('✅ [ChatController] Unread count retrieved:', count);
+      return { count };
+    } catch (error) {
+      console.error('❌ [ChatController] Error in getUnreadCount:', error.message);
+      console.error('❌ [ChatController] Error stack:', error.stack);
+      throw error;
+    }
   }
 }

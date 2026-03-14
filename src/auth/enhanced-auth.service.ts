@@ -41,20 +41,16 @@ export class EnhancedAuthService {
       throw new BadRequestException('You must accept the terms and conditions and privacy policy');
     }
 
-    // Determine if emailOrPhone is email or phone
-    const isEmail = this.isEmail(emailOrPhone);
-    const email = isEmail ? emailOrPhone : null;
-    const phone = !isEmail ? emailOrPhone : null;
+    // For enhanced registration, use phone number from emailOrPhone
+    const phone = emailOrPhone;
 
-    // Check if user already exists (by email only - phone temporarily disabled)
+    // Check if user already exists (by phone number)
     const existingUser = await this.userRepository.findOne({
-      where: { email: email || undefined },
+      where: { phoneNumber: phone },
     });
 
     if (existingUser) {
-      throw new ConflictException(
-        isEmail ? 'Email already registered' : 'Phone number already registered'
-      );
+      throw new ConflictException('Phone number already registered');
     }
 
     // Hash password
@@ -68,8 +64,7 @@ export class EnhancedAuthService {
 
     const user = this.userRepository.create({
       name: name,
-      email: email || undefined,
-      // phone: phone || undefined, // temporarily disabled
+      phoneNumber: phone,
       password: hashedPassword,
       role: 'user', // Default role
       vehicleType: vehicleType,
@@ -100,7 +95,7 @@ export class EnhancedAuthService {
         });
 
         await this.vehicleProfileRepository.save(vehicleProfile);
-        console.log(`✅ Created vehicle profile for user ${user.email}`);
+        console.log(`✅ Created vehicle profile for user ${user.phoneNumber}`);
       } catch (error) {
         console.error('❌ Error creating vehicle profile:', error);
         // Don't fail registration if vehicle profile creation fails
@@ -110,8 +105,7 @@ export class EnhancedAuthService {
     // Generate JWT token
     const payload = { 
       sub: user.id, 
-      email: user.email, 
-      // phone: user.phone, // temporarily disabled
+      phoneNumber: user.phoneNumber,
       role: user.role 
     };
     const access_token = this.jwtService.sign(payload);
@@ -120,8 +114,7 @@ export class EnhancedAuthService {
       access_token,
       user: {
         id: user.id,
-        email: user.email,
-        // phone: user.phone, // temporarily disabled
+        phoneNumber: user.phoneNumber,
         name: user.name,
         role: user.role,
         vehicleProfile: {
@@ -156,8 +149,7 @@ export class EnhancedAuthService {
 
     return {
       id: user.id,
-      email: user.email,
-      // phone: user.phone, // temporarily disabled
+      phoneNumber: user.phoneNumber,
       name: user.name,
       role: user.role,
       vehicleProfile: {

@@ -97,23 +97,48 @@ export class ChargingService {
     }
   }
 
-  async createSession(userId: string, chargerId: string, connectorId = 1) {
+  async getChargerByIdentity(chargeBoxIdentity: string) {
     try {
+      const response = await firstValueFrom(
+        this.httpService.get(
+          `${this.chargingServiceUrl}/chargers/by-identity/${chargeBoxIdentity}`,
+          { headers: this.getHeaders() },
+        ),
+      );
+      return response.data;
+    } catch (error) {
+      this.logger.error(`Failed to fetch charger by identity ${chargeBoxIdentity}`, error.message);
+      throw new HttpException('Charger not found or not connected', HttpStatus.NOT_FOUND);
+    }
+  }
+
+  async createSession(
+    userId: string,
+    chargerId: string,
+    connectorId = 1,
+    chargeBoxIdentity?: string,
+  ) {
+    try {
+      // If chargeBoxIdentity is given (from mobile app), resolve to OCPP service UUID
+      let resolvedChargerId = chargerId;
+      if (chargeBoxIdentity && !chargerId) {
+        const ocppCharger = await this.getChargerByIdentity(chargeBoxIdentity);
+        resolvedChargerId = ocppCharger.id;
+      }
+
       const response = await firstValueFrom(
         this.httpService.post(
           `${this.chargingServiceUrl}/sessions`,
           {
             userId,
-            chargerId,
+            chargerId: resolvedChargerId,
             connectorId,
             idTag: `USER-${userId}`,
           },
-          {
-            headers: this.getHeaders(),
-          },
+          { headers: this.getHeaders() },
         ),
       );
-      this.logger.log(`Session created for user ${userId} on charger ${chargerId}`);
+      this.logger.log(`Session created for user ${userId} on charger ${resolvedChargerId}`);
       return response.data;
     } catch (error) {
       this.logger.error('Failed to create session', error.message);
@@ -296,6 +321,49 @@ export class ChargingService {
         error.response?.status || HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
+  }
+
+  async resetCharger(chargerId: string, type: 'Soft' | 'Hard' = 'Soft') {
+    try {
+      const response = await firstValueFrom(
+        this.httpService.post(
+          `${this.chargingServiceUrl}/chargers/${chargerId}/reset`,
+          { type },
+          { headers: this.getHeaders() },
+        ),
+      );
+      this.logger.log(`Reset (${type}) sent to charger ${chargerId}`);
+      return response.data;
+    } catch (error) {
+      this.logger.error('Failed to reset charger', error.message);
+      throw new HttpException(
+        error.response?.data?.error || 'Failed to reset charger',
+        error.response?.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  async getAllSessions(status?: string) {
+    try {
+      const params = status ? `?status=${status}` : '';
+      const response = await firstValueFrom(
+        this.httpService.get(
+          `${this.chargingServiceUrl}/sessions${params}`,
+          { headers: this.getHeaders() },
+        ),
+      );
+      return response.data;
+    } catch (error) {
+      this.logger.error('Failed to get sessions', error.message);
+      throw new HttpException(
+        error.response?.data?.error || 'Failed to get sessions',
+        error.response?.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  async forceStopSession(sessionId: string) {
+    return this.stopCharging(sessionId);
   }
 
   // OCPP Webhook Handlers

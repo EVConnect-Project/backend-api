@@ -22,41 +22,60 @@ export class BookingEntity {
   @JoinColumn({ name: 'chargerId' })
   charger: Charger;
 
+  @Column({ type: 'uuid', nullable: true })
+  socketId: string | null;
+
   @Column({ type: 'timestamp' })
   startTime: Date;
 
   @Column({ type: 'timestamp' })
   endTime: Date;
 
-  @Column({ 
-    type: 'enum',
-    enum: ['pending', 'confirmed', 'active', 'completed', 'cancelled'],
-    default: 'pending'
-  })
+  @Column({ type: 'varchar', default: 'pending' })
   status: string;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2 })
+  // Maps to DB column "totalCost"
+  @Column({ name: 'totalCost', type: 'decimal', precision: 10, scale: 2, nullable: true })
   price: number;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  // Maps to DB column "estimatedEnergy"
+  @Column({ name: 'estimatedEnergy', type: 'decimal', precision: 10, scale: 2, nullable: true })
   energyConsumed: number;
+
+  @Column({ type: 'varchar', default: 'pending', nullable: true })
+  paymentStatus: string | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  cancelledAt: Date | null;
+
+  @Column({ type: 'text', nullable: true })
+  cancelReason: string | null;
 
   // Booking Type Fields
   @Column({ 
     type: 'varchar', 
     length: 20, 
+    nullable: true,
     default: BookingType.PRE_BOOKING 
   })
   bookingType: BookingType;
 
-  @Column({ type: 'timestamp', nullable: true })
+  // Maps to DB column "checkedInAt"
+  @Column({ name: 'checkedInAt', type: 'timestamp', nullable: true })
   checkInTime: Date | null;
 
-  @Column({ default: false })
+  // Maps to DB column "gracePeriodEndsAt"
+  @Column({ name: 'gracePeriodEndsAt', type: 'timestamp', nullable: true })
+  gracePeriodExpiresAt: Date | null;
+
+  @Column({ default: false, nullable: true })
+  autoCheckInEnabled: boolean;
+
+  @Column({ default: false, nullable: true })
   noShow: boolean;
 
-  @Column({ type: 'timestamp', nullable: true })
-  gracePeriodExpiresAt: Date | null;
+  @Column({ type: 'text', nullable: true })
+  notes: string | null;
 
   @CreateDateColumn()
   createdAt: Date;

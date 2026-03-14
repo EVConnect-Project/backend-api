@@ -33,12 +33,14 @@ export class EmergencyService {
     vehicleDetails: any,
     urgencyLevel: string,
     alertedMechanicIds: string[],
+    problemType?: string,
   ): Promise<EmergencyRequestEntity> {
     const emergencyRequest = this.emergencyRequestRepository.create({
       userId,
       latitude,
       longitude,
       problemDescription,
+      problemType: problemType as any,
       vehicleDetails,
       urgencyLevel: urgencyLevel as any,
       status: 'pending',
@@ -46,7 +48,7 @@ export class EmergencyService {
     });
 
     const saved = await this.emergencyRequestRepository.save(emergencyRequest);
-    console.log(`✅ Emergency request created: ${saved.id}`);
+    console.log(`✅ Emergency request created: ${saved.id} (problem: ${problemType || 'not specified'})`);
     return saved;
   }
 
@@ -353,5 +355,84 @@ export class EmergencyService {
     );
 
     console.log(`✅ Emergency request ${requestId} cancelled by user`);
+  }
+
+  /**
+   * Complete emergency request with resolution feedback
+   * This method is used to collect feedback and update mechanic expertise
+   */
+  async completeWithFeedback(
+    requestId: string,
+    userId: string,
+    satisfactionRating?: number,
+    feedback?: string,
+  ): Promise<EmergencyRequestEntity> {
+    const request = await this.emergencyRequestRepository.findOne({
+      where: { id: requestId, userId },
+      relations: ['selectedMechanic'],
+    });
+
+    if (!request) {
+      throw new NotFoundException('Emergency request not found');
+    }
+
+    if (request.status !== 'completed') {
+      throw new BadRequestException('Cannot provide feedback for incomplete requests');
+    }
+
+    // Calculate resolution time from creation to completion
+    const resolutionMinutes = request.completedAt 
+      ? Math.round((request.completedAt.getTime() - request.createdAt.getTime()) / (1000 * 60))
+      : null;
+
+    // Update the request with feedback
+    await this.emergencyRequestRepository.update(
+      { id: requestId },
+      {
+        userSatisfactionRating: satisfactionRating,
+        mechanicFeedback: feedback,
+        resolutionTimeMinutes: resolutionMinutes ?? undefined,
+      },
+    );
+
+    console.log(`✅ Feedback recorded for request ${requestId}: rating=${satisfactionRating}, resolution=${resolutionMinutes}min`);
+
+    // Return the updated request along with expertise update info
+    const updatedRequest = await this.emergencyRequestRepository.findOne({
+      where: { id: requestId },
+      relations: ['selectedMechanic'],
+    });
+    return updatedRequest!;
+  }
+
+  /**
+   * Get completed request details for expertise update
+   * Called by MechanicsService to update expertise after feedback
+   */
+  async getRequestForExpertiseUpdate(requestId: string): Promise<{
+    mechanicId: string | null;
+    problemType: string | null;
+    successful: boolean;
+    resolutionMinutes: number | null;
+    satisfactionRating: number | null;
+  } | null> {
+    const request = await this.emergencyRequestRepository.findOne({
+      where: { id: requestId },
+    });
+
+    if (!request) {
+      return null;
+    }
+
+    return {
+      mechanicId: request.selectedMechanicId,
+      problemType: request.problemType,
+      successful: request.status === 'completed' && 
+        (request.userSatisfactionRating === null || request.userSatisfactionRating >= 3),
+      resolutionMinutes: request.resolutionTimeMinutes,
+      satisfactionRating: request.userSatisfactionRating 
+        ? parseFloat(request.userSatisfactionRating as any) 
+        : null,
+    };
   }
 }

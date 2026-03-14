@@ -61,10 +61,27 @@ export class OwnerController {
     @Body() createStationDto: CreateStationDto,
     @Request() req,
   ) {
-    return this.ownerService.registerStation(
-      createStationDto,
-      req.user.userId,
-    );
+    try {
+      console.log('🏢 [OwnerController] registerStation called for user:', req.user?.userId);
+      console.log('🔍 [OwnerController] req.user object:', JSON.stringify(req.user, null, 2));
+      console.log('📝 [OwnerController] Station DTO:', JSON.stringify(createStationDto, null, 2));
+      
+      if (!req.user?.userId) {
+        console.error('❌ [OwnerController] No userId in request');
+        throw new Error('No user ID found in request');
+      }
+      
+      const result = await this.ownerService.registerStation(
+        createStationDto,
+        req.user.userId,
+      );
+      console.log('✅ [OwnerController] Station registered successfully');
+      return result;
+    } catch (error) {
+      console.error('❌ [OwnerController] Error in registerStation:', error.message);
+      console.error('❌ [OwnerController] Error stack:', error.stack);
+      throw error;
+    }
   }
 
   /**
@@ -73,8 +90,18 @@ export class OwnerController {
    * Temporarily removed role restriction to debug 403 error
    */
   @Get('chargers')
+  @UseGuards(JwtAuthGuard)
   async getMyChargers(@Request() req) {
-    return this.ownerService.getMyChargers(req.user.userId);
+    try {
+      console.log('✅ [OwnerController] Getting chargers for user:', req.user.userId);
+      const result = await this.ownerService.getMyChargers(req.user.userId);
+      console.log('✅ [OwnerController] Successfully got chargers:', result.length, 'chargers');
+      return result;
+    } catch (error) {
+      console.error('❌ [OwnerController] Error in getMyChargers:', error.message);
+      console.error('❌ [OwnerController] Error stack:', error.stack);
+      throw error;
+    }
   }
 
   /**

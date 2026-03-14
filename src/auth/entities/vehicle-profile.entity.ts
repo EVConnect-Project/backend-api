@@ -27,8 +27,18 @@ export class VehicleProfile {
   @Column()
   connectorType: string;
 
-  @Column({ type: 'varchar', length: 50, nullable: true })
-  vehicleType: string; // 'car', 'van', 'bus', 'truck', 'three-wheeler', 'bike'
+  // Normalized array of connector types: type2, ccs2, chademo, type1, ccs1, gb_t_ac, gb_t_dc, tesla, three_phase_type2
+  @Column({ type: 'jsonb', default: '[]' })
+  connectorTypes: string[];
+
+  @Column({ nullable: true })
+  vehicleType: string; // e.g., 'car', 'suv', 'van', 'bus', 'motorbike', 'scooty', 'threewheel', 'truck'
+
+  @Column({ type: 'decimal', precision: 8, scale: 2, nullable: true })
+  maxAcChargingPower: number; // kW
+
+  @Column({ type: 'decimal', precision: 8, scale: 2, nullable: true })
+  maxDcChargingPower: number; // kW
 
   @Column({ type: 'decimal', precision: 10, scale: 2 })
   rangeKm: number;

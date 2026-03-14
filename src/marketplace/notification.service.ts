@@ -20,8 +20,8 @@ export class NotificationService {
     this.logger.log('='.repeat(60));
     this.logger.log(`Listing ID: ${listing.id}`);
     this.logger.log(`Title: ${listing.title}`);
-    this.logger.log(`Seller: ${listing.seller?.name || listing.seller?.email || 'Unknown'}`);
-    this.logger.log(`Seller Email: ${listing.seller?.email || 'N/A'}`);
+    this.logger.log(`Seller: ${listing.seller?.name || 'Unknown'}`);
+    this.logger.log(`Seller Phone: ${listing.seller?.phoneNumber || 'N/A'}`);
     this.logger.log(`Status: ${listing.status}`);
     this.logger.log(`Message: Congratulations! Your listing "${listing.title}" has been approved and is now visible in the marketplace.`);
     this.logger.log('='.repeat(60));
@@ -58,8 +58,8 @@ export class NotificationService {
     this.logger.log('='.repeat(60));
     this.logger.log(`Listing ID: ${listing.id}`);
     this.logger.log(`Title: ${listing.title}`);
-    this.logger.log(`Seller: ${listing.seller?.name || listing.seller?.email || 'Unknown'}`);
-    this.logger.log(`Seller Email: ${listing.seller?.email || 'N/A'}`);
+    this.logger.log(`Seller: ${listing.seller?.name || 'Unknown'}`);
+    this.logger.log(`Seller Phone: ${listing.seller?.phoneNumber || 'N/A'}`);
     this.logger.log(`Status: ${listing.status}`);
     this.logger.log(`Reason: ${reason}`);
     this.logger.log(`Message: Your listing "${listing.title}" was not approved. Please review the feedback and resubmit.`);

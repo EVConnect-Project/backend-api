@@ -42,7 +42,7 @@ export class CreateStationDto {
 
   @IsString()
   @IsOptional()
-  accessType?: 'public' | 'private' | 'semi-public';
+  phoneNumber?: string;
 
   @IsArray()
   @ValidateNested({ each: true })

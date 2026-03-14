@@ -22,6 +22,32 @@ export class ChargerController {
     return this.chargerService.findAll();
   }
 
+  /**
+   * Vehicle-compatible stations endpoint.
+   * Returns stations annotated with compatibility info for the user's primary vehicle
+   * (or a specific vehicle if vehicleId is provided).
+   * Each station/charger/socket gets a `compatibility` object with:
+   *   isCompatible, effectiveChargingPowerKw, estimatedChargeTimeMinutes, matchedConnectorTypes
+   */
+  @Get('compatible-stations')
+  @UseGuards(JwtAuthGuard)
+  getCompatibleStations(@Query() query: any, @Request() req) {
+    return this.chargerService.getCompatibleStations(
+      req.user.userId,
+      query.vehicleId || null,
+      {
+        lat: query.lat ? parseFloat(query.lat) : undefined,
+        lng: query.lng ? parseFloat(query.lng) : undefined,
+        radius: query.radius ? parseFloat(query.radius) : undefined,
+        availableNow: query.availableNow === 'true',
+        sortBy: query.sortBy || 'distance',
+        sortOrder: query.sortOrder || 'asc',
+        limit: query.limit ? parseInt(query.limit) : 100,
+        offset: query.offset ? parseInt(query.offset) : 0,
+      },
+    );
+  }
+
   @Get('filter')
   filterChargers(@Query() filters: any) {
     // Convert string query params to proper types
@@ -36,7 +62,6 @@ export class ChargerController {
       minPrice: filters.minPrice ? parseFloat(filters.minPrice) : undefined,
       maxPrice: filters.maxPrice ? parseFloat(filters.maxPrice) : undefined,
       availableNow: filters.availableNow === 'true',
-      accessTypes: filters.accessTypes ? (Array.isArray(filters.accessTypes) ? filters.accessTypes : [filters.accessTypes]) : undefined,
       bookingModes: filters.bookingModes ? (Array.isArray(filters.bookingModes) ? filters.bookingModes : filters.bookingModes.split(',')) : undefined,
       amenities: filters.amenities ? (Array.isArray(filters.amenities) ? filters.amenities : [filters.amenities]) : undefined,
       sortBy: filters.sortBy || 'distance',
@@ -56,7 +81,13 @@ export class ChargerController {
       lng: filters.lng ? parseFloat(filters.lng) : undefined,
       radius: filters.radius ? parseFloat(filters.radius) : undefined,
       availableNow: filters.availableNow === 'true',
+      chargerType: filters.chargerType || undefined,
+      connectorTypes: filters.connectorTypes ? (Array.isArray(filters.connectorTypes) ? filters.connectorTypes : [filters.connectorTypes]) : undefined,
       amenities: filters.amenities ? (Array.isArray(filters.amenities) ? filters.amenities : [filters.amenities]) : undefined,
+      minPowerKw: filters.minPowerKw ? parseFloat(filters.minPowerKw) : undefined,
+      minPrice: filters.minPrice ? parseFloat(filters.minPrice) : undefined,
+      maxPrice: filters.maxPrice ? parseFloat(filters.maxPrice) : undefined,
+      stationType: filters.stationType || undefined,
       sortBy: filters.sortBy || 'distance',
       sortOrder: filters.sortOrder || 'asc',
       limit: filters.limit ? parseInt(filters.limit) : 50,
@@ -79,10 +110,36 @@ export class ChargerController {
     return this.chargerService.findNearby(latNum, lngNum, radiusNum);
   }
 
+  @Get('nearby-stations')
+  findNearbyStations(
+    @Query('lat') lat: string,
+    @Query('lng') lng: string,
+    @Query('radius') radius?: string,
+  ) {
+    const latNum = parseFloat(lat);
+    const lngNum = parseFloat(lng);
+    const radiusNum = radius ? parseFloat(radius) : 10;
+    
+    return this.chargerService.filterStations({
+      lat: latNum,
+      lng: lngNum,
+      radius: radiusNum,
+      sortBy: 'distance',
+      sortOrder: 'asc',
+      limit: 50,
+      offset: 0,
+    });
+  }
+
   @Get('my-chargers')
   @UseGuards(JwtAuthGuard)
   findMyChargers(@Request() req) {
     return this.chargerService.findByOwner(req.user.userId);
+  }
+
+  @Get('stations/:stationId')
+  getStation(@Param('stationId') stationId: string) {
+    return this.chargerService.getStationWithChargers(stationId);
   }
 
   @Get(':id')

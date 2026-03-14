@@ -4,6 +4,7 @@ import { Repository, LessThan } from 'typeorm';
 import { BookingEntity } from './entities/booking.entity';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { Charger } from '../charger/entities/charger.entity';
+import { ChargerSocket } from '../owner/entities/charger-socket.entity';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { NotificationsService } from '../notifications/notifications.service';
 import { BookingMode } from '../charger/enums/booking-mode.enum';
@@ -12,7 +13,7 @@ import { ChargerStatus } from '../charger/enums/charger-status.enum';
 import { CreateWalkInBookingDto, CreatePreBookingDto, CheckInBookingDto } from './dto/booking-type.dto';
 
 export interface BookingWarning {
-  type: 'public_charger' | 'semi_public_charger' | 'no_occupancy_sensor' | 'requires_verification';
+  type: 'no_occupancy_sensor' | 'requires_verification';
   severity: 'low' | 'medium' | 'high';
   message: string;
   recommendedAction?: string;
@@ -21,7 +22,6 @@ export interface BookingWarning {
 export interface BookingResponse {
   booking: BookingEntity;
   warnings: BookingWarning[];
-  accessType: string;
   requiresPhysicalVerification: boolean;
   gracePeriodMinutes: number;
   autoCancelAfterMinutes: number;
@@ -36,6 +36,8 @@ export class BookingsService {
     private bookingRepository: Repository<BookingEntity>,
     @InjectRepository(Charger)
     private chargerRepository: Repository<Charger>,
+    @InjectRepository(ChargerSocket)
+    private socketRepository: Repository<ChargerSocket>,
     private notificationsService: NotificationsService,
   ) {}
 
@@ -43,154 +45,123 @@ export class BookingsService {
    * Create a booking with comprehensive access type checking and conflict prevention
    */
   async create(createBookingDto: CreateBookingDto, userId: string): Promise<BookingResponse> {
-    const { chargerId, startTime, endTime, price } = createBookingDto;
+    try {
+      const { chargerId, startTime, endTime, price } = createBookingDto;
 
-    // Validate time range
-    const start = new Date(startTime);
-    const end = new Date(endTime);
+      // Validate time range
+      const start = new Date(startTime);
+      const end = new Date(endTime);
 
-    if (start >= end) {
-      throw new BadRequestException('End time must be after start time');
-    }
-
-    if (start < new Date()) {
-      throw new BadRequestException('Start time cannot be in the past');
-    }
-
-    // Fetch charger with owner relationship
-    const charger = await this.chargerRepository.findOne({ 
-      where: { id: chargerId },
-      relations: ['owner']
-    });
-    
-    if (!charger) {
-      throw new NotFoundException(`Charger with ID ${chargerId} not found`);
-    }
-
-    // Check if charger is verified by admin
-    if (!charger.verified) {
-      throw new BadRequestException('This charger is not yet verified by admin and cannot accept bookings');
-    }
-
-    // Initialize warnings array
-    const warnings: BookingWarning[] = [];
-
-    // ACCESS TYPE CHECKING - Critical for conflict prevention
-    const accessType = charger.accessType || 'private';
-
-    // Handle PUBLIC chargers - Warning only, no guaranteed booking
-    if (accessType === 'public') {
-      warnings.push({
-        type: 'public_charger',
-        severity: 'high',
-        message: '⚠️ This is a PUBLIC charger accessible without the app. Your booking is NOT guaranteed.',
-        recommendedAction: 'Arrive on time. Consider booking a PRIVATE charger for guaranteed availability.'
-      });
-
-      // PUBLIC chargers cannot have guaranteed bookings
-      if (!charger.requiresAuth) {
-        warnings.push({
-          type: 'no_occupancy_sensor',
-          severity: 'medium',
-          message: 'This charger does not require authentication and may be occupied by non-app users.',
-          recommendedAction: 'Have backup chargers ready. Check real-time availability before departure.'
-        });
+      if (start >= end) {
+        throw new BadRequestException('End time must be after start time');
       }
-    }
 
-    // Handle SEMI-PUBLIC chargers - Verification required
-    if (accessType === 'semi-public') {
-      warnings.push({
-        type: 'semi_public_charger',
-        severity: 'medium',
-        message: 'This is a SEMI-PUBLIC charger. Physical verification required upon arrival.',
-        recommendedAction: 'You will need to confirm your presence at the charger via the app.'
-      });
-
-      if (charger.requiresPhysicalCheck) {
-        warnings.push({
-          type: 'requires_verification',
-          severity: 'medium',
-          message: 'You must verify your physical presence within 10 minutes of start time.',
-          recommendedAction: 'Open the app when you arrive and tap "I\'m Here" to confirm.'
-        });
+      if (start < new Date()) {
+        throw new BadRequestException('Start time cannot be in the past');
       }
-    }
 
-    // Check for overlapping bookings (with grace period consideration)
-    const gracePeriod = charger.bookingGracePeriod || 0;
-    const effectiveStartTime = new Date(start.getTime() - gracePeriod * 60 * 1000);
+      // Fetch charger with owner relationship
+      const charger = await this.chargerRepository.findOne({ 
+        where: { id: chargerId },
+        relations: ['owner']
+      });
+      
+      if (!charger) {
+        throw new NotFoundException(`Charger with ID ${chargerId} not found`);
+      }
 
-    const overlappingBooking = await this.bookingRepository
-      .createQueryBuilder('booking')
-      .where('booking.chargerId = :chargerId', { chargerId })
-      .andWhere('booking.status NOT IN (:...statuses)', { statuses: ['cancelled', 'completed', 'no_show'] })
-      .andWhere(
-        '(booking.startTime < :endTime AND booking.endTime > :effectiveStartTime)',
-        { effectiveStartTime, endTime: end }
-      )
-      .getOne();
+      // Check if charger is verified by admin
+      if (!charger.verified) {
+        throw new BadRequestException('This charger is not yet verified by admin and cannot accept bookings');
+      }
 
-    if (overlappingBooking) {
-      // For PRIVATE chargers, strictly prevent overlaps
-      if (accessType === 'private') {
+      // Initialize warnings array
+      const warnings: BookingWarning[] = [];
+
+      // Check for overlapping bookings (with grace period consideration)
+      const gracePeriod = charger.bookingGracePeriod || 0;
+      const effectiveStartTime = new Date(start.getTime() - gracePeriod * 60 * 1000);
+
+      const overlappingBooking = await this.bookingRepository
+        .createQueryBuilder('booking')
+        .where('booking.chargerId = :chargerId', { chargerId })
+        .andWhere('booking.status NOT IN (:...statuses)', { statuses: ['cancelled', 'completed', 'no_show'] })
+        .andWhere(
+          '(booking.startTime < :endTime AND booking.endTime > :effectiveStartTime)',
+          { effectiveStartTime, endTime: end }
+        )
+        .getOne();
+
+      if (overlappingBooking) {
         throw new BadRequestException('Charger is already booked for this time slot');
       }
-      
-      // For PUBLIC/SEMI-PUBLIC, warn but allow booking
-      warnings.push({
-        type: 'public_charger',
-        severity: 'high',
-        message: 'Another booking exists for this time. Since this is a public/semi-public charger, both bookings will proceed.',
-        recommendedAction: 'Consider selecting a different time slot or charger for guaranteed availability.'
+
+      // Calculate price
+      let finalPrice = 0;
+      const durationMs = end.getTime() - start.getTime();
+      const durationHours = durationMs / (1000 * 60 * 60);
+      const chargerPower = Number(charger.powerKw || 0);
+      const chargerPricePerKwh = Number(charger.pricePerKwh || 0);
+      const calculatedPrice = chargerPower * chargerPricePerKwh * durationHours;
+
+      if (price && price > 0) {
+        finalPrice = price;
+      } else {
+        finalPrice = Number(calculatedPrice.toFixed(2));
+      }
+
+      // Validate price is not NaN or negative
+      if (isNaN(finalPrice) || finalPrice < 0) {
+        finalPrice = 0;
+        this.logger.warn(`Calculated price was invalid (${calculatedPrice}), falling back to 0 for booking`);
+      }
+
+      // Create booking
+      const booking = this.bookingRepository.create({
+        userId,
+        chargerId,
+        startTime: start,
+        endTime: end,
+        price: finalPrice,
+        status: 'pending',
       });
+
+      const savedBooking = await this.bookingRepository.save(booking);
+
+      this.logger.log(`Booking created: ${savedBooking.id} for charger ${chargerId} by user ${userId}`);
+
+      // Send booking confirmation notification (fire-and-forget to prevent blocking response)
+      this.notificationsService.sendBookingConfirmed(
+        userId,
+        savedBooking.id,
+        charger.name || 'charging station',
+        start,
+      ).catch((error) => {
+        this.logger.error(`Failed to send booking confirmation notification for booking ${savedBooking.id}:`, error);
+      });
+
+      // Return comprehensive response
+      return {
+        booking: savedBooking,
+        warnings,
+        requiresPhysicalVerification: charger.requiresPhysicalCheck || false,
+        gracePeriodMinutes: charger.bookingGracePeriod || 0,
+        autoCancelAfterMinutes: charger.autoCancelAfter || 15,
+      };
+    } catch (error) {
+      this.logger.error(`Error creating booking for user ${userId}:`, error);
+      
+      // Re-throw known exceptions
+      if (error instanceof BadRequestException || 
+          error instanceof NotFoundException || 
+          error instanceof ForbiddenException) {
+        throw error;
+      }
+
+      // Log and rethrow unknown database/system errors
+      this.logger.error(`Unexpected error in booking creation: ${error.message}`, error.stack);
+      throw new BadRequestException(`Failed to create booking: ${error.message}`);
     }
-
-    // Calculate price
-    let finalPrice = 0;
-    const durationMs = end.getTime() - start.getTime();
-    const durationHours = durationMs / (1000 * 60 * 60);
-    const chargerPower = Number(charger.powerKw || 0);
-    const chargerPricePerKwh = Number(charger.pricePerKwh || 0);
-    const calculatedPrice = chargerPower * chargerPricePerKwh * durationHours;
-
-    if (price && price > 0) {
-      finalPrice = price;
-    } else {
-      finalPrice = Number(calculatedPrice.toFixed(2));
-    }
-
-    // Create booking
-    const booking = this.bookingRepository.create({
-      userId,
-      chargerId,
-      startTime: start,
-      endTime: end,
-      price: finalPrice,
-      status: 'pending',
-    });
-
-    const savedBooking = await this.bookingRepository.save(booking);
-
-    this.logger.log(`Booking created: ${savedBooking.id} for charger ${chargerId} (${accessType}) by user ${userId}`);
-
-    // Send booking confirmation notification
-    await this.notificationsService.sendBookingConfirmed(
-      userId,
-      savedBooking.id,
-      charger.name || 'charging station',
-      start,
-    );
-
-    // Return comprehensive response
-    return {
-      booking: savedBooking,
-      warnings,
-      accessType,
-      requiresPhysicalVerification: charger.requiresPhysicalCheck || false,
-      gracePeriodMinutes: charger.bookingGracePeriod || 0,
-      autoCancelAfterMinutes: charger.autoCancelAfter || 15,
-    };
   }
 
   async findAll(): Promise<BookingEntity[]> {
@@ -334,7 +305,7 @@ export class BookingsService {
         cancelledCount++;
 
         this.logger.warn(
-          `Auto-cancelled booking ${booking.id} for charger ${charger.id} (${charger.accessType}) - ` +
+          `Auto-cancelled booking ${booking.id} for charger ${charger.id} - ` +
           `User ${booking.userId} did not verify within ${autoCancelMinutes} minutes`
         );
 
@@ -454,7 +425,7 @@ export class BookingsService {
           .andWhere('(booking.startTime < :endTime AND booking.endTime > :startTime)', { startTime, endTime })
           .getOne();
 
-        if (!hasOverlap || charger.accessType === 'public') {
+        if (!hasOverlap) {
           alternativeChargers.push(charger);
         }
       }
@@ -464,10 +435,6 @@ export class BookingsService {
     alternativeChargers.sort((a, b) => {
       const distA = this.calculateDistance(originalCharger.lat, originalCharger.lng, a.lat, a.lng);
       const distB = this.calculateDistance(originalCharger.lat, originalCharger.lng, b.lat, b.lng);
-      
-      // Prefer PRIVATE chargers
-      if (a.accessType === 'private' && b.accessType !== 'private') return -1;
-      if (a.accessType !== 'private' && b.accessType === 'private') return 1;
       
       return distA - distB;
     });
@@ -537,6 +504,26 @@ export class BookingsService {
       );
     }
 
+    // Socket-level validation if socketId provided
+    let socket: ChargerSocket | null = null;
+    if (dto.socketId) {
+      socket = await this.socketRepository.findOne({
+        where: { id: dto.socketId, chargerId: dto.chargerId },
+      });
+      if (!socket) {
+        throw new NotFoundException(`Socket with ID ${dto.socketId} not found on this charger`);
+      }
+      // Validate socket-level booking mode
+      if (socket.bookingMode === BookingMode.PRE_BOOKING) {
+        throw new BadRequestException(
+          'This socket only accepts pre-bookings. Please select a different socket or make a reservation.'
+        );
+      }
+      if (socket.status !== 'available') {
+        throw new BadRequestException(`Socket is currently ${socket.status}. Please try another socket.`);
+      }
+    }
+
     // Check charger status
     if (charger.currentStatus !== ChargerStatus.AVAILABLE) {
       throw new BadRequestException(
@@ -548,14 +535,20 @@ export class BookingsService {
     const now = new Date();
     const endTime = new Date(dto.endTime);
 
-    const activePreBooking = await this.bookingRepository
+    const overlapQuery = this.bookingRepository
       .createQueryBuilder('booking')
       .where('booking.chargerId = :chargerId', { chargerId: dto.chargerId })
       .andWhere('booking.bookingType = :bookingType', { bookingType: BookingType.PRE_BOOKING })
       .andWhere('booking.status IN (:...statuses)', { statuses: ['confirmed', 'pending'] })
       .andWhere('booking.startTime <= :endTime', { endTime })
-      .andWhere('booking.endTime > :now', { now })
-      .getOne();
+      .andWhere('booking.endTime > :now', { now });
+
+    // Filter by socket if provided
+    if (dto.socketId) {
+      overlapQuery.andWhere('booking.socketId = :socketId', { socketId: dto.socketId });
+    }
+
+    const activePreBooking = await overlapQuery.getOne();
 
     if (activePreBooking) {
       throw new BadRequestException(
@@ -573,6 +566,7 @@ export class BookingsService {
     const booking = this.bookingRepository.create({
       userId,
       chargerId: dto.chargerId,
+      socketId: dto.socketId || null,
       startTime: now,
       endTime,
       price,
@@ -588,6 +582,13 @@ export class BookingsService {
     charger.lastStatusUpdate = now;
     await this.chargerRepository.save(charger);
 
+    // Update socket status if applicable
+    if (socket) {
+      socket.status = 'in_use';
+      socket.occupiedBy = userId;
+      await this.socketRepository.save(socket);
+    }
+
     this.logger.log(`Walk-in booking created: ${savedBooking.id} for charger ${dto.chargerId}`);
 
     // Send notification
@@ -601,7 +602,6 @@ export class BookingsService {
     return {
       booking: savedBooking,
       warnings: [],
-      accessType: charger.accessType,
       requiresPhysicalVerification: false,
       gracePeriodMinutes: 0,
       autoCancelAfterMinutes: 0,
@@ -637,6 +637,22 @@ export class BookingsService {
       throw new BadRequestException(
         'This charger does not accept pre-bookings. Please use walk-in mode when you arrive.'
       );
+    }
+
+    // Socket-level validation if socketId provided
+    let socket: ChargerSocket | null = null;
+    if (dto.socketId) {
+      socket = await this.socketRepository.findOne({
+        where: { id: dto.socketId, chargerId: dto.chargerId },
+      });
+      if (!socket) {
+        throw new NotFoundException(`Socket with ID ${dto.socketId} not found on this charger`);
+      }
+      if (socket.bookingMode === BookingMode.WALK_IN) {
+        throw new BadRequestException(
+          'This socket only accepts walk-in charging. Please select a different socket.'
+        );
+      }
     }
 
     const startTime = new Date(dto.startTime);
@@ -677,13 +693,19 @@ export class BookingsService {
     }
 
     // Check for overlapping bookings
-    const overlapping = await this.bookingRepository
+    const overlapQuery = this.bookingRepository
       .createQueryBuilder('booking')
       .where('booking.chargerId = :chargerId', { chargerId: dto.chargerId })
       .andWhere('booking.status NOT IN (:...statuses)', { statuses: ['cancelled', 'completed', 'no_show'] })
       .andWhere('booking.startTime < :endTime', { endTime })
-      .andWhere('booking.endTime > :startTime', { startTime })
-      .getOne();
+      .andWhere('booking.endTime > :startTime', { startTime });
+
+    // Filter by socket if provided (allows parallel bookings on different sockets)
+    if (dto.socketId) {
+      overlapQuery.andWhere('booking.socketId = :socketId', { socketId: dto.socketId });
+    }
+
+    const overlapping = await overlapQuery.getOne();
 
     if (overlapping) {
       throw new BadRequestException(
@@ -704,6 +726,7 @@ export class BookingsService {
     const booking = this.bookingRepository.create({
       userId,
       chargerId: dto.chargerId,
+      socketId: dto.socketId || null,
       startTime,
       endTime,
       price,
@@ -718,6 +741,12 @@ export class BookingsService {
     charger.currentStatus = ChargerStatus.RESERVED;
     charger.lastStatusUpdate = now;
     await this.chargerRepository.save(charger);
+
+    // Update socket status if applicable
+    if (socket) {
+      socket.status = 'reserved';
+      await this.socketRepository.save(socket);
+    }
 
     this.logger.log(`Pre-booking created: ${savedBooking.id} for charger ${dto.chargerId}`);
 
@@ -739,7 +768,6 @@ export class BookingsService {
     return {
       booking: savedBooking,
       warnings,
-      accessType: charger.accessType,
       requiresPhysicalVerification: true,
       gracePeriodMinutes: settings.gracePeriodMinutes,
       autoCancelAfterMinutes: settings.gracePeriodMinutes,
@@ -857,10 +885,10 @@ export class BookingsService {
    */
   private validateBookingType(charger: Charger, bookingType: BookingType): boolean {
     switch (charger.bookingMode) {
-      case BookingMode.PRE_BOOKING_REQUIRED:
+      case BookingMode.PRE_BOOKING:
         return bookingType === BookingType.PRE_BOOKING;
       
-      case BookingMode.WALK_IN_ONLY:
+      case BookingMode.WALK_IN:
         return bookingType === BookingType.WALK_IN;
       
       case BookingMode.HYBRID:

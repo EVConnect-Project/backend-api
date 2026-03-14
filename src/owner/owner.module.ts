@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { HttpModule } from '@nestjs/axios';
 import { OwnerController } from './owner.controller';
 import { OwnerService } from './owner.service';
 import { OwnerPaymentAccountController } from './owner-payment-account.controller';
@@ -11,6 +12,8 @@ import { UserEntity } from '../users/entities/user.entity';
 import { OwnerPaymentAccount } from './entities/owner-payment-account.entity';
 import { ChargerSocket } from './entities/charger-socket.entity';
 import { ChargingStation } from './entities/charging-station.entity';
+import { Station } from '../station/entities/station.entity';
+import { ChargerModule } from '../charger/charger.module';
 
 @Module({
   imports: [
@@ -21,7 +24,10 @@ import { ChargingStation } from './entities/charging-station.entity';
       OwnerPaymentAccount,
       ChargerSocket,
       ChargingStation,
+      Station,
     ]),
+    HttpModule,
+    ChargerModule,
   ],
   controllers: [OwnerController, OwnerPaymentAccountController],
   providers: [OwnerService, OwnerPaymentAccountService, IsChargerOwnerGuard],

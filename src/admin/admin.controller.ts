@@ -32,7 +32,13 @@ export class AdminController {
   // Dashboard Stats
   @Get('stats')
   async getDashboardStats() {
-    return this.adminService.getDashboardStats();
+    try {
+      return await this.adminService.getDashboardStats();
+    } catch (error) {
+      console.error('Controller error in getDashboardStats:', error.message);
+      console.error('Stack trace:', error.stack);
+      throw error;
+    }
   }
 
   // Analytics
@@ -60,6 +66,11 @@ export class AdminController {
   @Get('analytics/bookings')
   async getBookingStats() {
     return this.adminService.getBookingStats();
+  }
+
+  @Get('analytics/vehicles')
+  async getVehicleAnalytics() {
+    return this.adminService.getVehicleAnalytics();
   }
 
   // User Management
@@ -136,6 +147,7 @@ export class AdminController {
     @Query('search') search: string,
     @Query('status') status: string,
     @Query('verified') verified: string,
+    @Query('banned') banned: string,
   ) {
     return this.adminService.getChargers({
       page: page ? parseInt(page) : 1,
@@ -143,12 +155,18 @@ export class AdminController {
       search,
       status,
       verified: verified ? verified === 'true' : undefined,
+      banned: banned ? banned === 'true' : undefined,
     });
   }
 
   @Get('chargers/:id')
   async getChargerById(@Param('id') id: string) {
     return this.adminService.getChargerById(id);
+  }
+
+  @Get('chargers/:id/analytics')
+  async getChargerAnalytics(@Param('id') id: string) {
+    return this.adminService.getChargerAnalytics(id);
   }
 
   @Post('chargers/:id/approve')
@@ -200,6 +218,82 @@ export class AdminController {
     return this.adminService.unbanCharger(id);
   }
 
+  // Charging Station Management
+  @Get('stations')
+  async getStations(
+    @Query('page') page: string,
+    @Query('limit') limit: string,
+    @Query('search') search: string,
+    @Query('verified') verified: string,
+  ) {
+    return this.adminService.getStations({
+      page: page ? parseInt(page) : 1,
+      limit: limit ? parseInt(limit) : 10,
+      search,
+      verified: verified ? verified === 'true' : undefined,
+    });
+  }
+
+  @Get('stations/:id')
+  async getStationById(@Param('id') id: string) {
+    return this.adminService.getStationById(id);
+  }
+
+  @Patch('stations/:id')
+  async updateStation(@Param('id') id: string, @Body() data: any) {
+    return this.adminService.updateStation(id, data);
+  }
+
+  @Delete('stations/:id')
+  async deleteStation(@Param('id') id: string) {
+    return this.adminService.deleteStation(id);
+  }
+
+  // OCPP Live Controls
+  @Get('ocpp/live')
+  async ocppLive() {
+    const [connected, sessions] = await Promise.all([
+      this.adminService.ocppGetConnectedChargers(),
+      this.adminService.ocppGetActiveSessions(),
+    ]);
+    return { connected, sessions };
+  }
+
+  @Get('ocpp/sessions')
+  async ocppGetSessions(@Query('status') status?: string) {
+    return this.adminService.ocppGetActiveSessions(status);
+  }
+
+  @Post('chargers/:id/ocpp/reset')
+  async ocppReset(
+    @Param('id') id: string,
+    @Body('type') type: 'Soft' | 'Hard' = 'Soft',
+  ) {
+    return this.adminService.ocppResetCharger(id, type);
+  }
+
+  @Post('chargers/:id/ocpp/unlock')
+  async ocppUnlock(
+    @Param('id') id: string,
+    @Body('connectorId') connectorId = 1,
+  ) {
+    return this.adminService.ocppUnlockConnector(id, connectorId);
+  }
+
+  @Post('chargers/:id/ocpp/availability')
+  async ocppAvailability(
+    @Param('id') id: string,
+    @Body('connectorId') connectorId: number,
+    @Body('type') type: 'Operative' | 'Inoperative',
+  ) {
+    return this.adminService.ocppSetAvailability(id, connectorId, type);
+  }
+
+  @Post('sessions/:sessionId/ocpp/stop')
+  async ocppForceStop(@Param('sessionId') sessionId: string) {
+    return this.adminService.ocppForceStopSession(sessionId);
+  }
+
   // Booking Management
   @Get('bookings')
   async getBookings(
@@ -221,6 +315,11 @@ export class AdminController {
   @Get('bookings/:id')
   async getBookingById(@Param('id') id: string) {
     return this.adminService.getBookingById(id);
+  }
+
+  @Get('bookings/:id/timeline')
+  async getBookingTimeline(@Param('id') id: string) {
+    return this.adminService.getBookingTimeline(id);
   }
 
   @Post('bookings/:id/approve')
@@ -984,6 +1083,111 @@ export class AdminController {
     );
 
     return { success: true, mechanic, message: 'Mechanic released successfully' };
+  }
+
+  // ==================== NOTIFICATIONS ====================
+
+  /**
+   * Get all notification logs (paginated)
+   */
+  @Get('notifications')
+  async getNotificationLogs(
+    @Query('page') page: string,
+    @Query('limit') limit: string,
+    @Query('search') search: string,
+    @Query('type') type: string,
+    @Query('status') status: string,
+  ) {
+    return this.adminService.getNotificationLogs({
+      page: page ? parseInt(page) : 1,
+      limit: limit ? parseInt(limit) : 20,
+      search,
+      type,
+      status,
+    });
+  }
+
+  /**
+   * Get notification statistics
+   */
+  @Get('notifications/stats')
+  async getNotificationStats() {
+    return this.adminService.getNotificationStats();
+  }
+
+  /**
+   * Send notification to a specific user
+   */
+  @Post('notifications/send')
+  async sendNotificationToUser(
+    @Body() body: { userId: string; title: string; body: string; type?: string },
+    @Request() req,
+    @Ip() ip: string,
+  ) {
+    const result = await this.adminService.sendNotificationToUser(
+      body.userId,
+      body.title,
+      body.body,
+      body.type,
+    );
+    // Audit log
+    await this.adminAuditService.logAction(
+      req.user.userId,
+      'SEND_NOTIFICATION',
+      'user',
+      body.userId,
+      { title: body.title, type: body.type },
+      `Sent notification to user ${body.userId}`,
+      ip,
+    );
+    return result;
+  }
+
+  /**
+   * Broadcast notification to all users
+   */
+  @Post('notifications/broadcast')
+  async broadcastNotification(
+    @Body() body: { title: string; body: string },
+    @Request() req,
+    @Ip() ip: string,
+  ) {
+    const result = await this.adminService.broadcastNotification(
+      body.title,
+      body.body,
+    );
+    await this.adminAuditService.logAction(
+      req.user.userId,
+      'BROADCAST_NOTIFICATION',
+      'system',
+      'all_users',
+      { title: body.title },
+      `Broadcast notification to all users`,
+      ip,
+    );
+    return result;
+  }
+
+  /**
+   * Delete a notification log entry
+   */
+  @Delete('notifications/:id')
+  async deleteNotificationLog(
+    @Param('id') id: string,
+    @Request() req,
+    @Ip() ip: string,
+  ) {
+    const result = await this.adminService.deleteNotificationLog(id);
+    await this.adminAuditService.logAction(
+      req.user.userId,
+      'DELETE_NOTIFICATION',
+      'notification',
+      id,
+      {},
+      `Deleted notification log ${id}`,
+      ip,
+    );
+    return result;
   }
 
   // ==================== AUDIT LOG ====================

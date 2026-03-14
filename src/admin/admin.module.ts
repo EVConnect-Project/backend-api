@@ -14,7 +14,12 @@ import { Conversation } from '../chat/entities/conversation.entity';
 import { Message } from '../chat/entities/message.entity';
 import { AdminAction } from './entities/admin-action.entity';
 import { OwnerPaymentAccount } from '../owner/entities/owner-payment-account.entity';
+import { ChargingStation } from '../owner/entities/charging-station.entity';
+import { ChargerSocket } from '../owner/entities/charger-socket.entity';
+import { VehicleProfile } from '../auth/entities/vehicle-profile.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { NotificationLogEntity } from '../notifications/entities/notification-log.entity';
+import { ChargingModule } from '../charging/charging.module';
 
 @Module({
   imports: [
@@ -29,8 +34,13 @@ import { NotificationsModule } from '../notifications/notifications.module';
       Message,
       AdminAction,
       OwnerPaymentAccount,
+      ChargingStation,
+      ChargerSocket,
+      VehicleProfile,
+      NotificationLogEntity,
     ]),
     NotificationsModule,
+    ChargingModule,
   ],
   controllers: [AdminController],
   providers: [AdminService, AdminChatService, AdminAuditService],

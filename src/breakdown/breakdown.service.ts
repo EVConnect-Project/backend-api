@@ -32,7 +32,7 @@ export class BreakdownService {
     const request = this.breakdownRequestRepository.create({
       ...createDto,
       userId,
-      status: BreakdownStatus.PENDING,
+      status: 'pending',
     });
 
     const saved = await this.breakdownRequestRepository.save(request);
@@ -49,7 +49,7 @@ export class BreakdownService {
   async getMyRequests(userId: string) {
     const requests = await this.breakdownRequestRepository.find({
       where: { userId },
-      relations: ['mechanic'],
+      relations: ['user'],
       order: { createdAt: 'DESC' },
     });
 
@@ -62,7 +62,7 @@ export class BreakdownService {
   async getRequestById(id: string, userId: string) {
     const request = await this.breakdownRequestRepository.findOne({
       where: { id },
-      relations: ['mechanic', 'user'],
+      relations: ['user'],
     });
 
     if (!request) {
@@ -85,9 +85,9 @@ export class BreakdownService {
     
     if (mechanicId) {
       // Mechanic can see their assigned requests and pending ones
-      where.status = BreakdownStatus.PENDING;
+      where.status = 'pending';
     } else {
-      where.status = BreakdownStatus.PENDING;
+      where.status = 'pending';
     }
 
     const requests = await this.breakdownRequestRepository.find({
@@ -124,7 +124,7 @@ export class BreakdownService {
       throw new NotFoundException('Request not found');
     }
 
-    if (request.status !== BreakdownStatus.PENDING) {
+    if (request.status !== 'pending') {
       throw new BadRequestException('Request is not available for assignment');
     }
 
@@ -138,7 +138,7 @@ export class BreakdownService {
     }
 
     request.mechanicId = mechanicId;
-    request.status = BreakdownStatus.ASSIGNED;
+    request.status = 'assigned';
 
     const updated = await this.breakdownRequestRepository.save(request);
 
@@ -178,8 +178,8 @@ export class BreakdownService {
 
     Object.assign(request, updateDto);
 
-    if (updateDto.status === BreakdownStatus.RESOLVED) {
-      request.resolvedAt = new Date();
+    if (updateDto.status === 'resolved') {
+      request.completedAt = new Date();
       
       // Send service completed notification
       await this.notificationsService.sendServiceCompleted(
@@ -212,11 +212,11 @@ export class BreakdownService {
       throw new ForbiddenException('You can only cancel your own requests');
     }
 
-    if (request.status === BreakdownStatus.RESOLVED) {
+    if (request.status === 'resolved') {
       throw new BadRequestException('Cannot cancel resolved request');
     }
 
-    request.status = BreakdownStatus.CANCELLED;
+    request.status = 'cancelled';
     await this.breakdownRequestRepository.save(request);
 
     return { message: 'Request cancelled successfully' };

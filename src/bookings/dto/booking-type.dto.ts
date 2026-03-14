@@ -6,6 +6,10 @@ export class CreateWalkInBookingDto {
   @IsNotEmpty()
   chargerId: string;
 
+  @IsUUID()
+  @IsOptional()
+  socketId?: string;
+
   @IsDateString()
   @IsNotEmpty()
   endTime: string;
@@ -15,6 +19,10 @@ export class CreatePreBookingDto {
   @IsUUID()
   @IsNotEmpty()
   chargerId: string;
+
+  @IsUUID()
+  @IsOptional()
+  socketId?: string;
 
   @IsDateString()
   @IsNotEmpty()

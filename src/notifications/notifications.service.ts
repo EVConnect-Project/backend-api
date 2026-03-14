@@ -1,12 +1,13 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import * as admin from 'firebase-admin';
 import { FcmTokenEntity } from './entities/fcm-token.entity';
 import { NotificationLogEntity } from './entities/notification-log.entity';
 import { NotificationPreferenceEntity } from './entities/notification-preference.entity';
 import { NotificationType, NotificationPayload } from './types/notification-types';
+import { NotificationsGateway } from './notifications.gateway';
 
 @Injectable()
 export class NotificationsService implements OnModuleInit {
@@ -21,6 +22,8 @@ export class NotificationsService implements OnModuleInit {
     @InjectRepository(NotificationPreferenceEntity)
     private notificationPreferenceRepository: Repository<NotificationPreferenceEntity>,
     private configService: ConfigService,
+    @Inject(forwardRef(() => NotificationsGateway))
+    private notificationsGateway: NotificationsGateway,
   ) {}
 
   onModuleInit() {
@@ -29,6 +32,13 @@ export class NotificationsService implements OnModuleInit {
 
   private initializeFirebase() {
     try {
+      // If Firebase is already initialized by another service, reuse it
+      if (admin.apps.length) {
+        this.firebaseApp = admin.app();
+        this.logger.log('Firebase Admin SDK reused from existing instance');
+        return;
+      }
+
       const projectId = this.configService.get('FIREBASE_PROJECT_ID');
       const privateKey = this.configService.get('FIREBASE_PRIVATE_KEY')?.replace(/\\n/g, '\n');
       const clientEmail = this.configService.get('FIREBASE_CLIENT_EMAIL');
@@ -149,6 +159,21 @@ export class NotificationsService implements OnModuleInit {
       log.sentAt = new Date();
       await this.notificationLogRepository.save(log);
       this.logger.log(`✅ Notification sent to user ${userId} (${tokens.length} devices)`);
+
+      // Emit via WebSocket for real-time delivery
+      try {
+        this.notificationsGateway.sendNotificationToUser(userId, {
+          id: log.id,
+          type: log.type,
+          title: log.title,
+          body: log.body,
+          data: log.data,
+          status: log.status,
+          createdAt: log.createdAt,
+        });
+      } catch (wsError) {
+        this.logger.warn(`WebSocket emit failed for user ${userId}: ${wsError}`);
+      }
     } catch (error) {
       log.status = 'failed';
       await this.notificationLogRepository.save(log);
@@ -462,17 +487,53 @@ export class NotificationsService implements OnModuleInit {
   }
 
   /**
-   * Get notification history for a user
+   * Get notification history for a user with pagination
    */
   async getNotificationHistory(
     userId: string,
-    limit: number = 50,
-  ): Promise<NotificationLogEntity[]> {
-    return this.notificationLogRepository.find({
+    limit: number = 20,
+    offset: number = 0,
+  ): Promise<{ notifications: NotificationLogEntity[]; total: number; hasMore: boolean }> {
+    const [notifications, total] = await this.notificationLogRepository.findAndCount({
       where: { userId },
       order: { createdAt: 'DESC' },
       take: limit,
+      skip: offset,
     });
+
+    return {
+      notifications,
+      total,
+      hasMore: offset + notifications.length < total,
+    };
+  }
+
+  /**
+   * Get unread notification count for a user
+   */
+  async getUnreadCount(userId: string): Promise<number> {
+    return this.notificationLogRepository.count({
+      where: { userId, status: 'sent' },
+    });
+  }
+
+  /**
+   * Delete a single notification
+   */
+  async deleteNotification(userId: string, notificationId: string): Promise<boolean> {
+    const result = await this.notificationLogRepository.delete({
+      id: notificationId,
+      userId,
+    });
+    return (result.affected || 0) > 0;
+  }
+
+  /**
+   * Clear all notifications for a user
+   */
+  async clearAllNotifications(userId: string): Promise<number> {
+    const result = await this.notificationLogRepository.delete({ userId });
+    return result.affected || 0;
   }
 
   /**
@@ -483,6 +544,17 @@ export class NotificationsService implements OnModuleInit {
       { id: notificationId },
       { status: 'read', readAt: new Date() },
     );
+  }
+
+  /**
+   * Mark all notifications as read for a user
+   */
+  async markAllAsRead(userId: string): Promise<number> {
+    const result = await this.notificationLogRepository.update(
+      { userId, status: 'sent' },
+      { status: 'read', readAt: new Date() },
+    );
+    return result.affected || 0;
   }
 
   /**
@@ -577,5 +649,101 @@ export class NotificationsService implements OnModuleInit {
         screen: 'ConnectWithEV',
       },
     });
+  }
+
+  /**
+   * Send vehicle-compatible station alert
+   * Notifies user when a new compatible charger is available near them
+   */
+  async sendVehicleCompatibleStation(
+    userId: string,
+    stationName: string,
+    stationId: string,
+    vehicleName: string,
+    connectorType: string,
+    maxPowerKw: number,
+    distance: number,
+  ): Promise<void> {
+    await this.sendToUser(userId, NotificationType.VEHICLE_COMPATIBLE_STATION, {
+      title: '🔌 Compatible Charger Found',
+      body: `${stationName} supports your ${vehicleName} (${connectorType}, ${maxPowerKw} kW) — ${distance.toFixed(1)} km away`,
+      data: {
+        stationId,
+        vehicleName,
+        connectorType,
+        maxPowerKw,
+        distance,
+        navigate: `/chargers/station/${stationId}`,
+      },
+    });
+  }
+
+  /**
+   * Send vehicle fast-charger nearby alert
+   * Notifies user when a high-power compatible charger is nearby
+   */
+  async sendVehicleFastChargerNearby(
+    userId: string,
+    stationName: string,
+    stationId: string,
+    vehicleName: string,
+    powerKw: number,
+    estimatedMinutes: number,
+    distance: number,
+  ): Promise<void> {
+    await this.sendToUser(userId, NotificationType.VEHICLE_FAST_CHARGER_NEARBY, {
+      title: '⚡ Fast Charger Nearby',
+      body: `${stationName} can charge your ${vehicleName} in ~${estimatedMinutes} min (${powerKw} kW) — ${distance.toFixed(1)} km away`,
+      data: {
+        stationId,
+        vehicleName,
+        powerKw,
+        estimatedMinutes,
+        distance,
+        navigate: `/chargers/station/${stationId}`,
+      },
+    });
+  }
+
+  /**
+   * Update user's FCM token (for Firebase notification integration)
+   */
+  async updateUserFcmToken(userId: string, fcmToken: string, platform?: 'ios' | 'android' | 'web'): Promise<void> {
+    await this.saveFcmToken(userId, fcmToken, platform || 'android');
+  }
+
+  /**
+   * Get user's FCM token
+   */
+  async getUserFcmToken(userId: string): Promise<string | null> {
+    const tokens = await this.fcmTokenRepository.find({
+      where: { userId, isActive: true },
+      order: { createdAt: 'DESC' },
+      take: 1,
+    });
+
+    return tokens.length > 0 ? tokens[0].fcmToken : null;
+  }
+
+  /**
+   * Get all FCM tokens for multiple users
+   */
+  async getUsersFcmTokens(userIds: string[]): Promise<Map<string, string[]>> {
+    const tokens = await this.fcmTokenRepository.find({
+      where: { userId: In(userIds), isActive: true },
+    });
+
+    const tokenMap = new Map<string, string[]>();
+    tokens.forEach(token => {
+      if (!tokenMap.has(token.userId)) {
+        tokenMap.set(token.userId, []);
+      }
+      const userTokens = tokenMap.get(token.userId);
+      if (userTokens) {
+        userTokens.push(token.fcmToken);
+      }
+    });
+
+    return tokenMap;
   }
 }

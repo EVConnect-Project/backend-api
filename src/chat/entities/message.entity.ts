@@ -36,8 +36,8 @@ export class Message {
   sender: UserEntity;
 
   @Column({
-    type: 'enum',
-    enum: MessageType,
+    type: 'varchar',
+    length: 20,
     default: MessageType.TEXT,
   })
   type: MessageType;

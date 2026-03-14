@@ -1,5 +1,5 @@
 export enum BookingMode {
-  PRE_BOOKING_REQUIRED = 'pre_booking_required',
-  WALK_IN_ONLY = 'walk_in_only',
+  PRE_BOOKING = 'pre_booking',
+  WALK_IN = 'walk_in',
   HYBRID = 'hybrid',
 }

@@ -25,17 +25,21 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => ({
-        secret: configService.get('JWT_SECRET') || 'your-secret-key-change-in-production',
-        signOptions: {
-          expiresIn: configService.get('JWT_EXPIRES_IN') || '7d',
-        },
-      }),
+      useFactory: async (configService: ConfigService) => {
+        const secret = configService.get<string>('JWT_SECRET');
+        if (!secret) throw new Error('JWT_SECRET environment variable is not set');
+        return {
+          secret,
+          signOptions: {
+            expiresIn: (configService.get<string>('JWT_EXPIRES_IN') || '24h') as any,
+          },
+        };
+      },
       inject: [ConfigService],
     }),
   ],
   controllers: [AuthController, EnhancedAuthController, VehicleProfileController, MigrationController],
   providers: [AuthService, EnhancedAuthService, VehicleProfileService, OtpService, SmsService, JwtStrategy],
-  exports: [AuthService, EnhancedAuthService, JwtModule],
+  exports: [AuthService, EnhancedAuthService, JwtModule, VehicleProfileService],
 })
 export class AuthModule {}

@@ -6,16 +6,10 @@ export class UserEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ nullable: true })
-  email: string;
-
-  @Column({ nullable: true })
-  phone: string;
-
-  @Column({ nullable: true, unique: true })
+  @Column({ name: 'phone', nullable: true, unique: true })
   phoneNumber: string;
 
-  @Column({ nullable: true })
+  @Column({ name: 'country_code', nullable: true })
   countryCode: string;
 
   @Column()
@@ -28,10 +22,10 @@ export class UserEntity {
   @Column({ default: 'user' })
   role: string;
 
-  @Column({ default: false })
+  @Column({ name: 'is_verified', default: false })
   isVerified: boolean;
 
-  @Column({ default: false })
+  @Column({ name: 'is_banned', default: false })
   isBanned: boolean;
 
   // EV Driver Profile Information
@@ -63,12 +57,16 @@ export class UserEntity {
   @Column({ name: 'terms_accepted_at', type: 'timestamp', nullable: true })
   termsAcceptedAt: Date;
 
+  // Token version for logout invalidation - incremented on logout to invalidate all existing tokens
+  @Column({ name: 'token_version', default: 0 })
+  tokenVersion: number;
+
   @OneToMany('MarketplaceListing', 'seller')
   marketplaceListings: any[];
 
-  @CreateDateColumn()
+  @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 }

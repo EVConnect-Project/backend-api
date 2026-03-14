@@ -30,12 +30,12 @@ export async function seedDatabase(dataSource: DataSource) {
         
         // Create mechanic users
         const mechanicUsers = [
-          { email: 'quickfix@example.com', password: hashedPassword, name: 'Quick Fix Auto', role: 'mechanic' as const },
-          { email: 'evspecialist@example.com', password: hashedPassword, name: 'EV Specialist', role: 'mechanic' as const },
-          { email: 'allroundauto@example.com', password: hashedPassword, name: 'All-Round Auto', role: 'mechanic' as const },
-          { email: 'mobilemech@example.com', password: hashedPassword, name: 'Mobile Mechanic', role: 'mechanic' as const },
-          { email: 'premiumauto@example.com', password: hashedPassword, name: 'Premium Auto', role: 'mechanic' as const },
-          { email: 'budgetrepairs@example.com', password: hashedPassword, name: 'Budget Repairs', role: 'mechanic' as const },
+          { phoneNumber: '+94771234501', password: hashedPassword, name: 'Quick Fix Auto', role: 'mechanic' as const },
+          { phoneNumber: '+94771234502', password: hashedPassword, name: 'EV Specialist', role: 'mechanic' as const },
+          { phoneNumber: '+94771234503', password: hashedPassword, name: 'All-Round Auto', role: 'mechanic' as const },
+          { phoneNumber: '+94771234504', password: hashedPassword, name: 'Mobile Mechanic', role: 'mechanic' as const },
+          { phoneNumber: '+94771234505', password: hashedPassword, name: 'Premium Auto', role: 'mechanic' as const },
+          { phoneNumber: '+94771234506', password: hashedPassword, name: 'Budget Repairs', role: 'mechanic' as const },
         ];
         
         for (const mechanicUser of mechanicUsers) {
@@ -58,7 +58,6 @@ export async function seedDatabase(dataSource: DataSource) {
           lng: 80.087264,
           rating: 4.8,
           phone: '+94771234567',
-          email: 'quickfix@example.com',
           description: 'Fast and reliable emergency roadside assistance. Available 24/7 for battery jumps, tire changes, and minor repairs.',
           available: true,
           pricePerHour: 75.00,
@@ -76,7 +75,6 @@ export async function seedDatabase(dataSource: DataSource) {
           lng: 79.8612,
           rating: 4.9,
           phone: '+94772345678',
-          email: 'evspecialist@example.com',
           description: 'Specialized in electric vehicle maintenance and repair. Expert in EV battery systems and charging infrastructure.',
           available: true,
           pricePerHour: 120.00,
@@ -94,7 +92,6 @@ export async function seedDatabase(dataSource: DataSource) {
           lng: 80.6337,
           rating: 4.6,
           phone: '+94773456789',
-          email: 'allroundauto@example.com',
           description: 'Comprehensive auto repair services for all makes and models. From routine maintenance to major repairs.',
           available: true,
           pricePerHour: 85.00,
@@ -112,8 +109,6 @@ export async function seedDatabase(dataSource: DataSource) {
           lng: 79.8585,
           rating: 4.7,
           phone: '+94774567890',
-          email: 'mobilemech@example.com',
-          description: 'We come to you! Mobile mechanic service available across Colombo. No need to tow your vehicle.',
           available: true,
           pricePerHour: 95.00,
           completedJobs: 178,
@@ -130,8 +125,6 @@ export async function seedDatabase(dataSource: DataSource) {
           lng: 79.8844,
           rating: 5.0,
           phone: '+94775678901',
-          email: 'premiumauto@example.com',
-          description: 'Exclusive service for luxury and performance vehicles. Expert technicians with factory training.',
           available: false,
           pricePerHour: 200.00,
           completedJobs: 312,
@@ -149,8 +142,6 @@ export async function seedDatabase(dataSource: DataSource) {
           rating: 4.3,
           phone: '+94776789012',
           email: 'budgetrepairs@example.com',
-          description: 'Quality auto care at affordable prices. Perfect for routine maintenance and basic repairs.',
-          available: true,
           pricePerHour: 50.00,
           completedJobs: 67,
           licenseNumber: 'MEC-2024-006',
@@ -174,7 +165,7 @@ export async function seedDatabase(dataSource: DataSource) {
 
   // 1. Admin User
   const admin = userRepository.create({
-    email: 'admin@evconnect.com',
+    phoneNumber: '+94771234567',
     password: hashedPassword,
     name: 'Admin User',
     role: 'admin',
@@ -187,7 +178,7 @@ export async function seedDatabase(dataSource: DataSource) {
   const normalUsers: UserEntity[] = [];
   for (let i = 1; i <= 5; i++) {
     const user = userRepository.create({
-      email: `user${i}@example.com`,
+      phoneNumber: `+9477${1000000 + i}`,
       password: hashedPassword,
       name: `User ${i}`,
       role: 'user',
@@ -202,7 +193,7 @@ export async function seedDatabase(dataSource: DataSource) {
   const owners: UserEntity[] = [];
   for (let i = 1; i <= 3; i++) {
     const owner = userRepository.create({
-      email: `owner${i}@example.com`,
+      phoneNumber: `+9477${2000000 + i}`,
       password: hashedPassword,
       name: `Charger Owner ${i}`,
       role: 'owner',
@@ -217,7 +208,7 @@ export async function seedDatabase(dataSource: DataSource) {
   const mechanics: UserEntity[] = [];
   for (let i = 1; i <= 3; i++) {
     const mechanic = userRepository.create({
-      email: `mechanic${i}@example.com`,
+      phoneNumber: `+9477${3000000 + i}`,
       password: hashedPassword,
       name: `Mechanic ${i}`,
       role: 'mechanic',
@@ -316,7 +307,6 @@ export async function seedDatabase(dataSource: DataSource) {
       lng: 80.087264,
       rating: 4.8,
       phone: '+94771234567',
-      email: 'quickfix@example.com',
       description: 'Fast and reliable emergency roadside assistance. Available 24/7 for battery jumps, tire changes, and minor repairs.',
       available: true,
       pricePerHour: 75.00,
@@ -334,7 +324,6 @@ export async function seedDatabase(dataSource: DataSource) {
       lng: 79.8612,
       rating: 4.9,
       phone: '+94772345678',
-      email: 'evspecialist@example.com',
       description: 'Specialized in electric vehicle maintenance and repair. Expert in EV battery systems and charging infrastructure.',
       available: true,
       pricePerHour: 120.00,
@@ -352,7 +341,6 @@ export async function seedDatabase(dataSource: DataSource) {
       lng: 80.6337,
       rating: 4.6,
       phone: '+94773456789',
-      email: 'allroundauto@example.com',
       description: 'Comprehensive auto repair services for all makes and models. From routine maintenance to major repairs.',
       available: true,
       pricePerHour: 85.00,
@@ -370,7 +358,6 @@ export async function seedDatabase(dataSource: DataSource) {
       lng: 79.8585,
       rating: 4.7,
       phone: '+94774567890',
-      email: 'mobilemech@example.com',
       description: 'We come to you! Mobile mechanic service available across Colombo. No need to tow your vehicle.',
       available: true,
       pricePerHour: 95.00,
@@ -388,7 +375,6 @@ export async function seedDatabase(dataSource: DataSource) {
       lng: 79.8844,
       rating: 5.0,
       phone: '+94775678901',
-      email: 'premiumauto@example.com',
       description: 'Exclusive service for luxury and performance vehicles. Expert technicians with factory training.',
       available: false,
       pricePerHour: 200.00,
@@ -406,7 +392,6 @@ export async function seedDatabase(dataSource: DataSource) {
       lng: 79.8358,
       rating: 4.3,
       phone: '+94776789012',
-      email: 'budgetrepairs@example.com',
       description: 'Quality auto care at affordable prices. Perfect for routine maintenance and basic repairs.',
       available: true,
       pricePerHour: 50.00,
@@ -426,19 +411,19 @@ export async function seedDatabase(dataSource: DataSource) {
   console.log('📋 Sample Credentials:');
   console.log('━'.repeat(50));
   console.log('👤 Admin:');
-  console.log('   Email: admin@evconnect.com');
+  console.log('   Phone: +94771234567');
   console.log('   Password: password123');
   console.log('');
   console.log('👥 Normal Users:');
-  console.log('   user1@example.com - user5@example.com');
+  console.log('   Phones: +9477 1000001 - 1000005');
   console.log('   Password: password123');
   console.log('');
   console.log('🏢 Charger Owners:');
-  console.log('   owner1@example.com - owner3@example.com');
+  console.log('   Phones: +9477 2000001 - 2000003');
   console.log('   Password: password123');
   console.log('');
   console.log('🔧 Mechanics:');
-  console.log('   mechanic1@example.com - mechanic3@example.com');
+  console.log('   Phones: +9477 3000001 - 3000003');
   console.log('   Password: password123');
   console.log('━'.repeat(50));
 }

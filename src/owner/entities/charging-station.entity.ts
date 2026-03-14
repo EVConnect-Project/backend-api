@@ -57,9 +57,6 @@ export class ChargingStation {
   @Column({ type: 'jsonb', default: [] })
   images: string[];
 
-  @Column({ name: 'access_type', type: 'varchar', length: 20, default: 'public' })
-  accessType: 'private' | 'public' | 'semi-public';
-
   @Column({ default: false })
   verified: boolean;
 

@@ -1,15 +1,20 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, HttpException, HttpStatus } from '@nestjs/common';
+import { ChargingService } from '../charging/charging.service';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In, Like } from 'typeorm';
+import { Repository, In, Like, ILike } from 'typeorm';
 import { UserEntity } from '../users/entities/user.entity';
 import { Charger } from '../charger/entities/charger.entity';
+import { ChargingStation } from '../owner/entities/charging-station.entity';
+import { ChargerSocket } from '../owner/entities/charger-socket.entity';
 import { BookingEntity } from '../bookings/entities/booking.entity';
 import { MechanicApplication, ApplicationStatus } from '../mechanic/entities/mechanic-application.entity';
 import { MechanicEntity } from '../mechanics/entities/mechanic.entity';
 import { MarketplaceListing } from '../marketplace/entities/marketplace-listing.entity';
 import { OwnerPaymentAccount } from '../owner/entities/owner-payment-account.entity';
+import { VehicleProfile } from '../auth/entities/vehicle-profile.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/types/notification-types';
+import { NotificationLogEntity } from '../notifications/entities/notification-log.entity';
 
 @Injectable()
 export class AdminService {
@@ -28,76 +33,61 @@ export class AdminService {
     private marketplaceRepository: Repository<MarketplaceListing>,
     @InjectRepository(OwnerPaymentAccount)
     private paymentAccountRepository: Repository<OwnerPaymentAccount>,
+    @InjectRepository(ChargingStation)
+    private chargingStationRepository: Repository<ChargingStation>,
+    @InjectRepository(ChargerSocket)
+    private chargerSocketRepository: Repository<ChargerSocket>,
+    @InjectRepository(VehicleProfile)
+    private vehicleProfileRepository: Repository<VehicleProfile>,
+    @InjectRepository(NotificationLogEntity)
+    private notificationLogRepository: Repository<NotificationLogEntity>,
     private notificationsService: NotificationsService,
+    private chargingService: ChargingService,
   ) {}
 
   // Dashboard Stats
   async getDashboardStats() {
-    const [totalUsers, totalChargers, totalBookings] = await Promise.all([
-      this.userRepository.count(),
-      this.chargerRepository.count(),
-      this.bookingRepository.count(),
-    ]);
-
-    const activeUsers = await this.userRepository.count({
-      where: { isBanned: false },
-    });
-
-    const availableChargers = await this.chargerRepository.count({
-      where: { status: 'available' },
-    });
-
-    const bookings = await this.bookingRepository.find({
-      where: { status: In(['completed']) },
-    });
-
-    const totalRevenue = bookings.reduce((sum, booking) => {
-      return sum + (Number(booking.price) || 0);
-    }, 0);
-
-    // Calculate growth (simplified - comparing last 30 days to previous 30 days)
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const sixtyDaysAgo = new Date();
-    sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
-
-    const recentRevenue = bookings
-      .filter((b) => new Date(b.createdAt) >= thirtyDaysAgo)
-      .reduce((sum, b) => sum + (Number(b.price) || 0), 0);
-
-    const previousRevenue = bookings
-      .filter(
-        (b) =>
-          new Date(b.createdAt) >= sixtyDaysAgo &&
-          new Date(b.createdAt) < thirtyDaysAgo,
-      )
-      .reduce((sum, b) => sum + (Number(b.price) || 0), 0);
-
-    const revenueGrowth =
-      previousRevenue > 0
-        ? ((recentRevenue - previousRevenue) / previousRevenue) * 100
-        : 0;
-
-    const recentUsers = await this.userRepository
-      .createQueryBuilder('user')
-      .where('EXTRACT(YEAR FROM user.createdAt) = :year', {
-        year: new Date().getFullYear(),
-      })
-      .andWhere('EXTRACT(MONTH FROM user.createdAt) = :month', {
-        month: new Date().getMonth() + 1,
-      })
-      .getCount();
-
-    return {
-      totalUsers,
-      totalChargers,
-      totalBookings,
-      totalRevenue: Math.round(totalRevenue * 100) / 100,
-      activeUsers,
-      availableChargers,
-      revenueGrowth: Math.round(revenueGrowth * 10) / 10,
-      userGrowth: recentUsers,
-    };
+    try {
+      const totalUsers = await this.userRepository.count();
+      const totalChargers = await this.chargerRepository.count();
+      const totalBookings = await this.bookingRepository.count();
+      
+      const activeUsers = await this.userRepository.count({
+        where: { isBanned: false },
+      });
+      
+      const availableChargers = await this.chargerRepository.count({
+        where: { currentStatus: 'available' as any },
+      });
+      
+      console.log('About to query user growth...');
+      // Calculate user growth for current month
+      const recentUsers = await this.userRepository
+        .createQueryBuilder('user')
+        .where('EXTRACT(YEAR FROM user.createdAt) = :year', {
+          year: new Date().getFullYear(),
+        })
+        .andWhere('EXTRACT(MONTH FROM user.createdAt) = :month', {
+          month: new Date().getMonth() + 1,
+        })
+        .getCount();
+      console.log(`Recent users: ${recentUsers}`);
+      
+      return {
+        totalUsers,
+        totalChargers,
+        totalBookings,
+        totalRevenue: 0,
+        activeUsers,
+        availableChargers,
+        revenueGrowth: 0,
+        userGrowth: recentUsers,
+      };
+    } catch (error) {
+      console.error('Error in getDashboardStats:', error.message);
+      console.error('Error stack:', error.stack);
+      throw error;
+    }
   }
 
   // Analytics
@@ -152,15 +142,23 @@ export class AdminService {
   }
 
   async getRevenueData(startDate: string, endDate: string) {
-    const start = new Date(startDate);
-    const end = new Date(endDate);
+    try {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
 
-    const bookings = await this.bookingRepository
-      .createQueryBuilder('booking')
-      .where('booking.createdAt BETWEEN :start AND :end', { start, end })
-      .getMany();
+      const bookings = await this.bookingRepository
+        .createQueryBuilder('booking')
+        .where('booking.createdAt BETWEEN :start AND :end', { start, end })
+        .getMany();
 
-    return this.generateDailyData(bookings, start, end, 'revenue');
+      return this.generateDailyData(bookings, start, end, 'revenue');
+    } catch (error) {
+      console.error('Error fetching revenue data:', error);
+      // Return empty data for the date range
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      return this.generateDailyData([], start, end, 'revenue');
+    }
   }
 
   async getUserGrowthData(period: string) {
@@ -193,6 +191,102 @@ export class AdminService {
     };
   }
 
+  // Vehicle Analytics
+  async getVehicleAnalytics() {
+    const vehicles = await this.vehicleProfileRepository.find();
+    const totalVehicles = vehicles.length;
+
+    // Vehicle type distribution (make-based)
+    const makeCount: Record<string, number> = {};
+    vehicles.forEach(v => {
+      const make = (v.make || 'Unknown').toLowerCase();
+      makeCount[make] = (makeCount[make] || 0) + 1;
+    });
+    const vehicleTypeDistribution = Object.entries(makeCount)
+      .map(([name, count]) => ({ name, count, percentage: totalVehicles > 0 ? Math.round((count / totalVehicles) * 100) : 0 }))
+      .sort((a, b) => b.count - a.count);
+
+    // Connector type distribution across all vehicles
+    const connectorCount: Record<string, number> = {};
+    vehicles.forEach(v => {
+      const connectors: string[] = v.connectorTypes || [];
+      connectors.forEach(c => {
+        connectorCount[c] = (connectorCount[c] || 0) + 1;
+      });
+    });
+    const connectorTypeDistribution = Object.entries(connectorCount)
+      .map(([name, count]) => ({ name, count, percentage: totalVehicles > 0 ? Math.round((count / totalVehicles) * 100) : 0 }))
+      .sort((a, b) => b.count - a.count);
+
+    // Available charger connector types from sockets
+    const chargerSockets = await this.chargerSocketRepository
+      .createQueryBuilder('socket')
+      .select('LOWER(socket.connectorType)', 'connectorType')
+      .addSelect('COUNT(*)', 'count')
+      .groupBy('LOWER(socket.connectorType)')
+      .getRawMany();
+
+    // Compatibility match rate: % of vehicles that have at least one matching charger connector
+    const chargerConnectors = new Set(chargerSockets.map(s => s.connectorType?.toLowerCase()));
+    let matchedVehicles = 0;
+    vehicles.forEach(v => {
+      const vehicleConnectors: string[] = v.connectorTypes || [];
+      if (vehicleConnectors.some(vc => chargerConnectors.has(vc.toLowerCase()))) {
+        matchedVehicles++;
+      }
+    });
+    const compatibilityMatchRate = totalVehicles > 0 ? Math.round((matchedVehicles / totalVehicles) * 100) : 0;
+
+    // Power distribution
+    const powerBuckets = {
+      'Under 7 kW': 0,
+      '7-22 kW': 0,
+      '22-50 kW': 0,
+      '50-150 kW': 0,
+      '150+ kW': 0,
+    };
+    vehicles.forEach(v => {
+      const maxPower = Math.max(
+        Number(v.maxAcChargingPower) || 0,
+        Number(v.maxDcChargingPower) || 0,
+      );
+      if (maxPower < 7) powerBuckets['Under 7 kW']++;
+      else if (maxPower < 22) powerBuckets['7-22 kW']++;
+      else if (maxPower < 50) powerBuckets['22-50 kW']++;
+      else if (maxPower < 150) powerBuckets['50-150 kW']++;
+      else powerBuckets['150+ kW']++;
+    });
+    const powerDistribution = Object.entries(powerBuckets)
+      .map(([name, count]) => ({ name, count }));
+
+    // Vehicles registered over time (monthly)
+    const vehicleGrowth = await this.vehicleProfileRepository
+      .createQueryBuilder('vp')
+      .select("TO_CHAR(vp.createdAt, 'YYYY-MM')", 'month')
+      .addSelect('COUNT(*)', 'count')
+      .groupBy("TO_CHAR(vp.createdAt, 'YYYY-MM')")
+      .orderBy("TO_CHAR(vp.createdAt, 'YYYY-MM')", 'ASC')
+      .getRawMany();
+
+    return {
+      totalVehicles,
+      vehicleTypeDistribution,
+      connectorTypeDistribution,
+      compatibilityMatchRate,
+      matchedVehicles,
+      totalChargerConnectors: chargerSockets.length,
+      chargerConnectorDistribution: chargerSockets.map(s => ({
+        name: s.connectorType,
+        count: parseInt(s.count),
+      })),
+      powerDistribution,
+      vehicleGrowth: vehicleGrowth.map(g => ({
+        month: g.month,
+        count: parseInt(g.count),
+      })),
+    };
+  }
+
   // User Management
   async getUsers(params: {
     page: number;
@@ -207,7 +301,7 @@ export class AdminService {
 
     if (search) {
       queryBuilder.where(
-        '(user.name ILIKE :search OR user.email ILIKE :search)',
+        '(user.name ILIKE :search OR user.phoneNumber ILIKE :search)',
         { search: `%${search}%` },
       );
     }
@@ -227,7 +321,7 @@ export class AdminService {
       users: users.map((u) => ({
         id: u.id,
         name: u.name,
-        email: u.email,
+        phone: u.phoneNumber,
         role: u.role,
         isBanned: u.isBanned,
         createdAt: u.createdAt,
@@ -245,7 +339,7 @@ export class AdminService {
     return {
       id: user.id,
       name: user.name,
-      email: user.email,
+      phone: user.phoneNumber,
       role: user.role,
       isBanned: user.isBanned,
       createdAt: user.createdAt,
@@ -334,13 +428,15 @@ export class AdminService {
     search?: string;
     status?: string;
     verified?: boolean;
+    banned?: boolean;
   }) {
-    const { page, limit, search, status, verified } = params;
+    const { page, limit, search, status, verified, banned } = params;
     const skip = (page - 1) * limit;
 
     const queryBuilder = this.chargerRepository
       .createQueryBuilder('charger')
-      .leftJoinAndSelect('charger.owner', 'owner');
+      .leftJoinAndSelect('charger.owner', 'owner')
+      .leftJoinAndSelect('charger.sockets', 'sockets');
 
     if (search) {
       queryBuilder.where(
@@ -358,11 +454,29 @@ export class AdminService {
       queryBuilder.andWhere('charger.verified = :verified', { verified });
     }
 
+    if (banned !== undefined) {
+      queryBuilder.andWhere('charger.isBanned = :banned', { banned });
+    }
+
     const [chargers, total] = await queryBuilder
       .skip(skip)
       .take(limit)
       .orderBy('charger.createdAt', 'DESC')
       .getManyAndCount();
+
+    // Batch-fetch station names for chargers that belong to a station
+    const stationIds = [...new Set(chargers.map(c => c.stationId).filter(Boolean))] as string[];
+    const stationMap: Record<string, string> = {};
+    if (stationIds.length > 0) {
+      const stations = await this.chargingStationRepository
+        .createQueryBuilder('s')
+        .select(['s.id', 's.stationName'])
+        .where('s.id IN (:...ids)', { ids: stationIds })
+        .getMany();
+      for (const s of stations) {
+        stationMap[s.id] = s.stationName;
+      }
+    }
 
     return {
       chargers: chargers.map((c) => ({
@@ -372,15 +486,29 @@ export class AdminService {
         lat: Number(c.lat),
         lng: Number(c.lng),
         status: c.status,
+        chargerType: c.chargerType || null,
+        maxPowerKw: Number(c.maxPowerKw || 0),
         powerKw: Number(c.powerKw),
         pricePerKwh: Number(c.pricePerKwh),
+        connectorType: c.connectorType || null,
+        speedType: c.speedType || null,
+        numberOfPlugs: c.numberOfPlugs || 1,
+        bookingMode: c.bookingMode || null,
+        isOnline: c.isOnline || false,
         verified: c.verified,
+        isBanned: c.isBanned,
         description: c.description,
+        chargeBoxIdentity: c.chargeBoxIdentity || null,
+        stationId: c.stationId || null,
+        stationName: c.stationId ? (stationMap[c.stationId] || null) : null,
+        amenities: c.amenities || null,
+        phoneNumber: c.phoneNumber || null,
+        socketsCount: c.sockets ? c.sockets.length : 0,
         owner: c.owner
           ? {
               id: c.owner.id,
               name: c.owner.name,
-              email: c.owner.email,
+              phone: c.owner.phoneNumber,
             }
           : null,
         ownerId: c.ownerId,
@@ -394,11 +522,21 @@ export class AdminService {
   async getChargerById(id: string) {
     const charger = await this.chargerRepository.findOne({
       where: { id },
-      relations: ['owner'],
+      relations: ['owner', 'sockets'],
     });
     if (!charger) {
       throw new NotFoundException('Charger not found');
     }
+
+    // Fetch station name if charger belongs to a station
+    let stationName: string | null = null;
+    if (charger.stationId) {
+      const station = await this.chargingStationRepository.findOne({
+        where: { id: charger.stationId },
+      });
+      if (station) stationName = station.stationName;
+    }
+
     return {
       id: charger.id,
       name: charger.name,
@@ -406,15 +544,53 @@ export class AdminService {
       lat: Number(charger.lat),
       lng: Number(charger.lng),
       status: charger.status,
+      chargerType: charger.chargerType || null,
+      maxPowerKw: Number(charger.maxPowerKw || 0),
       powerKw: Number(charger.powerKw),
       pricePerKwh: Number(charger.pricePerKwh),
+      connectorType: charger.connectorType || null,
+      speedType: charger.speedType || null,
+      numberOfPlugs: charger.numberOfPlugs || 1,
+      bookingMode: charger.bookingMode || null,
+      bookingSettings: charger.bookingSettings || null,
+      openingHours: charger.openingHours || null,
+      isOnline: charger.isOnline || false,
+      ocppStatus: charger.ocppStatus || 'not_configured',
+      chargeBoxIdentity: charger.chargeBoxIdentity || null,
+      currentStatus: charger.currentStatus || null,
+      lastStatusUpdate: charger.lastStatusUpdate || null,
+      lastHeartbeat: charger.lastHeartbeat || null,
       verified: charger.verified,
+      isBanned: charger.isBanned,
       description: charger.description,
+      amenities: charger.amenities || null,
+      phoneNumber: charger.phoneNumber || null,
+      googleMapUrl: charger.googleMapUrl || null,
+      chargerIdentifier: charger.chargerIdentifier || null,
+      reliabilityScore: Number(charger.reliabilityScore || 0),
+      requiresAuth: charger.requiresAuth,
+      requiresPhysicalCheck: charger.requiresPhysicalCheck,
+      hasOccupancySensor: charger.hasOccupancySensor,
+      paymentAccountId: charger.paymentAccountId || null,
+      stationId: charger.stationId || null,
+      stationName,
+      sockets: (charger.sockets || []).map(s => ({
+        id: s.id,
+        socketNumber: s.socketNumber,
+        socketLabel: s.socketLabel || null,
+        connectorType: s.connectorType,
+        maxPowerKw: Number(s.maxPowerKw),
+        pricePerKwh: s.pricePerKwh ? Number(s.pricePerKwh) : null,
+        pricePerHour: s.pricePerHour ? Number(s.pricePerHour) : null,
+        isFree: s.isFree,
+        bookingMode: s.bookingMode,
+        status: s.status,
+      })),
       owner: charger.owner
         ? {
             id: charger.owner.id,
             name: charger.owner.name,
-            email: charger.owner.email,
+            phone: charger.owner.phoneNumber,
           }
         : null,
       ownerId: charger.ownerId,
@@ -424,29 +600,64 @@ export class AdminService {
   }
 
   async approveCharger(id: string) {
+    console.log(`✅ [AdminService] Approving charger: ${id}`);
+    
     const charger = await this.chargerRepository.findOne({ 
       where: { id },
       relations: ['owner']
     });
     if (!charger) {
+      console.error(`❌ [AdminService] Charger not found: ${id}`);
       throw new NotFoundException('Charger not found');
     }
+    
+    console.log(`📝 [AdminService] Current charger state:`, {
+      id: charger.id,
+      name: charger.name,
+      verified: charger.verified,
+      status: charger.status,
+      ownerId: charger.ownerId,
+    });
+    
     charger.verified = true;
     charger.status = 'available'; // Make charger available when approved
-    await this.chargerRepository.save(charger);
+    const updatedCharger = await this.chargerRepository.save(charger);
+    
+    console.log(`✅ [AdminService] Charger updated:`, {
+      id: updatedCharger.id,
+      verified: updatedCharger.verified,
+      status: updatedCharger.status,
+    });
+
+    // Promote the owner's role to 'owner' so they can access the Owner Dashboard
+    const owner = charger.owner ?? await this.userRepository.findOne({ where: { id: charger.ownerId } });
+    if (owner && owner.role !== 'owner' && owner.role !== 'admin') {
+      owner.role = 'owner';
+      await this.userRepository.save(owner);
+      console.log(`✅ [AdminService] User ${owner.phoneNumber} promoted to 'owner' role`);
+    }
     
     // Send approval notification to owner
     try {
+      console.log(`📧 [AdminService] Sending approval notification to owner: ${charger.ownerId}`);
       await this.notificationsService.sendChargerApproved(
         charger.ownerId,
         charger.name || 'Your Charger',
         charger.id,
       );
+      console.log(`✅ [AdminService] Notification sent successfully`);
     } catch (error) {
-      console.error('Failed to send charger approval notification:', error);
+      console.error('❌ Failed to send charger approval notification:', error);
     }
     
-    return { message: 'Charger approved successfully' };
+    return {
+      id: updatedCharger.id,
+      name: updatedCharger.name,
+      address: updatedCharger.address,
+      verified: updatedCharger.verified,
+      status: updatedCharger.status,
+      message: 'Charger approved successfully',
+    };
   }
 
   async rejectCharger(id: string, reason: string) {
@@ -500,6 +711,101 @@ export class AdminService {
     }
     await this.chargerRepository.remove(charger);
     return { message: 'Charger deleted successfully' };
+  }
+
+  async getChargerAnalytics(id: string) {
+    const charger = await this.chargerRepository.findOne({ 
+      where: { id },
+      relations: ['owner']
+    });
+    
+    if (!charger) {
+      throw new NotFoundException('Charger not found');
+    }
+
+    // Get all bookings for this charger
+    const bookings = await this.bookingRepository.find({
+      where: { chargerId: id },
+      order: { createdAt: 'DESC' },
+    });
+
+    // Calculate revenue data by month (last 12 months)
+    const revenueData: Array<{ month: string; revenue: number; bookings: number }> = [];
+    const now = new Date();
+    for (let i = 11; i >= 0; i--) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const monthBookings = bookings.filter(b => {
+        const bookingDate = new Date(b.createdAt);
+        return bookingDate.getMonth() === date.getMonth() && 
+               bookingDate.getFullYear() === date.getFullYear() &&
+               b.status === 'completed';
+      });
+      
+      const revenue = monthBookings.reduce((sum, b) => sum + (Number(b.price) || 0), 0);
+      
+      revenueData.push({
+        month: date.toLocaleDateString('en-US', { month: 'short' }),
+        revenue: Math.round(revenue * 100) / 100,
+        bookings: monthBookings.length,
+      });
+    }
+
+    // Calculate utilization data by day (last 30 days)
+    const utilizationData: Array<{ date: string; utilization: number }> = [];
+    for (let i = 29; i >= 0; i--) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      date.setHours(0, 0, 0, 0);
+      
+      const dayBookings = bookings.filter(b => {
+        const bookingDate = new Date(b.createdAt);
+        bookingDate.setHours(0, 0, 0, 0);
+        return bookingDate.getTime() === date.getTime();
+      });
+
+      // Calculate total hours used (assuming each booking is ~2 hours average)
+      const hoursUsed = dayBookings.length * 2;
+      const utilizationRate = Math.min((hoursUsed / 24) * 100, 100);
+
+      utilizationData.push({
+        date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        utilization: Math.round(utilizationRate * 10) / 10,
+      });
+    }
+
+    // Calculate status distribution
+    const completedCount = bookings.filter(b => b.status === 'completed').length;
+    const cancelledCount = bookings.filter(b => b.status === 'cancelled').length;
+    const activeCount = bookings.filter(b => b.status === 'active').length;
+    const totalCount = bookings.length || 1; // Prevent division by zero
+
+    const statusDistribution = [
+      { status: 'Completed', count: completedCount, percentage: Math.round((completedCount / totalCount) * 100) },
+      { status: 'Cancelled', count: cancelledCount, percentage: Math.round((cancelledCount / totalCount) * 100) },
+      { status: 'Active', count: activeCount, percentage: Math.round((activeCount / totalCount) * 100) },
+    ];
+
+    // Calculate summary stats
+    const totalRevenue = bookings
+      .filter(b => b.status === 'completed')
+      .reduce((sum, b) => sum + (Number(b.price) || 0), 0);
+    
+    const totalEnergyDelivered = bookings
+      .filter(b => b.status === 'completed')
+      .reduce((sum, b) => sum + (Number(b.energyConsumed) || 0), 0);
+
+    return {
+      revenueData,
+      utilizationData,
+      statusDistribution,
+      summary: {
+        totalBookings: bookings.length,
+        completedBookings: completedCount,
+        totalRevenue: Math.round(totalRevenue * 100) / 100,
+        totalEnergyDelivered: Math.round(totalEnergyDelivered * 100) / 100,
+        averageBookingValue: bookings.length > 0 ? Math.round((totalRevenue / completedCount) * 100) / 100 : 0,
+      },
+    };
   }
 
   async banCharger(id: string) {
@@ -562,6 +868,220 @@ export class AdminService {
     return { message: 'Charger unbanned successfully' };
   }
 
+  // Charging Station Management
+  async getStations(params: {
+    page: number;
+    limit: number;
+    search?: string;
+    verified?: boolean;
+  }) {
+    const { page, limit, search, verified } = params;
+    const skip = (page - 1) * limit;
+
+    const query = this.chargingStationRepository
+      .createQueryBuilder('station')
+      .leftJoinAndSelect('station.owner', 'owner')
+      .orderBy('station.createdAt', 'DESC')
+      .skip(skip)
+      .take(limit);
+
+    if (search) {
+      query.andWhere(
+        '(station.stationName ILIKE :search OR station.address ILIKE :search)',
+        { search: `%${search}%` },
+      );
+    }
+
+    if (verified !== undefined) {
+      query.andWhere('station.verified = :verified', { verified });
+    }
+
+    const [stations, total] = await query.getManyAndCount();
+
+    // Get charger counts for each station
+    const stationIds = stations.map((s) => s.id);
+    let chargerCountMap: Record<string, number> = {};
+    if (stationIds.length > 0) {
+      const chargerCounts = await this.chargerRepository
+        .createQueryBuilder('charger')
+        .select('charger.stationId', 'stationId')
+        .addSelect('COUNT(*)', 'count')
+        .where('charger.stationId IN (:...stationIds)', { stationIds })
+        .groupBy('charger.stationId')
+        .getRawMany();
+      chargerCountMap = chargerCounts.reduce((acc, row) => {
+        acc[row.stationId] = parseInt(row.count);
+        return acc;
+      }, {} as Record<string, number>);
+    }
+
+    return {
+      data: stations.map((station) => ({
+        id: station.id,
+        stationName: station.stationName,
+        address: station.address,
+        stationType: station.stationType,
+        lat: station.lat,
+        lng: station.lng,
+        parkingCapacity: station.parkingCapacity,
+        amenities: station.amenities,
+        openingHours: station.openingHours,
+        images: station.images,
+        verified: station.verified,
+        isBanned: station.isBanned,
+        createdAt: station.createdAt,
+        updatedAt: station.updatedAt,
+        chargersCount: chargerCountMap[station.id] || 0,
+        owner: station.owner
+          ? {
+              id: station.owner.id,
+              name: station.owner.name,
+              email: station.owner.phoneNumber,
+            }
+          : null,
+      })),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async getStationById(id: string) {
+    const station = await this.chargingStationRepository.findOne({
+      where: { id },
+      relations: ['owner'],
+    });
+
+    if (!station) {
+      throw new NotFoundException('Charging station not found');
+    }
+
+    // Fetch chargers belonging to this station
+    const chargers = await this.chargerRepository.find({
+      where: { stationId: id },
+      relations: ['sockets'],
+      order: { createdAt: 'DESC' },
+    });
+
+    return {
+      id: station.id,
+      stationName: station.stationName,
+      locationUrl: station.locationUrl,
+      stationType: station.stationType,
+      lat: station.lat,
+      lng: station.lng,
+      address: station.address,
+      parkingCapacity: station.parkingCapacity,
+      description: station.description,
+      amenities: station.amenities,
+      openingHours: station.openingHours,
+      images: station.images,
+      verified: station.verified,
+      isBanned: station.isBanned,
+      createdAt: station.createdAt,
+      updatedAt: station.updatedAt,
+      owner: station.owner
+        ? {
+            id: station.owner.id,
+            name: station.owner.name,
+            email: station.owner.phoneNumber,
+            phone: station.owner.phoneNumber,
+          }
+        : null,
+      chargers: chargers.map((c) => ({
+        id: c.id,
+        name: c.name,
+        chargerType: c.chargerType,
+        maxPowerKw: c.maxPowerKw,
+        connectorType: c.connectorType,
+        speedType: c.speedType,
+        status: c.status,
+        currentStatus: c.currentStatus,
+        isOnline: c.isOnline,
+        verified: c.verified,
+        isBanned: c.isBanned,
+        pricePerKwh: c.pricePerKwh,
+        bookingMode: c.bookingMode,
+        socketsCount: c.sockets?.length || 0,
+        sockets: c.sockets?.map((s) => ({
+          id: s.id,
+          socketNumber: s.socketNumber,
+          socketLabel: s.socketLabel,
+          connectorType: s.connectorType,
+          maxPowerKw: s.maxPowerKw,
+          pricePerKwh: s.pricePerKwh,
+          status: s.status,
+        })),
+      })),
+    };
+  }
+
+  async updateStation(id: string, data: any) {
+    const station = await this.chargingStationRepository.findOne({
+      where: { id },
+    });
+
+    if (!station) {
+      throw new NotFoundException('Charging station not found');
+    }
+
+    // Update allowed fields
+    const allowedFields = [
+      'stationName',
+      'address',
+      'stationType',
+      'lat',
+      'lng',
+      'locationUrl',
+      'parkingCapacity',
+      'description',
+      'amenities',
+      'openingHours',
+      'verified',
+      'isBanned',
+    ];
+
+    for (const field of allowedFields) {
+      if (data[field] !== undefined) {
+        (station as any)[field] = data[field];
+      }
+    }
+
+    await this.chargingStationRepository.save(station);
+
+    return { message: 'Station updated successfully', station };
+  }
+
+  async deleteStation(id: string) {
+    const station = await this.chargingStationRepository.findOne({
+      where: { id },
+    });
+
+    if (!station) {
+      throw new NotFoundException('Charging station not found');
+    }
+
+    // Check if station has chargers
+    const chargerCount = await this.chargerRepository.count({
+      where: { stationId: id },
+    });
+
+    if (chargerCount > 0) {
+      // Unlink chargers from station (set stationId to null)
+      await this.chargerRepository
+        .createQueryBuilder()
+        .update(Charger)
+        .set({ stationId: null })
+        .where('stationId = :id', { id })
+        .execute();
+    }
+
+    await this.chargingStationRepository.remove(station);
+
+    return { message: 'Station deleted successfully', unlinkedChargers: chargerCount };
+  }
+
   // Booking Management
   async getBookings(params: {
     page: number;
@@ -613,7 +1133,7 @@ export class AdminService {
           ? {
               id: b.user.id,
               name: b.user.name,
-              email: b.user.email,
+              phone: b.user.phoneNumber,
             }
           : null,
         charger: b.charger
@@ -650,7 +1170,7 @@ export class AdminService {
         ? {
             id: booking.user.id,
             name: booking.user.name,
-            email: booking.user.email,
+            phone: booking.user.phoneNumber,
           }
         : null,
       charger: booking.charger
@@ -661,6 +1181,140 @@ export class AdminService {
           }
         : null,
       createdAt: booking.createdAt,
+    };
+  }
+
+  async getBookingTimeline(id: string) {
+    const booking = await this.bookingRepository.findOne({
+      where: { id },
+      relations: ['user', 'charger'],
+    });
+
+    if (!booking) {
+      throw new NotFoundException('Booking not found');
+    }
+
+    // Build timeline events based on booking data
+    const timeline: Array<{
+      time: string;
+      event: string;
+      status: 'completed' | 'pending' | 'cancelled';
+      details?: string;
+    }> = [];
+
+    // Booking created
+    timeline.push({
+      time: booking.createdAt.toISOString(),
+      event: 'Booking Created',
+      status: 'completed',
+      details: `Booking created by ${booking.user?.name || 'User'}`,
+    });
+
+    // Charging started
+    if (booking.startTime) {
+      timeline.push({
+        time: booking.startTime.toISOString(),
+        event: 'Charging Started',
+        status: 'completed',
+        details: `Started charging at ${booking.charger?.name || 'charger'}`,
+      });
+
+      // Calculate charging progress events based on energy consumed
+      if (booking.energyConsumed && booking.status === 'completed') {
+        const startTime = new Date(booking.startTime).getTime();
+        const endTime = booking.endTime ? new Date(booking.endTime).getTime() : Date.now();
+        const duration = endTime - startTime;
+
+        // 25% charged
+        timeline.push({
+          time: new Date(startTime + duration * 0.25).toISOString(),
+          event: '25% Charged',
+          status: 'completed',
+          details: `${Math.round(booking.energyConsumed * 0.25 * 100) / 100} kWh delivered`,
+        });
+
+        // 50% charged
+        timeline.push({
+          time: new Date(startTime + duration * 0.5).toISOString(),
+          event: '50% Charged',
+          status: 'completed',
+          details: `${Math.round(booking.energyConsumed * 0.5 * 100) / 100} kWh delivered`,
+        });
+
+        // 75% charged
+        timeline.push({
+          time: new Date(startTime + duration * 0.75).toISOString(),
+          event: '75% Charged',
+          status: 'completed',
+          details: `${Math.round(booking.energyConsumed * 0.75 * 100) / 100} kWh delivered`,
+        });
+      }
+    }
+
+    // Charging completed or cancelled
+    if (booking.endTime && booking.status === 'completed') {
+      timeline.push({
+        time: booking.endTime.toISOString(),
+        event: 'Charging Completed',
+        status: 'completed',
+        details: `Total energy: ${booking.energyConsumed} kWh, Cost: $${booking.price}`,
+      });
+    } else if (booking.status === 'cancelled') {
+      timeline.push({
+        time: (booking.updatedAt || booking.createdAt).toISOString(),
+        event: 'Booking Cancelled',
+        status: 'cancelled',
+        details: 'Booking was cancelled',
+      });
+    } else if (booking.status === 'active') {
+      timeline.push({
+        time: new Date().toISOString(),
+        event: 'Charging In Progress',
+        status: 'pending',
+        details: 'Charging is currently ongoing',
+      });
+    }
+
+    // Generate energy consumption data if charging completed
+    const energyData: Array<{ time: string; power: number; energy: number }> = [];
+    
+    if (booking.startTime && booking.energyConsumed && booking.status === 'completed') {
+      const startTime = new Date(booking.startTime).getTime();
+      const endTime = booking.endTime ? new Date(booking.endTime).getTime() : Date.now();
+      const duration = (endTime - startTime) / (1000 * 60); // Duration in minutes
+      const dataPoints = Math.min(20, Math.floor(duration / 5)); // Sample every 5 minutes or 20 points max
+
+      for (let i = 0; i <= dataPoints; i++) {
+        const progress = i / dataPoints;
+        const timeOffset = Math.floor(progress * duration);
+        
+        // Simulate realistic power curve (starts high, tapers off near end)
+        const basePower = booking.charger?.powerKw || 50;
+        const powerVariation = progress < 0.8 
+          ? basePower * (0.9 + Math.random() * 0.2) // 90-110% of rated power
+          : basePower * (0.5 + Math.random() * 0.3); // Tapers to 50-80% near end
+
+        energyData.push({
+          time: `${timeOffset}m`,
+          power: Math.round(powerVariation * 10) / 10,
+          energy: Math.round(booking.energyConsumed * progress * 100) / 100,
+        });
+      }
+    }
+
+    return {
+      timeline: timeline.sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime()),
+      energyData,
+      summary: {
+        totalEnergy: booking.energyConsumed || 0,
+        totalCost: booking.price || 0,
+        duration: booking.startTime && booking.endTime
+          ? Math.round((new Date(booking.endTime).getTime() - new Date(booking.startTime).getTime()) / (1000 * 60))
+          : 0,
+        averagePower: booking.energyConsumed && booking.startTime && booking.endTime
+          ? Math.round((booking.energyConsumed / ((new Date(booking.endTime).getTime() - new Date(booking.startTime).getTime()) / (1000 * 60 * 60))) * 10) / 10
+          : 0,
+      },
     };
   }
 
@@ -712,7 +1366,7 @@ export class AdminService {
 
     if (search) {
       queryBuilder.where(
-        '(application.fullName ILIKE :search OR application.phoneNumber ILIKE :search OR application.skills ILIKE :search)',
+        '(application.name ILIKE :search OR application.phone ILIKE :search OR application.services::text ILIKE :search)',
         { search: `%${search}%` },
       );
     }
@@ -732,16 +1386,16 @@ export class AdminService {
       applications: applications.map((a) => ({
         id: a.id,
         userId: a.userId,
-        fullName: a.fullName,
-        phoneNumber: a.phoneNumber,
-        skills: a.skills,
+        fullName: a.name,
+        phoneNumber: a.phone,
+        skills: a.services.join(', '),
         yearsOfExperience: a.yearsOfExperience,
         certifications: a.certifications,
-        serviceArea: a.serviceArea,
-        serviceLat: a.serviceLat ? Number(a.serviceLat) : null,
-        serviceLng: a.serviceLng ? Number(a.serviceLng) : null,
+        serviceArea: a.address,
+        serviceLat: a.lat ? Number(a.lat) : null,
+        serviceLng: a.lng ? Number(a.lng) : null,
         licenseNumber: a.licenseNumber,
-        additionalInfo: a.additionalInfo,
+        additionalInfo: a.description,
         status: a.status,
         reviewedBy: a.reviewedBy,
         reviewNotes: a.reviewNotes,
@@ -751,7 +1405,7 @@ export class AdminService {
         user: a.user ? {
           id: a.user.id,
           name: a.user.name,
-          email: a.user.email,
+          phone: a.user.phoneNumber,
         } : null,
       })),
       total,
@@ -771,16 +1425,16 @@ export class AdminService {
     return {
       id: application.id,
       userId: application.userId,
-      fullName: application.fullName,
-      phoneNumber: application.phoneNumber,
-      skills: application.skills,
+      fullName: application.name,
+      phoneNumber: application.phone,
+      skills: application.services.join(', '),
       yearsOfExperience: application.yearsOfExperience,
       certifications: application.certifications,
-      serviceArea: application.serviceArea,
-      serviceLat: application.serviceLat ? Number(application.serviceLat) : null,
-      serviceLng: application.serviceLng ? Number(application.serviceLng) : null,
+      serviceArea: application.address,
+      serviceLat: application.lat ? Number(application.lat) : null,
+      serviceLng: application.lng ? Number(application.lng) : null,
       licenseNumber: application.licenseNumber,
-      additionalInfo: application.additionalInfo,
+      additionalInfo: application.description,
       status: application.status,
       reviewedBy: application.reviewedBy,
       reviewNotes: application.reviewNotes,
@@ -790,7 +1444,7 @@ export class AdminService {
       user: application.user ? {
         id: application.user.id,
         name: application.user.name,
-        email: application.user.email,
+        phone: application.user.phoneNumber,
         role: application.user.role,
       } : null,
     };
@@ -824,16 +1478,16 @@ export class AdminService {
     // Create mechanic record
     const mechanic = this.mechanicRepository.create({
       userId: application.userId,
-      name: application.fullName,
-      specialization: application.skills,
+      name: application.name,
+      specialization: application.services.join(', '),
       yearsOfExperience: application.yearsOfExperience,
       rating: 0,
       completedJobs: 0,
       available: true,
-      services: application.skills.split(',').map(s => s.trim()),
-      lat: application.serviceLat,
-      lng: application.serviceLng,
-      phone: application.phoneNumber,
+      services: application.services,
+      lat: application.lat,
+      lng: application.lng,
+      phone: application.phone,
       licenseNumber: application.licenseNumber,
       certifications: application.certifications,
     });
@@ -922,7 +1576,7 @@ export class AdminService {
         user: m.user ? {
           id: m.user.id,
           name: m.user.name,
-          email: m.user.email,
+          phone: m.user.phoneNumber,
         } : null,
         createdAt: m.createdAt,
         updatedAt: m.updatedAt,
@@ -957,7 +1611,7 @@ export class AdminService {
       user: mechanic.user ? {
         id: mechanic.user.id,
         name: mechanic.user.name,
-        email: mechanic.user.email,
+        phone: mechanic.user.phoneNumber,
         role: mechanic.user.role,
       } : null,
       createdAt: mechanic.createdAt,
@@ -1229,8 +1883,7 @@ export class AdminService {
     return {
       id: charger.owner.id,
       name: charger.owner.name,
-      email: charger.owner.email,
-      phone: charger.owner.phone,
+      phone: charger.owner.phoneNumber,
       role: charger.owner.role,
       createdAt: charger.owner.createdAt,
     };
@@ -1674,5 +2327,197 @@ export class AdminService {
     }
 
     return this.mechanicRepository.save(mechanic);
+  }
+
+  // ── Admin OCPP Controls ────────────────────────────────────────────────────
+
+  private async resolveOcppId(postgresChargerId: string): Promise<string> {
+    const charger = await this.chargerRepository.findOne({ where: { id: postgresChargerId } });
+    if (!charger) throw new NotFoundException('Charger not found');
+    if (!charger.chargeBoxIdentity) {
+      throw new HttpException('Charger has no OCPP identity — not yet registered with OCPP service', HttpStatus.BAD_REQUEST);
+    }
+    // Resolve to ev-charging-service internal UUID
+    const ocppCharger = await this.chargingService.getChargerByIdentity(charger.chargeBoxIdentity);
+    return ocppCharger.id;
+  }
+
+  async ocppResetCharger(chargerId: string, type: 'Soft' | 'Hard' = 'Soft') {
+    const ocppId = await this.resolveOcppId(chargerId);
+    return this.chargingService.resetCharger(ocppId, type);
+  }
+
+  async ocppUnlockConnector(chargerId: string, connectorId = 1) {
+    const ocppId = await this.resolveOcppId(chargerId);
+    return this.chargingService.unlockConnector(ocppId, connectorId);
+  }
+
+  async ocppSetAvailability(chargerId: string, connectorId: number, type: 'Operative' | 'Inoperative') {
+    const ocppId = await this.resolveOcppId(chargerId);
+    return this.chargingService.setAvailability(ocppId, connectorId, type);
+  }
+
+  async ocppGetActiveSessions(status?: string) {
+    return this.chargingService.getAllSessions(status);
+  }
+
+  async ocppForceStopSession(sessionId: string) {
+    return this.chargingService.forceStopSession(sessionId);
+  }
+
+  async ocppGetConnectedChargers() {
+    return this.chargingService.getConnectedChargers();
+  }
+
+  // ==================== NOTIFICATIONS ====================
+
+  async getNotificationLogs(params: {
+    page: number;
+    limit: number;
+    search?: string;
+    type?: string;
+    status?: string;
+  }) {
+    const { page, limit, search, type, status } = params;
+    const skip = (page - 1) * limit;
+
+    const qb = this.notificationLogRepository
+      .createQueryBuilder('log')
+      .leftJoinAndSelect('log.user', 'user')
+      .orderBy('log.createdAt', 'DESC')
+      .skip(skip)
+      .take(limit);
+
+    if (search) {
+      qb.andWhere(
+        '(log.title ILIKE :search OR log.body ILIKE :search OR user.name ILIKE :search OR user.phone ILIKE :search)',
+        { search: `%${search}%` },
+      );
+    }
+
+    if (type) {
+      qb.andWhere('log.type = :type', { type });
+    }
+
+    if (status) {
+      qb.andWhere('log.status = :status', { status });
+    }
+
+    const [notifications, total] = await qb.getManyAndCount();
+
+    return {
+      notifications: notifications.map((n) => ({
+        id: n.id,
+        userId: n.userId,
+        userName: (n as any).user?.name || 'Unknown',
+        userPhone: (n as any).user?.phoneNumber || '',
+        type: n.type,
+        title: n.title,
+        body: n.body,
+        data: n.data,
+        status: n.status,
+        sentAt: n.sentAt,
+        readAt: n.readAt,
+        createdAt: n.createdAt,
+      })),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async getNotificationStats() {
+    const total = await this.notificationLogRepository.count();
+    const sent = await this.notificationLogRepository.count({
+      where: { status: 'sent' },
+    });
+    const read = await this.notificationLogRepository.count({
+      where: { status: 'read' },
+    });
+    const failed = await this.notificationLogRepository.count({
+      where: { status: 'failed' },
+    });
+    const pending = await this.notificationLogRepository.count({
+      where: { status: 'pending' },
+    });
+
+    // Recent 24h count
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const recentCount = await this.notificationLogRepository
+      .createQueryBuilder('log')
+      .where('log.createdAt >= :oneDayAgo', { oneDayAgo })
+      .getCount();
+
+    return { total, sent, read, failed, pending, recentCount };
+  }
+
+  async sendNotificationToUser(
+    userId: string,
+    title: string,
+    body: string,
+    type?: string,
+  ) {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException(`User ${userId} not found`);
+    }
+
+    const notificationType =
+      (type as NotificationType) || NotificationType.ADMIN_ANNOUNCEMENT;
+
+    await this.notificationsService.sendToUser(userId, notificationType, {
+      title,
+      body,
+      data: { source: 'admin', type: notificationType },
+    });
+
+    return { success: true, message: `Notification sent to ${user.name || user.phoneNumber}` };
+  }
+
+  async broadcastNotification(title: string, body: string) {
+    const users = await this.userRepository.find({
+      where: { isBanned: false },
+      select: ['id'],
+    });
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const user of users) {
+      try {
+        await this.notificationsService.sendToUser(
+          user.id,
+          NotificationType.ADMIN_ANNOUNCEMENT,
+          {
+            title,
+            body,
+            data: { source: 'admin_broadcast' },
+          },
+        );
+        successCount++;
+      } catch (err) {
+        failCount++;
+      }
+    }
+
+    return {
+      success: true,
+      message: `Broadcast sent to ${successCount} users (${failCount} failed)`,
+      totalUsers: users.length,
+      successCount,
+      failCount,
+    };
+  }
+
+  async deleteNotificationLog(id: string) {
+    const log = await this.notificationLogRepository.findOne({
+      where: { id },
+    });
+    if (!log) {
+      throw new NotFoundException(`Notification log ${id} not found`);
+    }
+    await this.notificationLogRepository.remove(log);
+    return { success: true, message: 'Notification log deleted' };
   }
 }

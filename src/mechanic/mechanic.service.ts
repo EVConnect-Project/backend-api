@@ -33,50 +33,75 @@ export class MechanicService {
     createDto: CreateMechanicApplicationDto,
     userId: string,
   ) {
-    // Check if user already has a pending or approved application
-    const existingApplication = await this.applicationRepository.findOne({
-      where: { userId },
-    });
+    try {
+      console.log('🔧 MechanicService.applyAsMechanic called with:', { 
+        userId, 
+        createDto,
+      });
 
-    if (existingApplication) {
-      if (existingApplication.status === ApplicationStatus.PENDING) {
-        throw new BadRequestException(
-          'You already have a pending application',
-        );
-      }
-      if (existingApplication.status === ApplicationStatus.APPROVED) {
-        // Check if they have an active mechanic profile
-        const mechanicProfile = await this.mechanicRepository.findOne({
-          where: { userId },
-        });
-        
-        if (mechanicProfile) {
-          // They have an approved application AND active profile
+      // Check if user already has a pending or approved application
+      const existingApplication = await this.applicationRepository.findOne({
+        where: { userId },
+      });
+
+      if (existingApplication) {
+        if (existingApplication.status === ApplicationStatus.PENDING) {
           throw new BadRequestException(
-            'You are already approved as a mechanic. Use the mechanic dashboard to manage your profile.',
+            'You already have a pending application',
           );
         }
-        
-        // They have approved application but NO profile (resigned previously)
-        // Allow them to reapply by deleting old application and creating new one
-        console.log('🔄 User resigned previously - allowing reapplication:', userId);
-        await this.applicationRepository.remove(existingApplication);
+        if (existingApplication.status === ApplicationStatus.APPROVED) {
+          // Check if they have an active mechanic profile
+          const mechanicProfile = await this.mechanicRepository.findOne({
+            where: { userId },
+          });
+          
+          if (mechanicProfile) {
+            // They have an approved application AND active profile
+            throw new BadRequestException(
+              'You are already approved as a mechanic. Use the mechanic dashboard to manage your profile.',
+            );
+          }
+          
+          // They have approved application but NO profile (resigned previously)
+          // Allow them to reapply by deleting old application and creating new one
+          console.log('🔄 User resigned previously - allowing reapplication:', userId);
+          await this.applicationRepository.remove(existingApplication);
+        }
       }
+
+      console.log('✅ Creating new application for user:', userId);
+      const application = this.applicationRepository.create({
+        ...createDto,
+        userId,
+        status: ApplicationStatus.PENDING,
+      });
+
+      console.log('💾 Saving application:', application);
+      const saved = await this.applicationRepository.save(application);
+      console.log('✅ Application saved successfully:', saved.id);
+
+      return {
+        ...saved,
+        message:
+          'Application submitted successfully. You will be notified once reviewed.',
+      };
+    } catch (error) {
+      console.error('❌ Error in applyAsMechanic:', error);
+      
+      if (error instanceof BadRequestException) {
+        throw error; // Re-throw BadRequestException
+      }
+      
+      // For any other error, throw a generic internal server error
+      console.error('❌ Full error details:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name,
+        ...error
+      });
+      throw new Error(`Failed to submit mechanic application: ${error.message}`);
     }
-
-    const application = this.applicationRepository.create({
-      ...createDto,
-      userId,
-      status: ApplicationStatus.PENDING,
-    });
-
-    const saved = await this.applicationRepository.save(application);
-
-    return {
-      ...saved,
-      message:
-        'Application submitted successfully. You will be notified once reviewed.',
-    };
   }
 
   /**
@@ -178,16 +203,16 @@ export class MechanicService {
         if (!existingMechanic) {
           const mechanic = this.mechanicRepository.create({
             userId: application.userId,
-            name: application.fullName,
-            specialization: application.skills,
+            name: application.name,
+            specialization: application.services.join(', '),
             yearsOfExperience: application.yearsOfExperience,
             rating: 0,
             completedJobs: 0,
             available: true,
-            services: application.skills.split(',').map(s => s.trim()),
-            lat: application.serviceLat,
-            lng: application.serviceLng,
-            phone: application.phoneNumber,
+            services: application.services,
+            lat: application.lat,
+            lng: application.lng,
+            phone: application.phone,
             licenseNumber: application.licenseNumber,
             certifications: application.certifications,
           });
@@ -210,7 +235,7 @@ export class MechanicService {
   async getAllMechanics() {
     const mechanics = await this.userRepository.find({
       where: { role: 'mechanic' },
-      select: ['id', 'name', 'email', 'role', 'createdAt'],
+      select: ['id', 'name', 'phoneNumber', 'role', 'createdAt'],
     });
 
     return mechanics;

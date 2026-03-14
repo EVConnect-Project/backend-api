@@ -24,15 +24,19 @@ export class PaymentMethodsService {
     const paymentMethod = this.paymentMethodRepository.create({
       ...createDto,
       userId,
-    });
+    } as any);
 
-    return await this.paymentMethodRepository.save(paymentMethod);
+    const saved = await this.paymentMethodRepository.save(paymentMethod);
+    return Array.isArray(saved) ? saved[0] : saved;
   }
 
   async findAll(userId: string): Promise<PaymentMethodEntity[]> {
     return await this.paymentMethodRepository.find({
       where: { userId },
-      order: { isDefault: 'DESC', createdAt: 'DESC' },
+      order: { 
+        isDefault: 'DESC' as any,
+        createdAt: 'DESC' as any,
+      },
     });
   }
 

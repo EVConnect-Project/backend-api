@@ -7,6 +7,8 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, DataSource } from 'typeorm';
+import { HttpService } from '@nestjs/axios';
+import { lastValueFrom } from 'rxjs';
 import { Charger } from '../charger/entities/charger.entity';
 import { BookingEntity } from '../bookings/entities/booking.entity';
 import { UserEntity } from '../users/entities/user.entity';
@@ -17,6 +19,8 @@ import { CreateStationDto } from './dto/create-station.dto';
 import { ChargerSocket } from './entities/charger-socket.entity';
 import { ChargingStation } from './entities/charging-station.entity';
 import { BookingMode } from '../charger/enums/booking-mode.enum';
+import { Station } from '../station/entities/station.entity';
+import { ChargersGateway } from '../charger/chargers.gateway';
 
 @Injectable()
 export class OwnerService {
@@ -31,7 +35,11 @@ export class OwnerService {
     private socketRepository: Repository<ChargerSocket>,
     @InjectRepository(ChargingStation)
     private stationRepository: Repository<ChargingStation>,
+    @InjectRepository(Station)
+    private stationEntityRepository: Repository<Station>,
     private dataSource: DataSource,
+    private httpService: HttpService,
+    private chargersGateway: ChargersGateway,
   ) {}
 
   /**
@@ -40,40 +48,108 @@ export class OwnerService {
    */
   /**
    * Get all chargers owned by a user
+   * Returns BOTH verified and unverified chargers so owner can see pending approvals
    */
   async getMyChargers(ownerId: string) {
-    const chargers = await this.chargerRepository.find({
-      where: { ownerId },
-      order: { createdAt: 'DESC' },
-    });
+    try {
+      console.log(`[OwnerService] Fetching chargers for owner: ${ownerId}`);
 
-    // Get booking counts for each charger
-    const chargersWithStats = await Promise.all(
-      chargers.map(async (charger) => {
-        const totalBookings = await this.bookingRepository.count({
-          where: { chargerId: charger.id },
-        });
+      // 1. Fetch chargers without eager loading station (table might not exist)
+      const chargers = await this.chargerRepository.find({
+        where: { ownerId },
+        relations: ['sockets'],
+        order: { 
+          verified: 'DESC',  // Verified chargers first
+          createdAt: 'DESC'  // Then newest first
+        },
+      });
 
-        const activeBookings = await this.bookingRepository.count({
-          where: { chargerId: charger.id, status: 'active' },
-        });
+      console.log(`[OwnerService] Found ${chargers.length} chargers for owner ${ownerId}.`);
 
-        const pendingBookings = await this.bookingRepository.count({
-          where: { chargerId: charger.id, status: 'pending' },
-        });
+      if (chargers.length === 0) {
+        console.log('[OwnerService] No chargers found, returning empty array.');
+        return [];
+      }
 
-        return {
-          ...charger,
-          stats: {
-            totalBookings,
-            activeBookings,
-            pendingBookings,
+      const chargerIds = chargers.map((charger) => charger.id);
+      console.log(`[OwnerService] Charger IDs: ${chargerIds.join(', ')}`);
+
+      // 2. Fetch booking statistics in a single efficient query
+      let bookingStats = [];
+      if (chargerIds.length > 0) {
+        console.log('[OwnerService] Fetching booking statistics...');
+        bookingStats = await this.bookingRepository
+          .createQueryBuilder('booking')
+          .select('booking.chargerId', 'chargerId')
+          .addSelect('COUNT(booking.id)', 'totalBookings')
+          .addSelect(
+            "SUM(CASE WHEN booking.status = 'active' THEN 1 ELSE 0 END)",
+            'activeBookings',
+          )
+          .addSelect(
+            "SUM(CASE WHEN booking.status = 'pending' THEN 1 ELSE 0 END)",
+            'pendingBookings',
+          )
+          .where('booking.chargerId IN (:...chargerIds)', { chargerIds })
+          .groupBy('booking.chargerId')
+          .getRawMany();
+        console.log(`[OwnerService] Retrieved stats for ${bookingStats.length} chargers.`);
+      }
+
+      // 3. Create a lookup map for quick access to stats
+      const statsMap = new Map(
+        bookingStats.map((stat: any) => [
+          stat.chargerId,
+          {
+            totalBookings: parseInt(stat.totalBookings, 10) || 0,
+            activeBookings: parseInt(stat.activeBookings, 10) || 0,
+            pendingBookings: parseInt(stat.pendingBookings, 10) || 0,
           },
-        };
-      }),
-    );
+        ]),
+      );
 
-    return chargersWithStats;
+      // 4. Manually and safely construct the final response object (without station)
+      const chargersWithStats = chargers.map((charger) => {
+        const stats =
+          statsMap.get(charger.id) ||
+          { totalBookings: 0, activeBookings: 0, pendingBookings: 0 };
+        return {
+          id: charger.id,
+          name: charger.name,
+          address: charger.address,
+          latitude: charger.lat,
+          longitude: charger.lng,
+          status: charger.status,
+          power: charger.maxPowerKw,
+          price: charger.pricePerKwh,
+          verified: charger.verified,
+          isPublic: true,
+          bookingMode: charger.bookingMode,
+          ownerId: charger.ownerId,
+          stationId: charger.stationId,
+          createdAt: charger.createdAt,
+          updatedAt: charger.updatedAt,
+          sockets: charger.sockets ? charger.sockets : [],
+          stats: stats,
+        };
+      });
+
+      console.log(
+        '[OwnerService] Successfully processed chargers with stats. Verified count:',
+        chargersWithStats.filter(c => c.verified).length,
+      );
+      return chargersWithStats;
+    } catch (error) {
+      console.error(
+        '❌ [OwnerService] Critical error in getMyChargers:',
+        error.message,
+        error.stack,
+      );
+      // Throw a standard NestJS exception
+      throw new InternalServerErrorException(
+        `A critical error occurred while fetching charger data: ${error.message}`,
+      );
+    }
   }
 
   /**
@@ -111,6 +187,7 @@ export class OwnerService {
 
     return {
       ...charger,
+      powerKw: charger.maxPowerKw, // Explicitly include powerKw for frontend compatibility
       stats: {
         totalBookings,
         completedBookings,
@@ -137,11 +214,14 @@ export class OwnerService {
       throw new ForbiddenException('You can only update your own chargers');
     }
 
-    if (!charger.verified) {
-      throw new ForbiddenException('Cannot update unverified charger. Please wait for admin approval.');
-    }
-
     Object.assign(charger, updateChargerDto);
+    
+    // Handle virtual powerKw field mapping to maxPowerKw
+    // Object.assign doesn't properly invoke setters for virtual properties
+    if ('powerKw' in updateChargerDto && updateChargerDto.powerKw !== undefined) {
+      charger.maxPowerKw = updateChargerDto.powerKw;
+    }
+    
     return this.chargerRepository.save(charger);
   }
 
@@ -169,6 +249,14 @@ export class OwnerService {
 
     charger.status = status;
     const updated = await this.chargerRepository.save(charger);
+
+    // Broadcast real-time update so the map removes/updates the pin immediately
+    try {
+      const broadcastAction = status === 'offline' ? 'deleted' : 'updated';
+      this.chargersGateway.broadcastChargerUpdate(updated, broadcastAction);
+    } catch (e) {
+      console.error('[OwnerService] Failed to broadcast charger status change:', e);
+    }
 
     return {
       ...updated,
@@ -362,51 +450,63 @@ export class OwnerService {
     startDate?: string,
     endDate?: string,
   ) {
-    const myChargers = await this.chargerRepository.find({
-      where: { ownerId },
-      select: ['id'],
-    });
-
-    const chargerIds = myChargers.map((c) => c.id);
-
-    if (chargerIds.length === 0) {
-      return {
-        totalRevenue: 0,
-        completedBookingsRevenue: 0,
-        pendingRevenue: 0,
-      };
-    }
-
-    let query = this.bookingRepository
-      .createQueryBuilder('booking')
-      .where('booking.chargerId IN (:...chargerIds)', { chargerIds });
-
-    if (startDate && endDate) {
-      query = query.andWhere('booking.createdAt BETWEEN :startDate AND :endDate', {
-        startDate: new Date(startDate),
-        endDate: new Date(endDate),
+    try {
+      const myChargers = await this.chargerRepository.find({
+        where: { ownerId },
+        select: ['id'],
       });
+
+      const chargerIds = myChargers.map((c) => c.id);
+
+      if (chargerIds.length === 0) {
+        return {
+          totalRevenue: 0,
+          completedBookingsRevenue: 0,
+          pendingRevenue: 0,
+        };
+      }
+
+      // Helper function to build base query
+      const buildBaseQuery = () => {
+        let query = this.bookingRepository
+          .createQueryBuilder('booking')
+          .where('booking.chargerId IN (:...chargerIds)', { chargerIds });
+
+        if (startDate && endDate) {
+          query = query.andWhere('booking.createdAt BETWEEN :startDate AND :endDate', {
+            startDate: new Date(startDate),
+            endDate: new Date(endDate),
+          });
+        }
+        return query;
+      };
+
+      // Get total revenue (all bookings)
+      const totalRevenue = await buildBaseQuery()
+        .select('SUM(booking.price)', 'total')
+        .getRawOne();
+
+      // Get completed revenue
+      const completedRevenue = await buildBaseQuery()
+        .andWhere('booking.status = :status', { status: 'completed' })
+        .select('SUM(booking.price)', 'total')
+        .getRawOne();
+
+      // Get pending revenue
+      const pendingRevenue = await buildBaseQuery()
+        .andWhere('booking.status = :status', { status: 'pending' })
+        .select('SUM(booking.price)', 'total')
+        .getRawOne();
+
+      return {
+        totalRevenue: parseFloat(totalRevenue?.total || '0'),
+        completedBookingsRevenue: parseFloat(completedRevenue?.total || '0'),
+        pendingRevenue: parseFloat(pendingRevenue?.total || '0'),
+      };
+    } catch (error) {
+      console.error('[OwnerService] Error in getRevenueStats:', error.message, error.stack);
+      throw error;
     }
-
-    const totalRevenue = await query
-      .select('SUM(booking.price)', 'total')
-      .getRawOne();
-
-    const completedRevenue = await query
-      .andWhere('booking.status = :status', { status: 'completed' })
-      .select('SUM(booking.price)', 'total')
-      .getRawOne();
-
-    const pendingRevenue = await query
-      .andWhere('booking.status = :status', { status: 'pending' })
-      .select('SUM(booking.price)', 'total')
-      .getRawOne();
-
-    return {
-      totalRevenue: parseFloat(totalRevenue?.total || '0'),
-      completedBookingsRevenue: parseFloat(completedRevenue?.total || '0'),
-      pendingRevenue: parseFloat(pendingRevenue?.total || '0'),
-    };
   }
 
   /**
@@ -473,7 +573,7 @@ export class OwnerService {
         console.error('User not found with ID:', userId);
         throw new NotFoundException('User not found');
       }
-      console.log('User found:', user.email, 'Role:', user.role);
+      console.log('User found:', user.phoneNumber, 'Role:', user.role);
 
       // Upgrade to owner role if needed
       if (user.role === 'user') {
@@ -485,8 +585,24 @@ export class OwnerService {
 
       // Parse location URL to extract coordinates
       console.log('Parsing location URL:', dto.locationUrl);
-      const { lat, lng, address } = this.parseLocationUrl(dto.locationUrl);
+      const { lat, lng, address } = await this.parseLocationUrl(dto.locationUrl);
       console.log('Parsed coordinates:', { lat, lng, address });
+
+      // Validate maxPowerKw
+      if (!dto.maxPowerKw || dto.maxPowerKw <= 0) {
+        console.error('Invalid maxPowerKw:', dto.maxPowerKw);
+        throw new BadRequestException(
+          'Invalid power rating. Please ensure maxPowerKw is a positive number.',
+        );
+      }
+      console.log('maxPowerKw validated:', dto.maxPowerKw);
+
+      // Validate sockets
+      if (!dto.sockets || dto.sockets.length === 0) {
+        console.error('No sockets provided');
+        throw new BadRequestException('At least one socket must be configured');
+      }
+      console.log('Sockets validated:', dto.sockets.length);
 
       // Use transaction to ensure atomicity
       const queryRunner = this.dataSource.createQueryRunner();
@@ -532,7 +648,8 @@ export class OwnerService {
         connectorType,
         numberOfPlugs: dto.sockets.length,
         description: dto.description,
-        accessType: dto.accessType || 'public',
+        phoneNumber: dto.phoneNumber || null,
+        bookingMode: (dto.bookingMode as BookingMode) || BookingMode.HYBRID,
         openingHours: dto.openingHours || { is24Hours: true, schedule: {} },
         verified: false,
         status: 'offline',
@@ -627,7 +744,7 @@ export class OwnerService {
     }
 
     // Parse location URL
-    const { lat, lng, address } = this.parseLocationUrl(dto.locationUrl);
+    const { lat, lng, address } = await this.parseLocationUrl(dto.locationUrl);
     console.log('📍 Parsed location:', { lat, lng, address });
 
     // Use transaction
@@ -650,7 +767,6 @@ export class OwnerService {
         amenities: dto.amenities || [],
         openingHours: dto.openingHours || { is24Hours: true, schedule: {} },
         images: dto.images || [],
-        accessType: dto.accessType || 'public',
         verified: false,
       });
 
@@ -685,7 +801,8 @@ export class OwnerService {
           speedType,
           connectorType: firstSocket.connectorType,
           numberOfPlugs: chargerDto.sockets.length,
-          accessType: dto.accessType || 'public',
+          phoneNumber: dto.phoneNumber || null,
+          bookingMode: (chargerDto.bookingMode as BookingMode) || BookingMode.HYBRID,
           openingHours: dto.openingHours || { is24Hours: true, schedule: {} },
           verified: false,
           status: 'offline',
@@ -746,51 +863,81 @@ export class OwnerService {
 
   /**
    * Parse Google Maps location URL to extract coordinates
+   * Supports:
+   * - Full Google Maps URLs (https://maps.google.com/?q=lat,lng)
+   * - Google Maps place URLs (https://www.google.com/maps/place/.../@lat,lng)
+   * - Shortened Google Maps URLs (https://maps.app.goo.gl/...)
+   * - Direct coordinates (lat,lng)
    */
-  private parseLocationUrl(locationUrl: string): {
+  private async parseLocationUrl(locationUrl: string): Promise<{
     lat: number;
     lng: number;
     address: string;
-  } {
+  }> {
     try {
       console.log('Parsing location URL:', locationUrl);
       
-      // Try multiple Google Maps URL formats:
-      // Format 1: https://maps.google.com/?q=6.9271,79.8612
-      // Format 2: https://www.google.com/maps/place/.../@6.9271,79.8612,17z
-      // Format 3: https://goo.gl/maps/... (short link - extract from redirect)
-      // Format 4: Just coordinates: 6.9271,79.8612
+      if (!locationUrl || typeof locationUrl !== 'string') {
+        throw new BadRequestException('Location URL is required and must be a string');
+      }
+
+      const trimmed = locationUrl.trim();
+      if (trimmed.length === 0) {
+        throw new BadRequestException('Location URL cannot be empty');
+      }
       
-      // Try to match coordinates with @ symbol (e.g., /@6.9271,79.8612,17z)
-      let coordMatch = locationUrl.match(/@(-?\d+\.?\d*),(-?\d+\.?\d*)/);
+      let urlToCheck = trimmed;
+      
+      // Check if this is a shortened URL (goo.gl or maps.app.goo.gl)
+      if (trimmed.match(/^https?:\/\/(maps\.app\.)?goo\.gl\//i)) {
+        console.log('📍 Detected shortened Google Maps URL, expanding...');
+        try {
+          urlToCheck = await this.expandShortenedUrl(trimmed);
+          console.log('✅ Expanded URL:', urlToCheck);
+        } catch (expandError) {
+          console.warn('⚠️  Could not expand shortened URL:', expandError.message);
+          // Fall through to try to extract from original URL
+          urlToCheck = trimmed;
+        }
+      }
+      
+      let coordMatch: RegExpMatchArray | null = null;
+      
+      // Try to match coordinates with @ symbol (e.g., /@6.9271,79.8612,17z or /@6.9271,79.8612/)
+      coordMatch = urlToCheck.match(/@(-?\d+\.?\d+),(-?\d+\.?\d+)/);
       
       // Try to match coordinates with ?q= (e.g., ?q=6.9271,79.8612)
       if (!coordMatch) {
-        coordMatch = locationUrl.match(/[?&]q=(-?\d+\.?\d*),(-?\d+\.?\d*)/);
+        coordMatch = urlToCheck.match(/[\?&]q=(-?\d+\.?\d+),(-?\d+\.?\d+)/);
+      }
+      
+      // Try to match coordinates with ?ll= (e.g., ?ll=6.9271,79.8612)
+      if (!coordMatch) {
+        coordMatch = urlToCheck.match(/[\?&]ll=(-?\d+\.?\d+),(-?\d+\.?\d+)/);
       }
       
       // Try to match just coordinates (e.g., 6.9271,79.8612)
       if (!coordMatch) {
-        coordMatch = locationUrl.match(/^(-?\d+\.?\d*),\s*(-?\d+\.?\d*)$/);
+        coordMatch = urlToCheck.match(/^(-?\d+\.?\d+),\s*(-?\d+\.?\d+)$/);
       }
       
-      // Try to match coordinates anywhere in the string
+      // Try to match coordinates anywhere in the string (fallback)
       if (!coordMatch) {
-        coordMatch = locationUrl.match(/(-?\d+\.?\d+),\s*(-?\d+\.?\d+)/);
+        coordMatch = urlToCheck.match(/(-?\d+\.?\d+),\s*(-?\d+\.?\d+)/);
       }
       
       if (coordMatch && coordMatch[1] && coordMatch[2]) {
         const lat = parseFloat(coordMatch[1]);
         const lng = parseFloat(coordMatch[2]);
         
-        console.log('Extracted coordinates:', { lat, lng });
+        console.log('✅ Extracted coordinates:', { lat, lng });
         
         // Validate coordinates are reasonable
         if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
           return {
             lat,
             lng,
-            address: locationUrl,
+            address: trimmed,
           };
         } else {
           throw new BadRequestException(
@@ -799,18 +946,63 @@ export class OwnerService {
         }
       }
 
-      // If no coordinates found, throw error
+      // If no coordinates found, throw error with hint
+      console.error('❌ Could not extract coordinates from:', urlToCheck);
       throw new BadRequestException(
         'Could not extract coordinates from location URL. Please provide a Google Maps link or coordinates in format: latitude,longitude',
       );
     } catch (error) {
-      console.error('Error parsing location URL:', error);
+      console.error('Error parsing location URL:', error.message);
       if (error instanceof BadRequestException) {
         throw error;
       }
       throw new BadRequestException(
         'Invalid location URL format. Please use a Google Maps share link or coordinates.',
       );
+    }
+  }
+
+  /**
+   * Expand shortened Google Maps URLs (goo.gl, maps.app.goo.gl)
+   * Follow redirects to get the full URL with coordinates
+   */
+  private async expandShortenedUrl(shortenedUrl: string): Promise<string> {
+    try {
+      console.log('🔗 Fetching expanded URL from:', shortenedUrl);
+      
+      // Make a request with maxRedirects: 0 to capture the first redirect Location header
+      const response = await lastValueFrom(
+        this.httpService.get(shortenedUrl, {
+          maxRedirects: 0,
+          validateStatus: (status) => status >= 200 && status < 400,
+        })
+      ).catch((err) => {
+        // Axios throws on 3xx when maxRedirects: 0, so catch and inspect headers
+        if (err.response && err.response.status >= 300 && err.response.status < 400) {
+          return err.response;
+        }
+        throw err;
+      });
+
+      // Check Location header for redirect target  
+      const location = response.headers?.location;
+      if (location) {
+        console.log('✅ Location header found:', location);
+        return location;
+      }
+
+      // If no redirect, try the final URL
+      const finalUrl = response.request?.res?.responseUrl || response.config?.url;
+      if (finalUrl && finalUrl !== shortenedUrl) {
+        console.log('✅ Final URL found:', finalUrl);
+        return finalUrl;
+      }
+
+      console.warn('⚠️  Could not determine redirect URL, using original');
+      return shortenedUrl;
+    } catch (error) {
+      console.warn('⚠️  Error expanding shortened URL:', error.message);
+      return shortenedUrl;
     }
   }
 

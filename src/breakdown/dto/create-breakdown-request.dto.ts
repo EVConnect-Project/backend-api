@@ -11,13 +11,21 @@ export class CreateBreakdownRequestDto {
 
   @IsString()
   @IsOptional()
-  address?: string;
+  problemType?: string;
 
   @IsString()
   @IsNotEmpty()
-  issueDescription: string;
+  problemDescription: string;
+
+  @IsString()
+  @IsOptional()
+  urgencyLevel?: string;
 
   @IsString()
   @IsOptional()
   vehicleInfo?: string;
+
+  @IsString()
+  @IsOptional()
+  userPhone?: string;
 }

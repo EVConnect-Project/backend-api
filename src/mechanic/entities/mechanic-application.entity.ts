@@ -20,21 +20,33 @@ export class MechanicApplication {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ name: 'user_id' })
+  @Column({ name: 'userId' })
   userId: string;
 
   @ManyToOne(() => UserEntity)
-  @JoinColumn({ name: 'user_id' })
+  @JoinColumn({ name: 'userId' })
   user: UserEntity;
 
   @Column()
-  fullName: string;
+  name: string;
 
   @Column()
-  phoneNumber: string;
+  phone: string;
+
+  @Column('text', { nullable: true })
+  email: string;
 
   @Column('text')
-  skills: string;
+  address: string;
+
+  @Column('decimal', { precision: 10, scale: 7 })
+  lat: number;
+
+  @Column('decimal', { precision: 10, scale: 7 })
+  lng: number;
+
+  @Column('text', { array: true })
+  services: string[];
 
   @Column('int')
   yearsOfExperience: number;
@@ -42,20 +54,15 @@ export class MechanicApplication {
   @Column({ nullable: true })
   certifications: string;
 
-  @Column()
-  serviceArea: string; // Geographic area they can cover
+  @Column('text', { nullable: true })
+  description: string;
 
-  @Column('decimal', { precision: 10, scale: 7, nullable: true })
-  serviceLat: number;
-
-  @Column('decimal', { precision: 10, scale: 7, nullable: true })
-  serviceLng: number;
+  @Column('decimal', { precision: 10, scale: 2 })
+  pricePerHour: number;
 
   @Column({ nullable: true })
   licenseNumber: string;
 
-  @Column('text', { nullable: true })
-  additionalInfo: string;
 
   @Column({
     type: 'enum',

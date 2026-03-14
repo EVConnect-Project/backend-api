@@ -168,7 +168,7 @@ export class AdminChatService {
   async getUserContext(userId: string) {
     const user = await this.userRepo.findOne({
       where: { id: userId },
-      select: ['id', 'name', 'email', 'phone', 'role', 'isBanned', 'createdAt'],
+      select: ['id', 'name', 'phoneNumber', 'role', 'isBanned', 'createdAt'],
     });
 
     if (!user) {

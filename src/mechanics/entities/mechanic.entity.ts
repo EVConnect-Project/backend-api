@@ -1,5 +1,6 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, OneToMany, JoinColumn } from 'typeorm';
 import { UserEntity } from '../../users/entities/user.entity';
+import { MechanicExpertiseEntity } from './mechanic-expertise.entity';
 
 @Entity('mechanics')
 export class MechanicEntity {
@@ -22,7 +23,7 @@ export class MechanicEntity {
   @Column({ nullable: true })
   specialization: string;
 
-  @Column({ type: 'int', default: 0 })
+  @Column({ name: 'yearsOfExperience', type: 'int', default: 0 })
   yearsOfExperience: number;
 
   @Column({ type: 'decimal', precision: 10, scale: 7 })
@@ -37,33 +38,48 @@ export class MechanicEntity {
   @Column({ nullable: true })
   phone: string;
 
-  @Column({ nullable: true })
-  email: string;
-
   @Column({ type: 'text', nullable: true })
   description: string;
+
+  @Column({ name: 'serviceRadius', type: 'decimal', precision: 5, scale: 2, default: 5 })
+  serviceRadius: number; // Service radius in kilometers (e.g., 5, 10, 25)
 
   @Column({ default: true })
   available: boolean;
 
-  @Column({ default: false })
+  @Column({ name: 'isBanned', default: false })
   isBanned: boolean;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  @Column({ name: 'pricePerHour', type: 'decimal', precision: 10, scale: 2, nullable: true })
   pricePerHour: number;
 
-  @Column({ type: 'int', default: 0 })
+  @Column({ name: 'completedJobs', type: 'int', default: 0 })
   completedJobs: number;
 
-  @Column({ nullable: true })
+  @Column({ name: 'licenseNumber', nullable: true })
   licenseNumber: string;
 
   @Column({ nullable: true })
   certifications: string;
 
-  @CreateDateColumn()
+  @Column({ name: 'currentLocationLat', type: 'decimal', precision: 10, scale: 7, nullable: true })
+  currentLocationLat: number;
+
+  @Column({ name: 'currentLocationLng', type: 'decimal', precision: 10, scale: 7, nullable: true })
+  currentLocationLng: number;
+
+  @Column({ name: 'isOnJob', type: 'boolean', default: false })
+  isOnJob: boolean;
+
+  @Column({ name: 'lastOnlineAt', type: 'timestamp', nullable: true })
+  lastOnlineAt: Date;
+
+  @CreateDateColumn({ name: 'createdAt' })
   createdAt: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ name: 'updatedAt' })
   updatedAt: Date;
+
+  @OneToMany(() => MechanicExpertiseEntity, expertise => expertise.mechanic)
+  expertise: MechanicExpertiseEntity[];
 }

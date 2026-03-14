@@ -13,6 +13,8 @@ import { UpdateBookingModeDto } from './dto/update-booking-mode.dto';
 import { UpdateChargerStatusDto } from './dto/update-charger-status.dto';
 import { DEFAULT_BOOKING_SETTINGS } from './interfaces/booking-settings.interface';
 import { ChargingStation } from '../owner/entities/charging-station.entity';
+import { VehicleProfileService } from '../auth/vehicle-profile.service';
+import { VehicleProfile } from '../auth/entities/vehicle-profile.entity';
 
 @Injectable()
 export class ChargerService {
@@ -25,6 +27,7 @@ export class ChargerService {
     private integrationService: ChargerIntegrationService,
     @Inject(forwardRef(() => ChargersGateway))
     private chargersGateway: ChargersGateway,
+    private vehicleProfileService: VehicleProfileService,
   ) {}
 
   async create(createChargerDto: CreateChargerDto, ownerId: string): Promise<any> {
@@ -70,11 +73,14 @@ export class ChargerService {
   }
 
   async findAll(): Promise<Charger[]> {
-    return this.chargerRepository.find({
-      where: { verified: true, isBanned: false },
-      relations: ['owner', 'sockets'],
-      order: { createdAt: 'DESC' },
-    });
+    const query = `
+      SELECT c.*, cs.station_name AS "stationName"
+      FROM chargers c
+      LEFT JOIN charging_stations cs ON c.station_id = cs.id
+      WHERE c.verified = true AND c."isBanned" = false AND c.status != 'offline'
+      ORDER BY c."createdAt" DESC
+    `;
+    return this.chargerRepository.query(query);
   }
 
   async findOne(id: string): Promise<Charger> {
@@ -92,9 +98,10 @@ export class ChargerService {
 
   async findNearby(lat: number, lng: number, radiusKm: number = 10): Promise<Charger[]> {
     // Simple distance calculation using Haversine formula
-    // For production, consider using PostGIS extension for better performance
+    // Includes stationName via LEFT JOIN so clients can display "Station · Charger" labels
     const query = `
-      SELECT * FROM (
+      SELECT cwd.*, cs.station_name AS "stationName"
+      FROM (
         SELECT *, 
           ( 6371 * acos( 
             cos( radians($1) ) * 
@@ -104,10 +111,11 @@ export class ChargerService {
             sin( radians(lat) ) 
           ) ) AS distance 
         FROM chargers
-        WHERE verified = true AND "isBanned" = false
-      ) AS chargers_with_distance
-      WHERE distance < $3 
-      ORDER BY distance
+        WHERE verified = true AND "isBanned" = false AND status != 'offline'
+      ) AS cwd
+      LEFT JOIN charging_stations cs ON cwd.station_id = cs.id
+      WHERE cwd.distance < $3 
+      ORDER BY cwd.distance
     `;
 
     return this.chargerRepository.query(query, [lat, lng, radiusKm]);
@@ -122,6 +130,13 @@ export class ChargerService {
     }
 
     Object.assign(charger, updateChargerDto);
+    
+    // Handle virtual powerKw field mapping to maxPowerKw
+    // Object.assign doesn't properly invoke setters for virtual properties
+    if ('powerKw' in updateChargerDto && updateChargerDto.powerKw !== undefined) {
+      charger.maxPowerKw = updateChargerDto.powerKw;
+    }
+    
     const updatedCharger = await this.chargerRepository.save(charger);
     
     // Broadcast update via WebSocket
@@ -244,11 +259,6 @@ export class ChargerService {
       query.andWhere('charger.status = :status', { status: 'available' });
     }
 
-    // Access type filters
-    if (filters.accessTypes && filters.accessTypes.length > 0) {
-      query.andWhere('charger.accessType IN (:...accessTypes)', { accessTypes: filters.accessTypes });
-    }
-
     // Booking mode filters
     if (filters.bookingModes && filters.bookingModes.length > 0) {
       query.andWhere('charger.bookingMode IN (:...bookingModes)', { bookingModes: filters.bookingModes });
@@ -295,71 +305,430 @@ export class ChargerService {
     try {
       console.log('filterStations called with filters:', filters);
       
-      // Get all verified charging stations - simplified, no joins initially
-      const stations = await this.stationRepository.find({
-        where: { verified: true },
+      // Get all verified chargers with their sockets and owner
+      const chargers = await this.chargerRepository.find({
+        where: { verified: true, isBanned: false },
+        relations: ['sockets', 'owner'],
       });
       
-      console.log(`Found ${stations.length} verified stations`);
+      console.log(`Found ${chargers.length} verified chargers`);
 
-      // For each station, fetch its chargers with sockets
-      const stationsWithChargers = await Promise.all(
-        stations.map(async (station) => {
-          console.log(`Fetching chargers for station ${station.id}`);
-          const chargers = await this.chargerRepository.find({
-            where: { stationId: station.id, verified: true },
-            relations: ['sockets'],
-          });
-          console.log(`Found ${chargers.length} chargers for station ${station.stationName}`);
-          
-          return {
-            ...station,
-            chargers,
-          };
-        })
-      );
+      // Apply location filter
+      let filteredChargers: any[] = chargers;
 
-      console.log(`Processed ${stationsWithChargers.length} stations with chargers`);
-
-      // Apply filters
-      let filteredStations: any[] = stationsWithChargers;
-
-      // Location filter
       if (filters.lat && filters.lng) {
-      const radius = filters.radius || 10;
-      filteredStations = filteredStations.map(station => {
-        const distance = this.calculateDistance(
-          filters.lat, filters.lng,
-          station.lat, 
-          station.lng
-        );
-        return { ...station, distance };
-      }).filter(station => station.distance < radius);
-
-        if (filters.sortBy === 'distance') {
-          filteredStations.sort((a, b) => 
-            filters.sortOrder === 'desc' ? b.distance - a.distance : a.distance - b.distance
+        const radius = filters.radius || 50;
+        filteredChargers = filteredChargers.map(charger => {
+          const distance = this.calculateDistance(
+            filters.lat, filters.lng,
+            parseFloat(charger.lat), 
+            parseFloat(charger.lng)
           );
+          return { ...charger, distance };
+        }).filter(charger => charger.distance < radius);
+      }
+
+      // Apply charger type filter
+      if (filters.chargerType) {
+        filteredChargers = filteredChargers.filter(c => 
+          c.chargerType === filters.chargerType || c.speedType?.includes(filters.chargerType)
+        );
+      }
+
+      // Apply availability filter
+      if (filters.availableNow) {
+        filteredChargers = filteredChargers.filter(c => c.status === 'available');
+      }
+
+      // Apply connector type filter
+      if (filters.connectorTypes && filters.connectorTypes.length > 0) {
+        filteredChargers = filteredChargers.filter(c => {
+          if (c.sockets && c.sockets.length > 0) {
+            return c.sockets.some((s: any) => filters.connectorTypes.includes(s.connectorType));
+          }
+          return filters.connectorTypes.includes(c.connectorType);
+        });
+      }
+
+      // Group chargers by stationId
+      const stationMap: Record<string, any[]> = {};
+      const individualChargers: any[] = [];
+      
+      for (const charger of filteredChargers) {
+        if (charger.stationId) {
+          if (!stationMap[charger.stationId]) {
+            stationMap[charger.stationId] = [];
+          }
+          stationMap[charger.stationId].push(charger);
+        } else {
+          individualChargers.push(charger);
         }
+      }
+
+      // Fetch station metadata from charging_stations table
+      const stationIds = Object.keys(stationMap);
+      let stationMetadata: Record<string, any> = {};
+      
+      if (stationIds.length > 0) {
+        const stationRecords = await this.stationRepository
+          .createQueryBuilder('s')
+          .where('s.id IN (:...ids)', { ids: stationIds })
+          .getMany();
+        
+        for (const s of stationRecords) {
+          stationMetadata[s.id] = s;
+        }
+      }
+
+      // Build station objects with nested chargers
+      const stations = Object.entries(stationMap).map(([stationId, stationChargers]) => {
+        const meta = stationMetadata[stationId];
+        const firstCharger = stationChargers[0];
+        
+        // Collect all unique connector types across all chargers/sockets
+        const connectorTypes = new Set<string>();
+        let totalSockets = 0;
+        let availableSockets = 0;
+        let minPrice = Infinity;
+        let maxPower = 0;
+        
+        for (const charger of stationChargers) {
+          if (charger.sockets && charger.sockets.length > 0) {
+            for (const socket of charger.sockets) {
+              connectorTypes.add(socket.connectorType);
+              totalSockets++;
+              if (socket.status === 'available') availableSockets++;
+              const price = parseFloat(socket.pricePerKwh || socket.pricePerHour || '0');
+              if (price > 0 && price < minPrice) minPrice = price;
+              const power = parseFloat(socket.maxPowerKw || '0');
+              if (power > maxPower) maxPower = power;
+            }
+          } else {
+            if (charger.connectorType) connectorTypes.add(charger.connectorType);
+            totalSockets++;
+            if (charger.status === 'available') availableSockets++;
+            const price = parseFloat(charger.pricePerKwh || '0');
+            if (price > 0 && price < minPrice) minPrice = price;
+            const power = parseFloat(charger.maxPowerKw || charger.powerKw || '0');
+            if (power > maxPower) maxPower = power;
+          }
+        }
+
+        if (minPrice === Infinity) minPrice = 0;
+
+        // Compute distance from first charger (all chargers in a station share location)
+        const distance = firstCharger.distance ?? null;
+
+        return {
+          id: stationId,
+          type: 'station',
+          ownerId: meta?.ownerId || firstCharger.ownerId,
+          stationName: meta?.stationName || firstCharger.name || 'Charging Station',
+          address: meta?.address || firstCharger.address || '',
+          lat: parseFloat(meta?.lat || firstCharger.lat),
+          lng: parseFloat(meta?.lng || firstCharger.lng),
+          stationType: meta?.stationType || 'public',
+          parkingCapacity: meta?.parkingCapacity || null,
+          description: meta?.description || firstCharger.description || null,
+          amenities: meta?.amenities || [],
+          openingHours: meta?.openingHours || firstCharger.openingHours || { is24Hours: true },
+          images: meta?.images || [],
+          verified: meta?.verified ?? firstCharger.verified,
+          isBanned: meta?.isBanned ?? false,
+          createdAt: meta?.createdAt || firstCharger.createdAt,
+          updatedAt: meta?.updatedAt || firstCharger.updatedAt,
+          distance,
+          connectorTypes: Array.from(connectorTypes),
+          totalSockets,
+          availableSockets,
+          minPrice,
+          maxPowerKw: maxPower,
+          chargers: stationChargers.map(c => ({
+            id: c.id,
+            ownerId: c.ownerId,
+            lat: parseFloat(c.lat),
+            lng: parseFloat(c.lng),
+            stationId: c.stationId,
+            chargerName: c.name || c.chargerIdentifier || 'Charger',
+            chargerIdentifier: c.chargerIdentifier,
+            chargerType: c.chargerType,
+            maxPowerKw: parseFloat(c.maxPowerKw || c.powerKw || '0'),
+            powerKw: parseFloat(c.powerKw || c.maxPowerKw || '0'),
+            pricePerKwh: parseFloat(c.pricePerKwh || '0'),
+            connectorType: c.connectorType,
+            speedType: c.speedType,
+            status: c.status,
+            currentStatus: c.currentStatus,
+            verified: c.verified ?? false,
+            name: c.name,
+            address: c.address,
+            description: c.description,
+            bookingMode: c.bookingMode,
+            bookingSettings: c.bookingSettings,
+            phoneNumber: c.phoneNumber,
+            amenities: c.amenities,
+            openingHours: c.openingHours,
+            isOnline: c.isOnline ?? false,
+            createdAt: c.createdAt,
+            updatedAt: c.updatedAt,
+            sockets: (c.sockets || []).map((s: any) => ({
+              id: s.id,
+              chargerId: s.chargerId || c.id,
+              socketNumber: s.socketNumber,
+              socketLabel: s.socketLabel,
+              connectorType: s.connectorType,
+              maxPowerKw: parseFloat(s.maxPowerKw || '0'),
+              pricePerKwh: s.pricePerKwh ? parseFloat(s.pricePerKwh) : null,
+              pricePerHour: s.pricePerHour ? parseFloat(s.pricePerHour) : null,
+              isFree: s.isFree || false,
+              currentStatus: s.status,
+              bookingMode: s.bookingMode,
+              isOccupied: s.occupiedBy ? true : false,
+              createdAt: s.createdAt,
+              updatedAt: s.updatedAt,
+            })),
+          })),
+        };
+      });
+
+      // Build individual charger objects (chargers without stationId)
+      const individuals = individualChargers.map(c => {
+        const sockets = c.sockets || [];
+        let totalSockets = sockets.length || 1;
+        let availableSockets = sockets.filter((s: any) => s.status === 'available').length;
+        if (sockets.length === 0 && c.status === 'available') availableSockets = 1;
+        
+        const connectorTypes = new Set<string>();
+        if (sockets.length > 0) {
+          sockets.forEach((s: any) => connectorTypes.add(s.connectorType));
+        } else if (c.connectorType) {
+          connectorTypes.add(c.connectorType);
+        }
+        
+        return {
+          id: c.id,
+          type: 'individual',
+          ownerId: c.ownerId,
+          stationName: c.name || 'Individual Charger',
+          address: c.address || '',
+          lat: parseFloat(c.lat),
+          lng: parseFloat(c.lng),
+          stationType: 'individual',
+          description: c.description || null,
+          images: c.images || [],
+          amenities: c.amenities ? Object.entries(c.amenities).filter(([_, v]) => v).map(([k]) => k) : [],
+          openingHours: c.openingHours || { is24Hours: true },
+          verified: c.verified,
+          distance: c.distance ?? null,
+          connectorTypes: Array.from(connectorTypes),
+          totalSockets,
+          availableSockets,
+          minPrice: parseFloat(c.pricePerKwh || '0'),
+          maxPowerKw: parseFloat(c.maxPowerKw || c.powerKw || '0'),
+          chargers: [{
+            id: c.id,
+            ownerId: c.ownerId,
+            lat: parseFloat(c.lat),
+            lng: parseFloat(c.lng),
+            stationId: c.stationId,
+            chargerName: c.name || 'Charger',
+            chargerIdentifier: c.chargerIdentifier,
+            chargerType: c.chargerType,
+            maxPowerKw: parseFloat(c.maxPowerKw || c.powerKw || '0'),
+            powerKw: parseFloat(c.powerKw || c.maxPowerKw || '0'),
+            pricePerKwh: parseFloat(c.pricePerKwh || '0'),
+            connectorType: c.connectorType,
+            speedType: c.speedType,
+            status: c.status,
+            currentStatus: c.currentStatus,
+            verified: c.verified ?? false,
+            name: c.name,
+            address: c.address,
+            description: c.description,
+            bookingMode: c.bookingMode,
+            bookingSettings: c.bookingSettings,
+            phoneNumber: c.phoneNumber,
+            amenities: c.amenities,
+            openingHours: c.openingHours,
+            isOnline: c.isOnline ?? false,
+            createdAt: c.createdAt,
+            updatedAt: c.updatedAt,
+            sockets: sockets.map((s: any) => ({
+              id: s.id,
+              chargerId: s.chargerId || c.id,
+              socketNumber: s.socketNumber,
+              socketLabel: s.socketLabel,
+              connectorType: s.connectorType,
+              maxPowerKw: parseFloat(s.maxPowerKw || '0'),
+              pricePerKwh: s.pricePerKwh ? parseFloat(s.pricePerKwh) : null,
+              pricePerHour: s.pricePerHour ? parseFloat(s.pricePerHour) : null,
+              isFree: s.isFree || false,
+              currentStatus: s.status,
+              bookingMode: s.bookingMode,
+              isOccupied: s.occupiedBy ? true : false,
+              createdAt: s.createdAt,
+              updatedAt: s.updatedAt,
+            })),
+          }],
+        };
+      });
+
+      // Merge all results
+      let allResults = [...stations, ...individuals];
+
+      // Sort by distance if location filter applied
+      if (filters.lat && filters.lng) {
+        allResults.sort((a, b) => {
+          const da = a.distance ?? 999999;
+          const db = b.distance ?? 999999;
+          return filters.sortOrder === 'desc' ? db - da : da - db;
+        });
       }
 
       // Pagination
       const limit = filters.limit || 50;
       const offset = filters.offset || 0;
-      const total = filteredStations.length;
-      const paginatedStations = filteredStations.slice(offset, offset + limit);
+      const total = allResults.length;
+      const paginatedResults = allResults.slice(offset, offset + limit);
 
-      console.log(`Returning ${paginatedStations.length} of ${total} stations`);
+      console.log(`Returning ${paginatedResults.length} stations/chargers of ${total} total`);
 
       return {
-        data: paginatedStations,
+        data: paginatedResults,
         total,
         limit,
         offset,
-        hasMore: offset + paginatedStations.length < total,
+        hasMore: offset + paginatedResults.length < total,
       };
     } catch (error) {
       console.error('Error in filterStations:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get a specific charging station with all its chargers and sockets
+   * Used for station detail screens in mobile app
+   */
+  async getStationWithChargers(stationId: string): Promise<any> {
+    try {
+      // Fetch the station record
+      const station = await this.stationRepository.findOne({
+        where: { id: stationId },
+      });
+
+      if (!station) {
+        throw new NotFoundException(`Charging station with ID ${stationId} not found`);
+      }
+
+      // Fetch all chargers for this station with their sockets
+      const chargers = await this.chargerRepository.find({
+        where: { stationId },
+        relations: ['sockets'],
+      });
+
+      // Build the response similar to filterStations
+      const connectorTypes = new Set<string>();
+      let totalSockets = 0;
+      let availableSockets = 0;
+      let minPrice = Infinity;
+      let maxPower = 0;
+
+      for (const charger of chargers) {
+        if (charger.sockets && charger.sockets.length > 0) {
+          for (const socket of charger.sockets) {
+            connectorTypes.add(socket.connectorType);
+            totalSockets++;
+            if (socket.status === 'available') availableSockets++;
+            const price = parseFloat(String(socket.pricePerKwh || socket.pricePerHour || '0'));
+            if (price > 0 && price < minPrice) minPrice = price;
+            const power = parseFloat(String(socket.maxPowerKw || '0'));
+            if (power > maxPower) maxPower = power;
+          }
+        } else {
+          if (charger.connectorType) connectorTypes.add(charger.connectorType);
+          totalSockets++;
+          if (charger.status === 'available') availableSockets++;
+          const price = parseFloat(String(charger.pricePerKwh || '0'));
+          if (price > 0 && price < minPrice) minPrice = price;
+          const power = parseFloat(String(charger.maxPowerKw || charger.powerKw || '0'));
+          if (power > maxPower) maxPower = power;
+        }
+      }
+
+      if (minPrice === Infinity) minPrice = 0;
+
+      return {
+        id: station.id,
+        type: 'station',
+        ownerId: station.ownerId,
+        stationName: station.stationName,
+        address: station.address,
+        lat: parseFloat(station.lat.toString()),
+        lng: parseFloat(station.lng.toString()),
+        stationType: station.stationType,
+        parkingCapacity: station.parkingCapacity,
+        description: station.description,
+        amenities: station.amenities || [],
+        openingHours: station.openingHours || { is24Hours: true },
+        images: station.images || [],
+        verified: station.verified,
+        isBanned: station.isBanned,
+        createdAt: station.createdAt,
+        updatedAt: station.updatedAt,
+        connectorTypes: Array.from(connectorTypes),
+        totalSockets,
+        availableSockets,
+        minPrice,
+        maxPowerKw: maxPower,
+        chargers: chargers.map(c => ({
+          id: c.id,
+          ownerId: c.ownerId,
+          lat: parseFloat(c.lat.toString()),
+          lng: parseFloat(c.lng.toString()),
+          stationId: c.stationId,
+          chargerName: c.name || c.chargerIdentifier || 'Charger',
+          chargerIdentifier: c.chargerIdentifier,
+          chargerType: c.chargerType,
+          maxPowerKw: parseFloat((c.maxPowerKw || '0').toString()),
+          powerKw: parseFloat((c.powerKw || c.maxPowerKw || '0').toString()),
+          pricePerKwh: parseFloat((c.pricePerKwh || '0').toString()),
+          connectorType: c.connectorType,
+          speedType: c.speedType,
+          status: c.status,
+          currentStatus: c.currentStatus,
+          verified: c.verified ?? false,
+          name: c.name,
+          address: c.address,
+          description: c.description,
+          bookingMode: c.bookingMode,
+          bookingSettings: c.bookingSettings,
+          phoneNumber: c.phoneNumber,
+          amenities: c.amenities,
+          openingHours: c.openingHours,
+          isOnline: c.isOnline ?? false,
+          createdAt: c.createdAt,
+          updatedAt: c.updatedAt,
+          sockets: (c.sockets || []).map((s: any) => ({
+            id: s.id,
+            chargerId: s.chargerId || c.id,
+            socketNumber: s.socketNumber,
+            socketLabel: s.socketLabel,
+            connectorType: s.connectorType,
+            maxPowerKw: parseFloat(s.maxPowerKw || '0'),
+            pricePerKwh: s.pricePerKwh ? parseFloat(s.pricePerKwh) : null,
+            pricePerHour: s.pricePerHour ? parseFloat(s.pricePerHour) : null,
+            isFree: s.isFree || false,
+            currentStatus: s.status,
+            bookingMode: s.bookingMode,
+            isOccupied: s.occupiedBy ? true : false,
+            createdAt: s.createdAt,
+            updatedAt: s.updatedAt,
+          })),
+        })),
+      };
+    } catch (error) {
+      console.error('Error in getStationWithChargers:', error);
       throw error;
     }
   }
@@ -442,7 +811,7 @@ export class ChargerService {
     }
 
     // Validate pre-booking requirements
-    if (updateDto.bookingMode === BookingMode.PRE_BOOKING_REQUIRED && 
+    if (updateDto.bookingMode === BookingMode.PRE_BOOKING && 
         settings.advanceBookingDays === 0) {
       throw new BadRequestException(
         'Pre-booking required mode must allow advance bookings'
@@ -538,5 +907,225 @@ export class ChargerService {
     }
 
     return queryBuilder.getMany();
+  }
+
+  // ==================== VEHICLE COMPATIBILITY ====================
+
+  /**
+   * Connector compatibility matrix — which charger connectors work with which vehicle connectors.
+   * A CCS2 vehicle can plug into a CCS2 socket (DC) and also into a Type 2 socket (AC).
+   * A Tesla vehicle can use tesla sockets and, with adapters, CCS2 sockets.
+   */
+  private static readonly CONNECTOR_COMPAT: Record<string, string[]> = {
+    type2: ['type2', 'three_phase_type2'],
+    ccs2: ['ccs2', 'type2', 'three_phase_type2'], // CCS2 plug includes Type 2 AC
+    chademo: ['chademo'],
+    type1: ['type1', 'type1_j1772'],
+    ccs1: ['ccs1', 'type1', 'type1_j1772'], // CCS1 plug includes Type 1 AC
+    tesla: ['tesla', 'tesla_nacs'],
+    gb_t_ac: ['gb_t_ac'],
+    gb_t_dc: ['gb_t_dc'],
+    three_phase_type2: ['three_phase_type2', 'type2'],
+  };
+
+  /**
+   * Normalize a single charger connector type string to the canonical mobile enum values.
+   * Maps backend values like type1_j1772 → type1, tesla_nacs → tesla.
+   */
+  private normalizeChargerConnector(raw: string | null): string {
+    if (!raw) return '';
+    const lower = raw.toLowerCase().trim();
+    const map: Record<string, string> = {
+      type1_j1772: 'type1',
+      tesla_nacs: 'tesla',
+    };
+    return map[lower] || lower;
+  }
+
+  /**
+   * Check if a single vehicle connector type is compatible with a charger socket's connector type.
+   */
+  private isConnectorCompatibleWith(vehicleConn: string, chargerConn: string): boolean {
+    const normalizedCharger = this.normalizeChargerConnector(chargerConn);
+    const compatList = ChargerService.CONNECTOR_COMPAT[vehicleConn] || [vehicleConn];
+    return compatList.includes(normalizedCharger);
+  }
+
+  /**
+   * Determine the effective charging power (min of vehicle max and charger max).
+   */
+  private getEffectiveChargingPower(
+    vehicle: VehicleProfile,
+    chargerType: string,
+    chargerMaxPower: number,
+  ): number {
+    const isAc = chargerType === 'ac' || chargerMaxPower <= 22;
+    const vehicleMax = isAc
+      ? (vehicle.maxAcChargingPower ? Number(vehicle.maxAcChargingPower) : 11)
+      : (vehicle.maxDcChargingPower ? Number(vehicle.maxDcChargingPower) : 50);
+    return Math.min(vehicleMax, chargerMaxPower);
+  }
+
+  /**
+   * Estimate charge time in minutes from currentSoc% to targetSoc%.
+   * Simple linear model; override with chargingCurve if available.
+   */
+  private estimateChargeTime(
+    batteryCapacityKwh: number,
+    effectivePowerKw: number,
+    fromSoc: number = 20,
+    toSoc: number = 80,
+  ): number {
+    if (effectivePowerKw <= 0) return 0;
+    const energyNeeded = batteryCapacityKwh * ((toSoc - fromSoc) / 100);
+    return Math.round((energyNeeded / effectivePowerKw) * 60);
+  }
+
+  /**
+   * Get compatible stations for a user's vehicle (primary vehicle or specified vehicleId).
+   * Returns stations with compatibility metadata per socket.
+   */
+  async getCompatibleStations(
+    userId: string,
+    vehicleId: string | null,
+    filters: {
+      lat?: number;
+      lng?: number;
+      radius?: number;
+      availableNow?: boolean;
+      sortBy?: string;
+      sortOrder?: string;
+      limit?: number;
+      offset?: number;
+    },
+  ): Promise<any> {
+    // 1. Get the vehicle
+    let vehicle: VehicleProfile | null = null;
+    if (vehicleId) {
+      vehicle = await this.vehicleProfileService.findOne(vehicleId, userId);
+    } else {
+      vehicle = await this.vehicleProfileService.findPrimaryByUser(userId);
+    }
+
+    if (!vehicle) {
+      // No vehicle → fall back to unfiltered station list
+      return this.filterStations(filters);
+    }
+
+    // 2. Determine vehicle connector types
+    const vehicleConnectors: string[] =
+      vehicle.connectorTypes && vehicle.connectorTypes.length > 0
+        ? vehicle.connectorTypes
+        : vehicle.connectorType
+          ? vehicle.connectorType.split(',').map(s => s.trim().toLowerCase())
+          : [];
+
+    // 3. Fetch all stations (reuse filterStations)
+    const stationsResult = await this.filterStations({
+      ...filters,
+      limit: filters.limit || 100,
+    });
+
+    const allStations: any[] = stationsResult.data || [];
+
+    // 4. Annotate each station with compatibility info
+    const annotated = allStations.map(station => {
+      let hasCompatibleSocket = false;
+      let bestEffectivePower = 0;
+      let bestEstimatedChargeMin = 0;
+      let matchedConnectorTypes: string[] = [];
+
+      const annotatedChargers = (station.chargers || []).map((charger: any) => {
+        const annotatedSockets = (charger.sockets || []).map((socket: any) => {
+          const normalizedSocketConn = this.normalizeChargerConnector(socket.connectorType);
+          let isCompatible = false;
+          let matchedVehicleConnector: string | null = null;
+
+          for (const vc of vehicleConnectors) {
+            if (this.isConnectorCompatibleWith(vc, socket.connectorType)) {
+              isCompatible = true;
+              matchedVehicleConnector = vc;
+              break;
+            }
+          }
+
+          const socketPower = parseFloat(socket.maxPowerKw || '0');
+          const effectivePower = isCompatible
+            ? this.getEffectiveChargingPower(vehicle!, charger.chargerType || 'ac', socketPower)
+            : 0;
+          const estimatedChargeMin = isCompatible
+            ? this.estimateChargeTime(Number(vehicle!.batteryCapacity), effectivePower)
+            : 0;
+
+          if (isCompatible) {
+            hasCompatibleSocket = true;
+            if (effectivePower > bestEffectivePower) {
+              bestEffectivePower = effectivePower;
+              bestEstimatedChargeMin = estimatedChargeMin;
+            }
+            if (!matchedConnectorTypes.includes(normalizedSocketConn)) {
+              matchedConnectorTypes.push(normalizedSocketConn);
+            }
+          }
+
+          return {
+            ...socket,
+            compatibility: {
+              isCompatible,
+              matchedVehicleConnector,
+              effectiveChargingPowerKw: Math.round(effectivePower * 10) / 10,
+              estimatedChargeTimeMinutes: estimatedChargeMin,
+            },
+          };
+        });
+
+        // Charger-level compatibility = any socket compatible
+        const chargerCompatible = annotatedSockets.some((s: any) => s.compatibility.isCompatible);
+
+        return {
+          ...charger,
+          sockets: annotatedSockets,
+          compatibility: {
+            isCompatible: chargerCompatible,
+          },
+        };
+      });
+
+      return {
+        ...station,
+        chargers: annotatedChargers,
+        compatibility: {
+          isCompatible: hasCompatibleSocket,
+          bestEffectiveChargingPowerKw: Math.round(bestEffectivePower * 10) / 10,
+          bestEstimatedChargeTimeMinutes: bestEstimatedChargeMin,
+          matchedConnectorTypes,
+          vehicleName: `${vehicle!.year} ${vehicle!.make} ${vehicle!.model}`,
+          vehicleId: vehicle!.id,
+        },
+      };
+    });
+
+    // 5. Sort: compatible first, then by distance
+    annotated.sort((a: any, b: any) => {
+      // Compatible first
+      if (a.compatibility.isCompatible && !b.compatibility.isCompatible) return -1;
+      if (!a.compatibility.isCompatible && b.compatibility.isCompatible) return 1;
+      // Then by distance if available
+      if (a.distance != null && b.distance != null) return a.distance - b.distance;
+      return 0;
+    });
+
+    return {
+      data: annotated,
+      total: annotated.length,
+      vehicle: {
+        id: vehicle.id,
+        name: `${vehicle.year} ${vehicle.make} ${vehicle.model}`,
+        connectorTypes: vehicleConnectors,
+        batteryCapacityKwh: Number(vehicle.batteryCapacity),
+        maxAcChargingPowerKw: vehicle.maxAcChargingPower ? Number(vehicle.maxAcChargingPower) : null,
+        maxDcChargingPowerKw: vehicle.maxDcChargingPower ? Number(vehicle.maxDcChargingPower) : null,
+      },
+    };
   }
 }

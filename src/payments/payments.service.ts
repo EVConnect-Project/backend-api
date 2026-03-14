@@ -102,8 +102,8 @@ export class PaymentsService {
         amount: amountStr,
         first_name: booking.user?.name?.split(' ')[0] || 'Customer',
         last_name: booking.user?.name?.split(' ').slice(1).join(' ') || '',
-        email: booking.user?.email || 'customer@evconnect.lk',
-        phone: '0771234567',
+        email: 'customer@evconnect.lk', // Default email for PayHere
+        phone: booking.user?.phoneNumber || '0771234567',
         address: booking.charger?.address || 'Colombo',
         city: 'Colombo',
         country: 'Sri Lanka',

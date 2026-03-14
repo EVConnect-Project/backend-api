@@ -1,4 +1,4 @@
-import { Controller, Post, Body, ValidationPipe, Get, UseGuards, Request, Inject, Patch, Delete } from '@nestjs/common';
+import { Controller, Post, Body, Get, UseGuards, Request, Inject, Patch, Delete, HttpCode, HttpStatus } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -27,10 +27,9 @@ export class AuthController {
     return {
       user: {
         id: user.id,
-        email: user.email,
         name: user.name,
         role: user.role,
-        phone: user.phone,
+        phone: user.phoneNumber,
         countryCode: user.countryCode,
         isVerified: user.isVerified,
         isBanned: user.isBanned,
@@ -41,18 +40,42 @@ export class AuthController {
     };
   }
 
+  @Post('logout')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async logout(@Request() req) {
+    return this.authService.logout(req.user.userId);
+  }
+
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  async refresh(@Body() body: { refresh_token: string }) {
+    if (!body.refresh_token) {
+      return { statusCode: 400, message: 'refresh_token is required' };
+    }
+    return this.authService.refreshToken(body.refresh_token);
+  }
+
   @Post('register')
-  async register(@Body(ValidationPipe) registerDto: RegisterDto) {
+  async register(@Body() registerDto: RegisterDto) {
     return this.authService.register(registerDto);
   }
 
   @Post('login')
-  async login(@Body(ValidationPipe) loginDto: LoginDto) {
-    return this.authService.login(loginDto);
+  async login(@Body() loginDto: LoginDto) {
+    try {
+      console.log('[AUTH CONTROLLER] Login request received for:', loginDto.phoneNumber);
+      const result = await this.authService.login(loginDto);
+      console.log('[AUTH CONTROLLER] Login successful for:', loginDto.phoneNumber);
+      return result;
+    } catch (error) {
+      console.error('[AUTH CONTROLLER] Login error:', error.message, error.stack);
+      throw error;
+    }
   }
 
   @Post('admin/login')
-  async adminLogin(@Body(ValidationPipe) loginDto: LoginDto) {
+  async adminLogin(@Body() loginDto: LoginDto) {
     return this.authService.adminLogin(loginDto);
   }
 
@@ -65,7 +88,7 @@ export class AuthController {
       valid: user.role === 'admin' && !user.isBanned,
       user: {
         id: user.userId,
-        email: user.email,
+        phone: user.phoneNumber,
         role: user.role,
       },
     };
@@ -81,7 +104,7 @@ export class AuthController {
       return { error: 'User not found' };
     }
 
-    console.log('🔍 /auth/me: Checking chargers for user:', user.email, 'ID:', user.id);
+    console.log('🔍 /auth/me: Checking chargers for user:', user.phoneNumber, 'ID:', user.id);
     
     // Check if user owns any chargers (determines isOwner status)
     const chargerCount = await this.chargerRepository.count({
@@ -95,7 +118,7 @@ export class AuthController {
     });
     const hasMechanicProfile = mechanicProfile !== null;
 
-    console.log('📊 /auth/me: User:', user.email);
+    console.log('📊 /auth/me: User:', user.phoneNumber);
     console.log('   - Role:', user.role);
     console.log('   - Charger count:', chargerCount);
     console.log('   - hasChargers:', hasChargers);
@@ -106,10 +129,9 @@ export class AuthController {
     return {
       user: {
         id: user.id,
-        email: user.email,
         name: user.name,
         role: user.role,
-        phone: user.phone,
+        phone: user.phoneNumber,
         countryCode: user.countryCode,
         isVerified: user.isVerified,
         isBanned: user.isBanned,
@@ -124,7 +146,7 @@ export class AuthController {
 
   @Post('change-password')
   @UseGuards(JwtAuthGuard)
-  async changePassword(@Request() req, @Body(ValidationPipe) changePasswordDto: ChangePasswordDto) {
+  async changePassword(@Request() req, @Body() changePasswordDto: ChangePasswordDto) {
     return this.authService.changePassword(
       req.user.userId,
       changePasswordDto.currentPassword,
@@ -141,12 +163,12 @@ export class AuthController {
   // ==================== PHONE AUTHENTICATION ENDPOINTS ====================
 
   @Post('send-otp')
-  async sendOTP(@Body(ValidationPipe) sendOtpDto: SendOtpDto) {
+  async sendOTP(@Body() sendOtpDto: SendOtpDto) {
     return this.authService.sendOTP(sendOtpDto.phoneNumber);
   }
 
   @Post('verify-otp')
-  async verifyOTP(@Body(ValidationPipe) verifyOtpDto: VerifyOtpDto) {
+  async verifyOTP(@Body() verifyOtpDto: VerifyOtpDto) {
     return this.authService.verifyOTP(
       verifyOtpDto.phoneNumber,
       verifyOtpDto.otp,
@@ -154,12 +176,12 @@ export class AuthController {
   }
 
   @Post('resend-otp')
-  async resendOTP(@Body(ValidationPipe) sendOtpDto: SendOtpDto) {
+  async resendOTP(@Body() sendOtpDto: SendOtpDto) {
     return this.authService.sendOTP(sendOtpDto.phoneNumber);
   }
 
   @Post('register-phone')
-  async registerPhone(@Body(ValidationPipe) registerPhoneDto: RegisterPhoneDto) {
+  async registerPhone(@Body() registerPhoneDto: RegisterPhoneDto) {
     return this.authService.registerWithPhone(
       registerPhoneDto.phoneNumber,
       registerPhoneDto.password,
@@ -168,7 +190,7 @@ export class AuthController {
   }
 
   @Post('login-phone')
-  async loginPhone(@Body(ValidationPipe) loginPhoneDto: LoginPhoneDto) {
+  async loginPhone(@Body() loginPhoneDto: LoginPhoneDto) {
     return this.authService.loginWithPhone(
       loginPhoneDto.phoneNumber,
       loginPhoneDto.password,
@@ -176,12 +198,12 @@ export class AuthController {
   }
 
   @Post('forgot-password')
-  async forgotPassword(@Body(ValidationPipe) sendOtpDto: SendOtpDto) {
+  async forgotPassword(@Body() sendOtpDto: SendOtpDto) {
     return this.authService.sendPasswordResetOTP(sendOtpDto.phoneNumber);
   }
 
   @Post('reset-password')
-  async resetPassword(@Body(ValidationPipe) resetPasswordDto: ResetPasswordDto) {
+  async resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
     return this.authService.resetPassword(
       resetPasswordDto.phoneNumber,
       resetPasswordDto.newPassword,

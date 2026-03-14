@@ -28,6 +28,10 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { TripModule } from './trip/trip.module';
 import { SupportModule } from './support/support.module';
 import { EmergencyModule } from './emergency/emergency.module';
+import { FeedbackModule } from './feedback/feedback.module';
+import { PromotionsModule } from './promotions/promotions.module';
+import { StationModule } from './station/station.module';
+import { DirectionsModule } from './directions/directions.module';
 
 @Module({
   imports: [
@@ -75,6 +79,10 @@ import { EmergencyModule } from './emergency/emergency.module';
     TripModule,
     SupportModule,
     EmergencyModule,
+    FeedbackModule,
+    PromotionsModule,
+    StationModule,
+    DirectionsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
@@ -116,9 +124,14 @@ export class AppModule implements OnModuleInit {
       await queryRunner.query(`ALTER TABLE vehicle_profiles ADD COLUMN IF NOT EXISTS "efficiency" DECIMAL(10, 2)`);
       await queryRunner.query(`ALTER TABLE vehicle_profiles ADD COLUMN IF NOT EXISTS "chargingCurve" JSONB`);
       await queryRunner.query(`ALTER TABLE vehicle_profiles ADD COLUMN IF NOT EXISTS "drivingMode" VARCHAR(20) DEFAULT 'normal'`);
+      await queryRunner.query(`ALTER TABLE vehicle_profiles ADD COLUMN IF NOT EXISTS "vehicleType" VARCHAR(50) DEFAULT 'car'`);
+      
+      // Update existing records to have 'car' as default vehicleType where NULL
+      await queryRunner.query(`UPDATE vehicle_profiles SET "vehicleType" = 'car' WHERE "vehicleType" IS NULL`);
       
       await queryRunner.query(`CREATE INDEX IF NOT EXISTS idx_vehicle_profiles_user_id ON vehicle_profiles("userId")`);
       await queryRunner.query(`CREATE INDEX IF NOT EXISTS idx_vehicle_profiles_is_primary ON vehicle_profiles("isPrimary")`);
+      await queryRunner.query(`CREATE INDEX IF NOT EXISTS idx_vehicle_profiles_vehicle_type ON vehicle_profiles("vehicleType")`);
       
       // Create trigger function for vehicle_profiles if not exists
       await queryRunner.query(`
@@ -152,11 +165,9 @@ export class AppModule implements OnModuleInit {
       await queryRunner.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS accepted_terms BOOLEAN DEFAULT false`);
       await queryRunner.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS accepted_privacy_policy BOOLEAN DEFAULT false`);
       await queryRunner.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_accepted_at TIMESTAMP`);
-      await queryRunner.query(`ALTER TABLE users ALTER COLUMN email DROP NOT NULL`);
       
       // Create indexes
       await queryRunner.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_phone_users ON users(phone) WHERE phone IS NOT NULL`);
-      await queryRunner.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_email_users ON users(email) WHERE email IS NOT NULL`);
       
       console.log('✅ Schema fixes applied successfully');
     } catch (error) {
