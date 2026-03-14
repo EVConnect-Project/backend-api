@@ -28,8 +28,10 @@ export class VehicleProfile {
   connectorType: string;
 
   // Normalized array of connector types: type2, ccs2, chademo, type1, ccs1, gb_t_ac, gb_t_dc, tesla, three_phase_type2
-  @Column({ type: 'jsonb', default: '[]' })
-  connectorTypes: string[];
+  // NOTE: Some deployed DBs don't yet have `connectorTypes` column; keep this
+  // as a computed/runtime field to avoid select failures, and derive from
+  // connectorType in service/clients when absent.
+  connectorTypes?: string[];
 
   @Column({ nullable: true })
   vehicleType: string; // e.g., 'car', 'suv', 'van', 'bus', 'motorbike', 'scooty', 'threewheel', 'truck'

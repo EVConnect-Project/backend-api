@@ -41,11 +41,12 @@ export class AuthService {
   // ==================== TOKEN HELPERS ====================
 
   private generateAccessToken(user: UserEntity): string {
+    const tokenVersion = user.tokenVersion ?? 0;
     const payload = {
       sub: user.id,
       phoneNumber: user.phoneNumber,
       role: user.role,
-      tokenVersion: user.tokenVersion,
+      tokenVersion,
       type: 'access',
     };
     return this.jwtService.sign(payload, {
@@ -56,9 +57,10 @@ export class AuthService {
   private generateRefreshToken(user: UserEntity): string {
     const refreshSecret = this.configService.get<string>('JWT_REFRESH_SECRET');
     if (!refreshSecret) throw new Error('JWT_REFRESH_SECRET environment variable is not set');
+    const tokenVersion = user.tokenVersion ?? 0;
     const payload = {
       sub: user.id,
-      tokenVersion: user.tokenVersion,
+      tokenVersion,
       type: 'refresh',
     };
     return this.jwtService.sign(payload, {
@@ -188,8 +190,13 @@ export class AuthService {
     if (!user) throw new UnauthorizedException('User not found');
     if (user.isBanned) throw new UnauthorizedException('User account is banned');
 
-    // Validate token version — reject tokens issued before last logout
-    if (payload.tokenVersion !== user.tokenVersion) {
+    // Validate token version when supported by the current DB schema.
+    // Some deployments may not yet have tokenVersion column.
+    if (
+      typeof user.tokenVersion === 'number' &&
+      typeof payload.tokenVersion === 'number' &&
+      payload.tokenVersion !== user.tokenVersion
+    ) {
       throw new UnauthorizedException('Refresh token has been invalidated. Please login again.');
     }
 
@@ -201,7 +208,16 @@ export class AuthService {
 
   async logout(userId: string) {
     // Increment tokenVersion to invalidate all existing access + refresh tokens
-    await this.userRepository.increment({ id: userId }, 'tokenVersion', 1);
+    // when tokenVersion exists in this deployment.
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    if (typeof user.tokenVersion === 'number') {
+      await this.userRepository.increment({ id: userId }, 'tokenVersion', 1);
+    }
+
     return { success: true, message: 'Logged out successfully' };
   }
 

@@ -22,6 +22,13 @@ export class VehicleProfileService {
         where: { userId },
         order: { isPrimary: 'DESC', createdAt: 'DESC' },
       });
+
+      for (const vehicle of vehicles) {
+        vehicle.connectorTypes = this.normalizeConnectorTypes(
+          vehicle.connectorTypes,
+          vehicle.connectorType,
+        );
+      }
       
       this.logger.debug(`Found ${vehicles.length} vehicles for user ${userId}`);
       return vehicles;
@@ -39,6 +46,11 @@ export class VehicleProfileService {
     if (!vehicle) {
       throw new NotFoundException('Vehicle not found');
     }
+
+    vehicle.connectorTypes = this.normalizeConnectorTypes(
+      vehicle.connectorTypes,
+      vehicle.connectorType,
+    );
 
     return vehicle;
   }
@@ -88,6 +100,10 @@ export class VehicleProfileService {
       } as Partial<VehicleProfile>);
 
       const saved = await this.vehicleProfileRepository.save(vehicle);
+      saved.connectorTypes = this.normalizeConnectorTypes(
+        saved.connectorTypes,
+        saved.connectorType,
+      );
       this.logger.log(`Vehicle created successfully with ID: ${saved.id}`);
       return saved;
     } catch (error) {
@@ -120,7 +136,12 @@ export class VehicleProfileService {
     }
 
     Object.assign(vehicle, updateVehicleDto);
-    return this.vehicleProfileRepository.save(vehicle);
+    const saved = await this.vehicleProfileRepository.save(vehicle);
+    saved.connectorTypes = this.normalizeConnectorTypes(
+      saved.connectorTypes,
+      saved.connectorType,
+    );
+    return saved;
   }
 
   async remove(id: string, userId: string): Promise<void> {
@@ -154,7 +175,12 @@ export class VehicleProfileService {
 
     // Set this one as primary
     vehicle.isPrimary = true;
-    return this.vehicleProfileRepository.save(vehicle);
+    const saved = await this.vehicleProfileRepository.save(vehicle);
+    saved.connectorTypes = this.normalizeConnectorTypes(
+      saved.connectorTypes,
+      saved.connectorType,
+    );
+    return saved;
   }
 
   /**

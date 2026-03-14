@@ -233,6 +233,9 @@ export class Charger {
     type: "jsonb",
     nullable: true,
     default: null,
+    select: false,
+    insert: false,
+    update: false,
   })
   images: string[] | null;
 
