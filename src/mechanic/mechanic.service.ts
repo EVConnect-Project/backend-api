@@ -108,16 +108,110 @@ export class MechanicService {
    * Get user's application status
    */
   async getMyApplication(userId: string) {
-    const application = await this.applicationRepository.findOne({
-      where: { userId },
-      relations: ['user'],
-    });
+    try {
+      const application = await this.applicationRepository.findOne({
+        where: { userId },
+      });
 
-    if (!application) {
-      throw new NotFoundException('No application found');
+      if (!application) {
+        throw new NotFoundException('No application found');
+      }
+
+      return application;
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+
+      console.error('❌ getMyApplication ORM query failed, trying schema-safe fallback:', {
+        userId,
+        message: error?.message,
+      });
+
+      const fallbackApplication = await this.getMyApplicationFallback(userId);
+      if (!fallbackApplication) {
+        throw new NotFoundException('No application found');
+      }
+
+      return fallbackApplication;
+    }
+  }
+
+  /**
+   * Fallback query for environments where mechanic_applications schema differs
+   * between deployments (camelCase vs snake_case columns).
+   */
+  private async getMyApplicationFallback(userId: string) {
+    const columnsResult: Array<{ column_name: string }> =
+      await this.applicationRepository.query(
+        `SELECT column_name FROM information_schema.columns WHERE table_name = 'mechanic_applications'`,
+      );
+
+    const columnNames = new Set(columnsResult.map((column) => column.column_name));
+
+    const userIdColumn = columnNames.has('userId')
+      ? '"userId"'
+      : columnNames.has('user_id')
+        ? 'user_id'
+        : null;
+
+    if (!userIdColumn) {
+      console.error('❌ getMyApplicationFallback: user id column not found in mechanic_applications');
+      return null;
     }
 
-    return application;
+    const reviewNotesColumn = columnNames.has('review_notes')
+      ? 'review_notes'
+      : columnNames.has('reviewNotes')
+        ? '"reviewNotes"'
+        : 'NULL';
+
+    const reviewedByColumn = columnNames.has('reviewed_by')
+      ? 'reviewed_by'
+      : columnNames.has('reviewedBy')
+        ? '"reviewedBy"'
+        : 'NULL';
+
+    const reviewedAtColumn = columnNames.has('reviewedAt')
+      ? '"reviewedAt"'
+      : columnNames.has('reviewed_at')
+        ? 'reviewed_at'
+        : 'NULL';
+
+    const createdAtColumn = columnNames.has('created_at')
+      ? 'created_at'
+      : columnNames.has('createdAt')
+        ? '"createdAt"'
+        : 'NULL';
+
+    const updatedAtColumn = columnNames.has('updated_at')
+      ? 'updated_at'
+      : columnNames.has('updatedAt')
+        ? '"updatedAt"'
+        : 'NULL';
+
+    const orderByColumn = createdAtColumn == 'NULL' ? 'id' : createdAtColumn;
+
+    const rows = await this.applicationRepository.query(
+      `
+        SELECT
+          id,
+          ${userIdColumn} AS "userId",
+          status,
+          ${reviewNotesColumn} AS "reviewNotes",
+          ${reviewedByColumn} AS "reviewedBy",
+          ${reviewedAtColumn} AS "reviewedAt",
+          ${createdAtColumn} AS "createdAt",
+          ${updatedAtColumn} AS "updatedAt"
+        FROM mechanic_applications
+        WHERE ${userIdColumn} = $1
+        ORDER BY ${orderByColumn} DESC
+        LIMIT 1
+      `,
+      [userId],
+    );
+
+    return rows?.[0] ?? null;
   }
 
   /**
