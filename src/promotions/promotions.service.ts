@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
 import { PromotionEntity, PromotionStatus, AdPlacement, BillingModel } from './entities/promotion.entity';
@@ -9,6 +9,8 @@ import { CreatePromotionDto, UpdatePromotionDto, CreateAbTestDto, UpdateAbTestDt
 
 @Injectable()
 export class PromotionsService {
+  private readonly logger = new Logger(PromotionsService.name);
+
   constructor(
     @InjectRepository(PromotionEntity)
     private promotionRepository: Repository<PromotionEntity>,
@@ -45,9 +47,17 @@ export class PromotionsService {
   }
 
   async findAll(): Promise<PromotionEntity[]> {
-    return this.promotionRepository.find({
-      order: { createdAt: 'DESC' },
-    });
+    try {
+      this.logger.log('🔍 Querying promotions from database...');
+      const result = await this.promotionRepository.find({
+        order: { createdAt: 'DESC' },
+      });
+      this.logger.log(`✅ Retrieved ${result.length} promotions`);
+      return result;
+    } catch (error) {
+      this.logger.error('❌ Error querying promotions:', error instanceof Error ? error.message : error);
+      throw error;
+    }
   }
 
   async findActive(): Promise<PromotionEntity[]> {

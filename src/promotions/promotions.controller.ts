@@ -9,6 +9,9 @@ import {
   UseGuards,
   Query,
   Request,
+  HttpException,
+  HttpStatus,
+  Logger,
 } from '@nestjs/common';
 import { PromotionsService } from './promotions.service';
 import {
@@ -26,6 +29,8 @@ import { Roles } from '../auth/decorators/roles.decorator';
 
 @Controller('v1/promotions')
 export class PromotionsController {
+  private readonly logger = new Logger(PromotionsController.name);
+
   constructor(private readonly promotionsService: PromotionsService) {}
 
   // ── Promotion CRUD ─────────────────────────────────────────
@@ -38,8 +43,24 @@ export class PromotionsController {
   }
 
   @Get()
-  findAll() {
-    return this.promotionsService.findAll();
+  async findAll() {
+    try {
+      this.logger.log('⏰ GET /v1/promotions - fetching all promotions');
+      const result = await this.promotionsService.findAll();
+      this.logger.log(`✅ Found ${result.length} promotions`);
+      return result;
+    } catch (error) {
+      this.logger.error('❌ Error in findAll:', error instanceof Error ? error.message : error);
+      this.logger.error('Stack:', error instanceof Error ? error.stack : '');
+      throw new HttpException(
+        {
+          statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+          message: 'Failed to fetch promotions',
+          error: error instanceof Error ? error.message : 'Unknown error',
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
   }
 
   @Get('active')
