@@ -652,6 +652,7 @@ export class OwnerService {
         phoneNumber: dto.phoneNumber || null,
         bookingMode: (dto.bookingMode as BookingMode) || BookingMode.HYBRID,
         openingHours: dto.openingHours || { is24Hours: true, schedule: {} },
+        images: dto.images || [],
         verified: false,
         status: 'offline',
       });        console.log('Saving charger to database...');

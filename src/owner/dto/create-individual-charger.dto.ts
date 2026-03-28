@@ -52,4 +52,8 @@ export class CreateIndividualChargerDto {
   @IsString()
   @IsOptional()
   bookingMode?: 'pre_booking' | 'walk_in' | 'hybrid';
+
+  @IsArray()
+  @IsOptional()
+  images?: string[];
 }
