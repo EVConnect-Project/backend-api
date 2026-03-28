@@ -1357,97 +1357,112 @@ export class AdminService {
     status?: string;
     search?: string;
   }) {
-    const { page, limit, status, search } = params;
-    const skip = (page - 1) * limit;
+    try {
+      const { page, limit, status, search } = params;
+      const skip = (page - 1) * limit;
 
-    const queryBuilder = this.mechanicApplicationRepository
-      .createQueryBuilder('application')
-      .leftJoinAndSelect('application.user', 'user');
+      const queryBuilder = this.mechanicApplicationRepository
+        .createQueryBuilder('application')
+        .leftJoinAndSelect('application.user', 'user');
 
-    if (search) {
-      queryBuilder.where(
-        '(application.name ILIKE :search OR application.phone ILIKE :search OR application.services::text ILIKE :search)',
-        { search: `%${search}%` },
-      );
+      if (search) {
+        queryBuilder.where(
+          '(application.name ILIKE :search OR application.phone ILIKE :search OR application.services::text ILIKE :search)',
+          { search: `%${search}%` },
+        );
+      }
+
+      if (status) {
+        const statuses = status.split(',');
+        queryBuilder.andWhere('application.status IN (:...statuses)', { statuses });
+      }
+
+      const [applications, total] = await queryBuilder
+        .skip(skip)
+        .take(limit)
+        .orderBy('application.createdAt', 'DESC')
+        .getManyAndCount();
+
+      return {
+        applications: applications.map((a) => {
+          const services = Array.isArray(a.services) ? a.services : (a.services ? [a.services] : []);
+          return {
+            id: a.id,
+            userId: a.userId,
+            fullName: a.name || '',
+            phoneNumber: a.phone || '',
+            skills: services.join(', '),
+            yearsOfExperience: a.yearsOfExperience || 0,
+            certifications: a.certifications || null,
+            serviceArea: a.address || '',
+            serviceLat: a.lat ? Number(a.lat) : null,
+            serviceLng: a.lng ? Number(a.lng) : null,
+            licenseNumber: a.licenseNumber || null,
+            additionalInfo: a.description || null,
+            status: a.status || 'pending',
+            reviewedBy: a.reviewedBy || null,
+            reviewNotes: a.reviewNotes || null,
+            reviewedAt: a.reviewedAt || null,
+            createdAt: a.createdAt,
+            updatedAt: a.updatedAt,
+            user: a.user ? {
+              id: a.user.id,
+              name: a.user.name || '',
+              phone: a.user.phoneNumber || '',
+            } : null,
+          };
+        }),
+        total,
+      };
+    } catch (error) {
+      console.error('Error fetching mechanic applications:', error);
+      throw error;
     }
-
-    if (status) {
-      const statuses = status.split(',');
-      queryBuilder.andWhere('application.status IN (:...statuses)', { statuses });
-    }
-
-    const [applications, total] = await queryBuilder
-      .skip(skip)
-      .take(limit)
-      .orderBy('application.createdAt', 'DESC')
-      .getManyAndCount();
-
-    return {
-      applications: applications.map((a) => ({
-        id: a.id,
-        userId: a.userId,
-        fullName: a.name,
-        phoneNumber: a.phone,
-        skills: a.services.join(', '),
-        yearsOfExperience: a.yearsOfExperience,
-        certifications: a.certifications,
-        serviceArea: a.address,
-        serviceLat: a.lat ? Number(a.lat) : null,
-        serviceLng: a.lng ? Number(a.lng) : null,
-        licenseNumber: a.licenseNumber,
-        additionalInfo: a.description,
-        status: a.status,
-        reviewedBy: a.reviewedBy,
-        reviewNotes: a.reviewNotes,
-        reviewedAt: a.reviewedAt,
-        createdAt: a.createdAt,
-        updatedAt: a.updatedAt,
-        user: a.user ? {
-          id: a.user.id,
-          name: a.user.name,
-          phone: a.user.phoneNumber,
-        } : null,
-      })),
-      total,
-    };
   }
 
   async getMechanicApplicationById(id: string) {
-    const application = await this.mechanicApplicationRepository.findOne({
-      where: { id },
-      relations: ['user'],
-    });
+    try {
+      const application = await this.mechanicApplicationRepository.findOne({
+        where: { id },
+        relations: ['user'],
+      });
 
-    if (!application) {
-      throw new NotFoundException('Mechanic application not found');
+      if (!application) {
+        throw new NotFoundException('Mechanic application not found');
+      }
+
+      const services = Array.isArray(application.services) ? application.services : (application.services ? [application.services] : []);
+
+      return {
+        id: application.id,
+        userId: application.userId,
+        fullName: application.name || '',
+        phoneNumber: application.phone || '',
+        skills: services.join(', '),
+        yearsOfExperience: application.yearsOfExperience || 0,
+        certifications: application.certifications || null,
+        serviceArea: application.address || '',
+        serviceLat: application.lat ? Number(application.lat) : null,
+        serviceLng: application.lng ? Number(application.lng) : null,
+        licenseNumber: application.licenseNumber || null,
+        additionalInfo: application.description || null,
+        status: application.status || 'pending',
+        reviewedBy: application.reviewedBy || null,
+        reviewNotes: application.reviewNotes || null,
+        reviewedAt: application.reviewedAt || null,
+        createdAt: application.createdAt,
+        updatedAt: application.updatedAt,
+        user: application.user ? {
+          id: application.user.id,
+          name: application.user.name || '',
+          phone: application.user.phoneNumber || '',
+        } : null,
+      };
+    } catch (error) {
+      console.error('Error fetching mechanic application:', error);
+      throw error;
     }
 
-    return {
-      id: application.id,
-      userId: application.userId,
-      fullName: application.name,
-      phoneNumber: application.phone,
-      skills: application.services.join(', '),
-      yearsOfExperience: application.yearsOfExperience,
-      certifications: application.certifications,
-      serviceArea: application.address,
-      serviceLat: application.lat ? Number(application.lat) : null,
-      serviceLng: application.lng ? Number(application.lng) : null,
-      licenseNumber: application.licenseNumber,
-      additionalInfo: application.description,
-      status: application.status,
-      reviewedBy: application.reviewedBy,
-      reviewNotes: application.reviewNotes,
-      reviewedAt: application.reviewedAt,
-      createdAt: application.createdAt,
-      updatedAt: application.updatedAt,
-      user: application.user ? {
-        id: application.user.id,
-        name: application.user.name,
-        phone: application.user.phoneNumber,
-        role: application.user.role,
-      } : null,
-    };
   }
 
   async approveMechanicApplication(
@@ -1455,51 +1470,59 @@ export class AdminService {
     reviewNotes: string,
     reviewedBy: string,
   ) {
-    const application = await this.mechanicApplicationRepository.findOne({
-      where: { id },
-      relations: ['user'],
-    });
+    try {
+      const application = await this.mechanicApplicationRepository.findOne({
+        where: { id },
+        relations: ['user'],
+      });
 
-    if (!application) {
-      throw new NotFoundException('Mechanic application not found');
+      if (!application) {
+        throw new NotFoundException('Mechanic application not found');
+      }
+
+      if (application.status !== 'pending') {
+        throw new BadRequestException('Only pending applications can be approved');
+      }
+
+      // Safe array handling for services
+      const services = Array.isArray(application.services) ? application.services : (application.services ? [application.services] : []);
+
+      // Update application status
+      application.status = ApplicationStatus.APPROVED;
+      application.reviewedBy = reviewedBy;
+      application.reviewNotes = reviewNotes;
+      application.reviewedAt = new Date();
+      await this.mechanicApplicationRepository.save(application);
+
+      // Create mechanic record
+      const mechanic = this.mechanicRepository.create({
+        userId: application.userId,
+        name: application.name || '',
+        specialization: services.join(', ') || 'General Auto Repair',
+        yearsOfExperience: application.yearsOfExperience || 0,
+        rating: 0,
+        completedJobs: 0,
+        available: true,
+        services: services,
+        lat: application.lat ? Number(application.lat) : 0,
+        lng: application.lng ? Number(application.lng) : 0,
+        phone: application.phone || '',
+        licenseNumber: application.licenseNumber,
+        certifications: application.certifications,
+      });
+      await this.mechanicRepository.save(mechanic);
+
+      // Update user role to mechanic
+      if (application.user) {
+        application.user.role = 'mechanic';
+        await this.userRepository.save(application.user);
+      }
+
+      return { message: 'Mechanic application approved successfully' };
+    } catch (error) {
+      console.error('Error approving mechanic application:', error);
+      throw error;
     }
-
-    if (application.status !== 'pending') {
-      throw new BadRequestException('Only pending applications can be approved');
-    }
-
-    // Update application status
-    application.status = ApplicationStatus.APPROVED;
-    application.reviewedBy = reviewedBy;
-    application.reviewNotes = reviewNotes;
-    application.reviewedAt = new Date();
-    await this.mechanicApplicationRepository.save(application);
-
-    // Create mechanic record
-    const mechanic = this.mechanicRepository.create({
-      userId: application.userId,
-      name: application.name,
-      specialization: application.services.join(', '),
-      yearsOfExperience: application.yearsOfExperience,
-      rating: 0,
-      completedJobs: 0,
-      available: true,
-      services: application.services,
-      lat: application.lat,
-      lng: application.lng,
-      phone: application.phone,
-      licenseNumber: application.licenseNumber,
-      certifications: application.certifications,
-    });
-    await this.mechanicRepository.save(mechanic);
-
-    // Update user role to mechanic
-    if (application.user) {
-      application.user.role = 'mechanic';
-      await this.userRepository.save(application.user);
-    }
-
-    return { message: 'Mechanic application approved successfully' };
   }
 
   async rejectMechanicApplication(
@@ -1507,25 +1530,30 @@ export class AdminService {
     reviewNotes: string,
     reviewedBy: string,
   ) {
-    const application = await this.mechanicApplicationRepository.findOne({
-      where: { id },
-    });
+    try {
+      const application = await this.mechanicApplicationRepository.findOne({
+        where: { id },
+      });
 
-    if (!application) {
-      throw new NotFoundException('Mechanic application not found');
+      if (!application) {
+        throw new NotFoundException('Mechanic application not found');
+      }
+
+      if (application.status !== 'pending') {
+        throw new BadRequestException('Only pending applications can be rejected');
+      }
+
+      application.status = ApplicationStatus.REJECTED;
+      application.reviewedBy = reviewedBy;
+      application.reviewNotes = reviewNotes;
+      application.reviewedAt = new Date();
+      await this.mechanicApplicationRepository.save(application);
+
+      return { message: 'Mechanic application rejected successfully' };
+    } catch (error) {
+      console.error('Error rejecting mechanic application:', error);
+      throw error;
     }
-
-    if (application.status !== 'pending') {
-      throw new BadRequestException('Only pending applications can be rejected');
-    }
-
-    application.status = ApplicationStatus.REJECTED;
-    application.reviewedBy = reviewedBy;
-    application.reviewNotes = reviewNotes;
-    application.reviewedAt = new Date();
-    await this.mechanicApplicationRepository.save(application);
-
-    return { message: 'Mechanic application rejected successfully' };
   }
 
   // Mechanics Management
@@ -1535,88 +1563,100 @@ export class AdminService {
     search?: string;
     available?: boolean;
   }) {
-    const { page, limit, search, available } = params;
-    const skip = (page - 1) * limit;
+    try {
+      const { page, limit, search, available } = params;
+      const skip = (page - 1) * limit;
 
-    const queryBuilder = this.mechanicRepository
-      .createQueryBuilder('mechanic')
-      .leftJoinAndSelect('mechanic.user', 'user');
+      const queryBuilder = this.mechanicRepository
+        .createQueryBuilder('mechanic')
+        .leftJoinAndSelect('mechanic.user', 'user');
 
-    if (search) {
-      queryBuilder.where(
-        '(mechanic.specialization ILIKE :search OR user.name ILIKE :search)',
-        { search: `%${search}%` },
-      );
+      if (search) {
+        queryBuilder.where(
+          '(mechanic.specialization ILIKE :search OR user.name ILIKE :search)',
+          { search: `%${search}%` },
+        );
+      }
+
+      if (available !== undefined) {
+        queryBuilder.andWhere('mechanic.available = :available', { available });
+      }
+
+      const [mechanics, total] = await queryBuilder
+        .skip(skip)
+        .take(limit)
+        .orderBy('mechanic.createdAt', 'DESC')
+        .getManyAndCount();
+
+      return {
+        mechanics: mechanics.map((m) => ({
+          id: m.id,
+          userId: m.userId,
+          specialization: m.specialization || '',
+          yearsOfExperience: m.yearsOfExperience || 0,
+          rating: Number(m.rating) || 0,
+          completedJobs: m.completedJobs || 0,
+          available: m.available || false,
+          isBanned: m.isBanned || false,
+          services: Array.isArray(m.services) ? m.services : (m.services ? [m.services] : []),
+          lat: m.lat ? Number(m.lat) : null,
+          lng: m.lng ? Number(m.lng) : null,
+          licenseNumber: m.licenseNumber || null,
+          certifications: m.certifications || null,
+          user: m.user ? {
+            id: m.user.id,
+            name: m.user.name || '',
+            phone: m.user.phoneNumber || '',
+          } : null,
+          createdAt: m.createdAt,
+          updatedAt: m.updatedAt,
+        })),
+        total,
+      };
+    } catch (error) {
+      console.error('Error fetching mechanics:', error);
+      throw error;
     }
-
-    if (available !== undefined) {
-      queryBuilder.andWhere('mechanic.available = :available', { available });
-    }
-
-    const [mechanics, total] = await queryBuilder
-      .skip(skip)
-      .take(limit)
-      .orderBy('mechanic.createdAt', 'DESC')
-      .getManyAndCount();
-
-    return {
-      mechanics: mechanics.map((m) => ({
-        id: m.id,
-        userId: m.userId,
-        specialization: m.specialization,
-        yearsOfExperience: m.yearsOfExperience,
-        rating: Number(m.rating) || 0,
-        completedJobs: m.completedJobs || 0,
-        available: m.available,
-        services: m.services,
-        lat: m.lat ? Number(m.lat) : null,
-        lng: m.lng ? Number(m.lng) : null,
-        licenseNumber: m.licenseNumber,
-        certifications: m.certifications,
-        user: m.user ? {
-          id: m.user.id,
-          name: m.user.name,
-          phone: m.user.phoneNumber,
-        } : null,
-        createdAt: m.createdAt,
-        updatedAt: m.updatedAt,
-      })),
-      total,
-    };
   }
 
   async getMechanicById(id: string) {
-    const mechanic = await this.mechanicRepository.findOne({
-      where: { id },
-      relations: ['user'],
-    });
+    try {
+      const mechanic = await this.mechanicRepository.findOne({
+        where: { id },
+        relations: ['user'],
+      });
 
-    if (!mechanic) {
-      throw new NotFoundException('Mechanic not found');
+      if (!mechanic) {
+        throw new NotFoundException('Mechanic not found');
+      }
+
+      return {
+        id: mechanic.id,
+        userId: mechanic.userId,
+        specialization: mechanic.specialization || '',
+        yearsOfExperience: mechanic.yearsOfExperience || 0,
+        rating: Number(mechanic.rating) || 0,
+        completedJobs: mechanic.completedJobs || 0,
+        available: mechanic.available || false,
+        isBanned: mechanic.isBanned || false,
+        services: Array.isArray(mechanic.services) ? mechanic.services : (mechanic.services ? [mechanic.services] : []),
+        lat: mechanic.lat ? Number(mechanic.lat) : null,
+        lng: mechanic.lng ? Number(mechanic.lng) : null,
+        licenseNumber: mechanic.licenseNumber || null,
+        certifications: mechanic.certifications || null,
+        user: mechanic.user ? {
+          id: mechanic.user.id,
+          name: mechanic.user.name || '',
+          phone: mechanic.user.phoneNumber || '',
+          role: mechanic.user.role,
+        } : null,
+        createdAt: mechanic.createdAt,
+        updatedAt: mechanic.updatedAt,
+      };
+    } catch (error) {
+      console.error('Error fetching mechanic details:', error);
+      throw error;
     }
-
-    return {
-      id: mechanic.id,
-      userId: mechanic.userId,
-      specialization: mechanic.specialization,
-      yearsOfExperience: mechanic.yearsOfExperience,
-      rating: Number(mechanic.rating) || 0,
-      completedJobs: mechanic.completedJobs || 0,
-      available: mechanic.available,
-      services: mechanic.services,
-      lat: mechanic.lat ? Number(mechanic.lat) : null,
-      lng: mechanic.lng ? Number(mechanic.lng) : null,
-      licenseNumber: mechanic.licenseNumber,
-      certifications: mechanic.certifications,
-      user: mechanic.user ? {
-        id: mechanic.user.id,
-        name: mechanic.user.name,
-        phone: mechanic.user.phoneNumber,
-        role: mechanic.user.role,
-      } : null,
-      createdAt: mechanic.createdAt,
-      updatedAt: mechanic.updatedAt,
-    };
   }
 
   async updateMechanic(id: string, data: Partial<MechanicEntity>) {

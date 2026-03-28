@@ -8,21 +8,21 @@ export class BookingEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'uuid' })
+  @Column({ type: 'uuid', name: 'userId' })
   userId: string;
 
   @ManyToOne(() => UserEntity)
   @JoinColumn({ name: 'userId' })
   user: UserEntity;
 
-  @Column({ type: 'uuid' })
+  @Column({ type: 'uuid', name: 'chargerId' })
   chargerId: string;
 
   @ManyToOne(() => Charger)
   @JoinColumn({ name: 'chargerId' })
   charger: Charger;
 
-  @Column({ type: 'uuid', nullable: true })
+  @Column({ type: 'uuid', nullable: true, name: 'socketId' })
   socketId: string | null;
 
   @Column({ type: 'timestamp' })

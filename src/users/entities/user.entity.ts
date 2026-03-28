@@ -6,10 +6,10 @@ export class UserEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ name: 'phoneNumber', nullable: true, unique: true })
+  @Column({ name: 'phone', nullable: true, unique: true })
   phoneNumber: string;
 
-  @Column({ name: 'countryCode', nullable: true })
+  @Column({ name: 'country_code', nullable: true })
   countryCode: string;
 
   @Column()
@@ -22,10 +22,10 @@ export class UserEntity {
   @Column({ default: 'user' })
   role: string;
 
-  @Column({ name: 'isVerified', default: false })
+  @Column({ name: 'is_verified', default: false })
   isVerified: boolean;
 
-  @Column({ name: 'isBanned', default: false })
+  @Column({ name: 'is_banned', default: false })
   isBanned: boolean;
 
   // EV Driver Profile Information
@@ -63,9 +63,9 @@ export class UserEntity {
   @OneToMany('MarketplaceListing', 'seller')
   marketplaceListings: any[];
 
-  @CreateDateColumn({ name: 'createdAt' })
+  @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
-  @UpdateDateColumn({ name: 'updatedAt' })
+  @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 }
