@@ -185,8 +185,21 @@ export class OwnerService {
       .andWhere('booking.status = :status', { status: 'completed' })
       .getRawOne();
 
+    let imageFallback: string[] = [];
+    if (charger.stationId) {
+      const parentStation = await this.stationRepository.findOne({ where: { id: charger.stationId } });
+      if (parentStation && parentStation.images) {
+        imageFallback = parentStation.images;
+      }
+    }
+
+    const chargerImages = charger.images && charger.images.length > 0
+      ? charger.images
+      : imageFallback;
+
     return {
       ...charger,
+      images: chargerImages,
       powerKw: charger.maxPowerKw, // Explicitly include powerKw for frontend compatibility
       stats: {
         totalBookings,
