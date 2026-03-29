@@ -32,6 +32,7 @@ import { FeedbackModule } from './feedback/feedback.module';
 import { PromotionsModule } from './promotions/promotions.module';
 import { StationModule } from './station/station.module';
 import { DirectionsModule } from './directions/directions.module';
+import { LeadsModule } from './leads/leads.module';
 
 @Module({
   imports: [
@@ -83,6 +84,7 @@ import { DirectionsModule } from './directions/directions.module';
     PromotionsModule,
     StationModule,
     DirectionsModule,
+    LeadsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
