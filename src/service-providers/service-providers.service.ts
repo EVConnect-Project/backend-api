@@ -51,7 +51,7 @@ export class ServiceProvidersService {
 
     if (includeMechanics) {
       const mechanics = await this.mechanicRepository.find({
-        where: { available: true, isBanned: false },
+        where: { isBanned: false },
         order: { rating: 'DESC' },
       });
 
@@ -90,6 +90,16 @@ export class ServiceProvidersService {
           responseSlaMinutes: 20,
         });
       }
+
+      // Prefer currently available mechanics, then by higher score/rating downstream.
+      providers.sort((a, b) => {
+        if (a.providerType !== 'individual_mechanic' || b.providerType !== 'individual_mechanic') {
+          return 0;
+        }
+        const aAvailable = a.available === true ? 1 : 0;
+        const bAvailable = b.available === true ? 1 : 0;
+        return bAvailable - aAvailable;
+      });
     }
 
     if (includeStations) {
