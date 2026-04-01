@@ -20,6 +20,8 @@ import { VehicleProfile } from '../auth/entities/vehicle-profile.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { NotificationLogEntity } from '../notifications/entities/notification-log.entity';
 import { ChargingModule } from '../charging/charging.module';
+import { ServiceStationApplicationEntity } from '../service-stations/entities/service-station-application.entity';
+import { ServiceStationEntity } from '../service-stations/entities/service-station.entity';
 
 @Module({
   imports: [
@@ -38,6 +40,8 @@ import { ChargingModule } from '../charging/charging.module';
       ChargerSocket,
       VehicleProfile,
       NotificationLogEntity,
+      ServiceStationApplicationEntity,
+      ServiceStationEntity,
     ]),
     NotificationsModule,
     ChargingModule,

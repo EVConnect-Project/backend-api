@@ -4,7 +4,7 @@ export class CreateMarketplaceChatTables1731802800000 implements MigrationInterf
   public async up(queryRunner: QueryRunner): Promise<void> {
     // Create marketplace_chats table
     await queryRunner.query(`
-      CREATE TABLE marketplace_chats (
+      CREATE TABLE IF NOT EXISTS marketplace_chats (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         "listingId" UUID NOT NULL,
         "buyerId" UUID NOT NULL,
@@ -22,7 +22,7 @@ export class CreateMarketplaceChatTables1731802800000 implements MigrationInterf
 
     // Create chat_messages table
     await queryRunner.query(`
-      CREATE TABLE chat_messages (
+      CREATE TABLE IF NOT EXISTS chat_messages (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         "chatId" UUID NOT NULL,
         "senderId" UUID NOT NULL,
@@ -36,41 +36,41 @@ export class CreateMarketplaceChatTables1731802800000 implements MigrationInterf
 
     // Create indexes for better query performance
     await queryRunner.query(`
-      CREATE INDEX "IDX_marketplace_chats_buyer" ON marketplace_chats ("buyerId")
+      CREATE INDEX IF NOT EXISTS "IDX_marketplace_chats_buyer" ON marketplace_chats ("buyerId")
     `);
 
     await queryRunner.query(`
-      CREATE INDEX "IDX_marketplace_chats_seller" ON marketplace_chats ("sellerId")
+      CREATE INDEX IF NOT EXISTS "IDX_marketplace_chats_seller" ON marketplace_chats ("sellerId")
     `);
 
     await queryRunner.query(`
-      CREATE INDEX "IDX_marketplace_chats_listing" ON marketplace_chats ("listingId")
+      CREATE INDEX IF NOT EXISTS "IDX_marketplace_chats_listing" ON marketplace_chats ("listingId")
     `);
 
     await queryRunner.query(`
-      CREATE INDEX "IDX_chat_messages_chat" ON chat_messages ("chatId")
+      CREATE INDEX IF NOT EXISTS "IDX_chat_messages_chat" ON chat_messages ("chatId")
     `);
 
     await queryRunner.query(`
-      CREATE INDEX "IDX_chat_messages_sender" ON chat_messages ("senderId")
+      CREATE INDEX IF NOT EXISTS "IDX_chat_messages_sender" ON chat_messages ("senderId")
     `);
 
     await queryRunner.query(`
-      CREATE INDEX "IDX_chat_messages_unread" ON chat_messages ("isRead", "senderId")
+      CREATE INDEX IF NOT EXISTS "IDX_chat_messages_unread" ON chat_messages ("isRead", "senderId")
     `);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     // Drop indexes
-    await queryRunner.query(`DROP INDEX "IDX_chat_messages_unread"`);
-    await queryRunner.query(`DROP INDEX "IDX_chat_messages_sender"`);
-    await queryRunner.query(`DROP INDEX "IDX_chat_messages_chat"`);
-    await queryRunner.query(`DROP INDEX "IDX_marketplace_chats_listing"`);
-    await queryRunner.query(`DROP INDEX "IDX_marketplace_chats_seller"`);
-    await queryRunner.query(`DROP INDEX "IDX_marketplace_chats_buyer"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_chat_messages_unread"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_chat_messages_sender"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_chat_messages_chat"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_marketplace_chats_listing"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_marketplace_chats_seller"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_marketplace_chats_buyer"`);
 
     // Drop tables
-    await queryRunner.query(`DROP TABLE chat_messages`);
-    await queryRunner.query(`DROP TABLE marketplace_chats`);
+    await queryRunner.query(`DROP TABLE IF EXISTS chat_messages`);
+    await queryRunner.query(`DROP TABLE IF EXISTS marketplace_chats`);
   }
 }

@@ -249,6 +249,53 @@ export class AdminController {
     return this.adminService.deleteStation(id);
   }
 
+  // Service Station Application Management
+  @Get('service-station-applications')
+  async getServiceStationApplications(
+    @Query('page') page: string,
+    @Query('limit') limit: string,
+    @Query('status') status: string,
+    @Query('search') search: string,
+  ) {
+    return this.adminService.getServiceStationApplications({
+      page: page ? parseInt(page) : 1,
+      limit: limit ? parseInt(limit) : 10,
+      status,
+      search,
+    });
+  }
+
+  @Get('service-station-applications/:id')
+  async getServiceStationApplicationById(@Param('id') id: string) {
+    return this.adminService.getServiceStationApplicationById(id);
+  }
+
+  @Post('service-station-applications/:id/approve')
+  async approveServiceStationApplication(
+    @Param('id') id: string,
+    @Body('reviewNotes') reviewNotes: string,
+    @Request() req,
+  ) {
+    return this.adminService.approveServiceStationApplication(
+      id,
+      reviewNotes,
+      req.user.userId,
+    );
+  }
+
+  @Post('service-station-applications/:id/reject')
+  async rejectServiceStationApplication(
+    @Param('id') id: string,
+    @Body('reviewNotes') reviewNotes: string,
+    @Request() req,
+  ) {
+    return this.adminService.rejectServiceStationApplication(
+      id,
+      reviewNotes,
+      req.user.userId,
+    );
+  }
+
   // OCPP Live Controls
   @Get('ocpp/live')
   async ocppLive() {

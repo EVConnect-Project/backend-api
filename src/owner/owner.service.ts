@@ -16,8 +16,11 @@ import { CreateChargerDto } from '../charger/dto/create-charger.dto';
 import { UpdateChargerDto } from '../charger/dto/update-charger.dto';
 import { CreateIndividualChargerDto } from './dto/create-individual-charger.dto';
 import { CreateStationDto } from './dto/create-station.dto';
+import { CreateServiceStationDto } from './dto/create-service-station.dto';
 import { ChargerSocket } from './entities/charger-socket.entity';
 import { ChargingStation } from './entities/charging-station.entity';
+import { ServiceStationApplicationEntity } from '../service-stations/entities/service-station-application.entity';
+import { ServiceStationEntity } from '../service-stations/entities/service-station.entity';
 import { BookingMode } from '../charger/enums/booking-mode.enum';
 import { Station } from '../station/entities/station.entity';
 import { ChargersGateway } from '../charger/chargers.gateway';
@@ -37,6 +40,10 @@ export class OwnerService {
     private stationRepository: Repository<ChargingStation>,
     @InjectRepository(Station)
     private stationEntityRepository: Repository<Station>,
+    @InjectRepository(ServiceStationApplicationEntity)
+    private serviceStationApplicationRepository: Repository<ServiceStationApplicationEntity>,
+    @InjectRepository(ServiceStationEntity)
+    private serviceStationRepository: Repository<ServiceStationEntity>,
     private dataSource: DataSource,
     private httpService: HttpService,
     private chargersGateway: ChargersGateway,
@@ -150,6 +157,83 @@ export class OwnerService {
         `A critical error occurred while fetching charger data: ${error.message}`,
       );
     }
+  }
+
+  async registerServiceStation(dto: CreateServiceStationDto, userId: string) {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (user.role === 'user') {
+      user.role = 'owner';
+      await this.userRepository.save(user);
+    }
+
+    const { lat, lng, address } = await this.parseLocationUrl(dto.locationUrl);
+
+    const application = this.serviceStationApplicationRepository.create({
+      userId,
+      stationName: dto.stationName,
+      locationUrl: dto.locationUrl,
+      lat,
+      lng,
+      address,
+      city: dto.city?.trim(),
+      phoneNumber: dto.phoneNumber?.trim() || null,
+      description: dto.description,
+      serviceCategories: dto.serviceCategories ?? [],
+      amenities: dto.amenities ?? [],
+      openingHours: dto.openingHours ?? { is24Hours: true, schedule: {} },
+      images: dto.images ?? [],
+      applicationStatus: 'pending',
+      reviewNotes: null,
+      reviewedBy: null,
+      reviewedAt: null,
+    });
+
+    const saved = await this.serviceStationApplicationRepository.save(application);
+    return {
+      ...saved,
+      message: 'Service station application submitted. Awaiting admin approval.',
+      needsApproval: true,
+    };
+  }
+
+  async getMyServiceStations(userId: string) {
+    const applications = await this.serviceStationApplicationRepository.find({
+      where: { userId },
+      order: { createdAt: 'DESC' },
+    });
+
+    const approvedStationRows = await this.serviceStationRepository.find({
+      where: { ownerId: userId },
+      order: { createdAt: 'DESC' },
+    });
+    const approvedByApplicationId = new Map(
+      approvedStationRows
+        .filter((s) => s.applicationId)
+        .map((s) => [s.applicationId as string, s]),
+    );
+
+    return applications.map((application) => ({
+      id: application.id,
+      stationName: application.stationName,
+      city: application.city,
+      address: application.address,
+      verified: application.applicationStatus === 'approved',
+      status: application.applicationStatus,
+      reviewNotes: application.reviewNotes,
+      reviewedBy: application.reviewedBy,
+      reviewedAt: application.reviewedAt,
+      description: application.description,
+      serviceCategories: application.serviceCategories ?? [],
+      amenities: application.amenities ?? [],
+      images: application.images ?? [],
+      createdAt: application.createdAt,
+      updatedAt: application.updatedAt,
+      approvedStationId: approvedByApplicationId.get(application.id)?.id ?? null,
+    }));
   }
 
   /**

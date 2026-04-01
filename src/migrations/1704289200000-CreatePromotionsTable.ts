@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner, Table, TableIndex } from 'typeorm';
+import { MigrationInterface, QueryRunner, Table } from 'typeorm';
 
 export class CreatePromotionsTable1704289200000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
@@ -106,28 +106,14 @@ export class CreatePromotionsTable1704289200000 implements MigrationInterface {
     );
 
     // Add indexes for better query performance
-    await queryRunner.createIndex(
-      'promotions',
-      new TableIndex({
-        name: 'IDX_PROMOTIONS_STATUS',
-        columnNames: ['status'],
-      }),
+    await queryRunner.query(
+      'CREATE INDEX IF NOT EXISTS "IDX_PROMOTIONS_STATUS" ON "promotions" ("status")',
     );
-
-    await queryRunner.createIndex(
-      'promotions',
-      new TableIndex({
-        name: 'IDX_PROMOTIONS_DATES',
-        columnNames: ['startDate', 'endDate'],
-      }),
+    await queryRunner.query(
+      'CREATE INDEX IF NOT EXISTS "IDX_PROMOTIONS_DATES" ON "promotions" ("startDate", "endDate")',
     );
-
-    await queryRunner.createIndex(
-      'promotions',
-      new TableIndex({
-        name: 'IDX_PROMOTIONS_TYPE',
-        columnNames: ['type'],
-      }),
+    await queryRunner.query(
+      'CREATE INDEX IF NOT EXISTS "IDX_PROMOTIONS_TYPE" ON "promotions" ("type")',
     );
   }
 

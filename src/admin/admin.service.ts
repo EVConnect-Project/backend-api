@@ -15,6 +15,8 @@ import { VehicleProfile } from '../auth/entities/vehicle-profile.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/types/notification-types';
 import { NotificationLogEntity } from '../notifications/entities/notification-log.entity';
+import { ServiceStationApplicationEntity } from '../service-stations/entities/service-station-application.entity';
+import { ServiceStationEntity } from '../service-stations/entities/service-station.entity';
 
 @Injectable()
 export class AdminService {
@@ -41,6 +43,10 @@ export class AdminService {
     private vehicleProfileRepository: Repository<VehicleProfile>,
     @InjectRepository(NotificationLogEntity)
     private notificationLogRepository: Repository<NotificationLogEntity>,
+    @InjectRepository(ServiceStationApplicationEntity)
+    private serviceStationApplicationRepository: Repository<ServiceStationApplicationEntity>,
+    @InjectRepository(ServiceStationEntity)
+    private serviceStationRepository: Repository<ServiceStationEntity>,
     private notificationsService: NotificationsService,
     private chargingService: ChargingService,
   ) {}
@@ -1080,6 +1086,229 @@ export class AdminService {
     await this.chargingStationRepository.remove(station);
 
     return { message: 'Station deleted successfully', unlinkedChargers: chargerCount };
+  }
+
+  async getServiceStationApplications(params: {
+    page: number;
+    limit: number;
+    status?: string;
+    search?: string;
+  }) {
+    const { page, limit, status, search } = params;
+    const skip = (page - 1) * limit;
+
+    const query = this.serviceStationApplicationRepository
+      .createQueryBuilder('station')
+      .leftJoinAndSelect('station.user', 'owner')
+      .orderBy('station.createdAt', 'DESC')
+      .skip(skip)
+      .take(limit);
+
+    if (search) {
+      query.andWhere(
+        '(station.stationName ILIKE :search OR station.address ILIKE :search OR owner.name ILIKE :search OR owner.phoneNumber ILIKE :search)',
+        { search: `%${search}%` },
+      );
+    }
+
+    if (status) {
+      const statuses = status
+        .split(',')
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean);
+      if (statuses.length > 0) {
+        query.andWhere('LOWER(station.applicationStatus) IN (:...statuses)', {
+          statuses,
+        });
+      }
+    }
+
+    const [stations, total] = await query.getManyAndCount();
+    const approvedStations = await this.serviceStationRepository.find({
+      where: { applicationId: In(stations.map((s) => s.id)) },
+    });
+    const approvedByApplicationId = new Map(
+      approvedStations
+        .filter((row) => row.applicationId)
+        .map((row) => [row.applicationId as string, row]),
+    );
+
+    return {
+      applications: stations.map((station) => ({
+        id: station.id,
+        stationName: station.stationName,
+        city: station.city,
+        address: station.address,
+        status: station.applicationStatus || 'pending',
+        verified: station.applicationStatus === 'approved',
+        reviewNotes: station.reviewNotes,
+        reviewedBy: station.reviewedBy,
+        reviewedAt: station.reviewedAt,
+        createdAt: station.createdAt,
+        updatedAt: station.updatedAt,
+        approvedStationId: approvedByApplicationId.get(station.id)?.id ?? null,
+        owner: station.user
+          ? {
+              id: station.user.id,
+              name: station.user.name,
+              phone: station.user.phoneNumber,
+            }
+          : null,
+      })),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async getServiceStationApplicationById(id: string) {
+    const station = await this.serviceStationApplicationRepository.findOne({
+      where: { id },
+      relations: ['user'],
+    });
+
+    if (!station) {
+      throw new NotFoundException('Service station application not found');
+    }
+
+    const approvedStation = await this.serviceStationRepository.findOne({
+      where: { applicationId: station.id },
+    });
+
+    return {
+      id: station.id,
+      stationName: station.stationName,
+      city: station.city,
+      address: station.address,
+      locationUrl: station.locationUrl,
+      description: station.description,
+      amenities: station.amenities,
+      serviceCategories: station.serviceCategories,
+      images: station.images,
+      phoneNumber: station.phoneNumber,
+      openingHours: station.openingHours,
+      status: station.applicationStatus || 'pending',
+      verified: station.applicationStatus === 'approved',
+      reviewNotes: station.reviewNotes,
+      reviewedBy: station.reviewedBy,
+      reviewedAt: station.reviewedAt,
+      createdAt: station.createdAt,
+      updatedAt: station.updatedAt,
+      approvedStationId: approvedStation?.id ?? null,
+      owner: station.user
+        ? {
+            id: station.user.id,
+            name: station.user.name,
+            phone: station.user.phoneNumber,
+          }
+        : null,
+    };
+  }
+
+  async approveServiceStationApplication(
+    id: string,
+    reviewNotes: string,
+    reviewedBy: string,
+  ) {
+    const station = await this.serviceStationApplicationRepository.findOne({
+      where: { id },
+    });
+
+    if (!station) {
+      throw new NotFoundException('Service station application not found');
+    }
+
+    if ((station.applicationStatus || 'pending') !== 'pending') {
+      throw new BadRequestException('Only pending service station applications can be approved');
+    }
+
+    station.applicationStatus = 'approved';
+    station.reviewNotes = reviewNotes || null;
+    station.reviewedBy = reviewedBy;
+    station.reviewedAt = new Date();
+
+    await this.serviceStationApplicationRepository.save(station);
+
+    let approvedStation = await this.serviceStationRepository.findOne({
+      where: { applicationId: station.id },
+    });
+
+    if (!approvedStation) {
+      approvedStation = this.serviceStationRepository.create({
+        ownerId: station.userId,
+        applicationId: station.id,
+        stationName: station.stationName,
+        locationUrl: station.locationUrl,
+        lat: station.lat,
+        lng: station.lng,
+        address: station.address,
+        city: station.city,
+        phoneNumber: station.phoneNumber,
+        description: station.description,
+        serviceCategories: station.serviceCategories ?? [],
+        amenities: station.amenities ?? [],
+        openingHours: station.openingHours,
+        images: station.images ?? [],
+        verified: true,
+        isBanned: false,
+      });
+    } else {
+      approvedStation.stationName = station.stationName;
+      approvedStation.locationUrl = station.locationUrl;
+      approvedStation.lat = station.lat;
+      approvedStation.lng = station.lng;
+      approvedStation.address = station.address;
+      approvedStation.city = station.city;
+      approvedStation.phoneNumber = station.phoneNumber;
+      approvedStation.description = station.description;
+      approvedStation.serviceCategories = station.serviceCategories ?? [];
+      approvedStation.amenities = station.amenities ?? [];
+      approvedStation.openingHours = station.openingHours;
+      approvedStation.images = station.images ?? [];
+      approvedStation.verified = true;
+      approvedStation.isBanned = false;
+    }
+
+    await this.serviceStationRepository.save(approvedStation);
+
+    return { message: 'Service station application approved successfully' };
+  }
+
+  async rejectServiceStationApplication(
+    id: string,
+    reviewNotes: string,
+    reviewedBy: string,
+  ) {
+    const station = await this.serviceStationApplicationRepository.findOne({
+      where: { id },
+    });
+
+    if (!station) {
+      throw new NotFoundException('Service station application not found');
+    }
+
+    if ((station.applicationStatus || 'pending') !== 'pending') {
+      throw new BadRequestException('Only pending service station applications can be rejected');
+    }
+
+    station.applicationStatus = 'rejected';
+    station.reviewNotes = reviewNotes || null;
+    station.reviewedBy = reviewedBy;
+    station.reviewedAt = new Date();
+
+    await this.serviceStationApplicationRepository.save(station);
+
+    const approvedStation = await this.serviceStationRepository.findOne({
+      where: { applicationId: station.id },
+    });
+    if (approvedStation) {
+      approvedStation.verified = false;
+      approvedStation.isBanned = true;
+      await this.serviceStationRepository.save(approvedStation);
+    }
+
+    return { message: 'Service station application rejected successfully' };
   }
 
   // Booking Management

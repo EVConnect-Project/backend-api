@@ -33,6 +33,7 @@ import { PromotionsModule } from './promotions/promotions.module';
 import { StationModule } from './station/station.module';
 import { DirectionsModule } from './directions/directions.module';
 import { LeadsModule } from './leads/leads.module';
+import { ServiceProvidersModule } from './service-providers/service-providers.module';
 
 @Module({
   imports: [
@@ -85,6 +86,7 @@ import { LeadsModule } from './leads/leads.module';
     StationModule,
     DirectionsModule,
     LeadsModule,
+    ServiceProvidersModule,
   ],
   controllers: [AppController],
   providers: [AppService],
@@ -134,6 +136,106 @@ export class AppModule implements OnModuleInit {
       await queryRunner.query(`CREATE INDEX IF NOT EXISTS idx_vehicle_profiles_user_id ON vehicle_profiles("userId")`);
       await queryRunner.query(`CREATE INDEX IF NOT EXISTS idx_vehicle_profiles_is_primary ON vehicle_profiles("isPrimary")`);
       await queryRunner.query(`CREATE INDEX IF NOT EXISTS idx_vehicle_profiles_vehicle_type ON vehicle_profiles("vehicleType")`);
+
+      // Service station domain safety tables (kept idempotent for environments with partial migrations)
+      await queryRunner.query(`
+        CREATE TABLE IF NOT EXISTS service_station_applications (
+          id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+          user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          station_name VARCHAR(255) NOT NULL,
+          location_url TEXT NOT NULL,
+          lat DECIMAL(10,7) NOT NULL,
+          lng DECIMAL(10,7) NOT NULL,
+          address TEXT NOT NULL,
+          city VARCHAR(120),
+          phone_number VARCHAR(24),
+          description TEXT,
+          service_categories JSONB NOT NULL DEFAULT '[]'::jsonb,
+          amenities JSONB NOT NULL DEFAULT '[]'::jsonb,
+          opening_hours JSONB DEFAULT '{"is24Hours": true, "schedule": {}}'::jsonb,
+          images JSONB NOT NULL DEFAULT '[]'::jsonb,
+          application_status VARCHAR(20) NOT NULL DEFAULT 'pending',
+          review_notes TEXT,
+          reviewed_by UUID,
+          reviewed_at TIMESTAMP,
+          created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      await queryRunner.query(`
+        CREATE TABLE IF NOT EXISTS service_stations (
+          id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+          owner_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          application_id UUID,
+          station_name VARCHAR(255) NOT NULL,
+          contact_phone VARCHAR(24),
+          city VARCHAR(120),
+          address TEXT NOT NULL,
+          lat DECIMAL(10,7) NOT NULL,
+          lng DECIMAL(10,7) NOT NULL,
+          location_url TEXT,
+          description TEXT,
+          service_categories JSONB NOT NULL DEFAULT '[]'::jsonb,
+          amenities JSONB NOT NULL DEFAULT '[]'::jsonb,
+          opening_hours JSONB DEFAULT '{"is24Hours": true, "schedule": {}}'::jsonb,
+          images JSONB NOT NULL DEFAULT '[]'::jsonb,
+          verified BOOLEAN NOT NULL DEFAULT false,
+          is_banned BOOLEAN NOT NULL DEFAULT false,
+          created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      await queryRunner.query(
+        `CREATE INDEX IF NOT EXISTS idx_service_station_applications_user ON service_station_applications(user_id)`
+      );
+      await queryRunner.query(
+        `CREATE INDEX IF NOT EXISTS idx_service_station_applications_status ON service_station_applications(application_status)`
+      );
+      await queryRunner.query(
+        `CREATE INDEX IF NOT EXISTS idx_service_stations_owner ON service_stations(owner_user_id)`
+      );
+      await queryRunner.query(
+        `CREATE INDEX IF NOT EXISTS idx_service_stations_city ON service_stations(city)`
+      );
+      await queryRunner.query(
+        `CREATE UNIQUE INDEX IF NOT EXISTS uq_service_stations_application ON service_stations(application_id) WHERE application_id IS NOT NULL`
+      );
+
+      await queryRunner.query(`
+        CREATE TABLE IF NOT EXISTS service_station_bookings (
+          id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+          station_id UUID NOT NULL REFERENCES charging_stations(id) ON DELETE CASCADE,
+          user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          appointment_date DATE NOT NULL,
+          slot_time VARCHAR(5) NOT NULL,
+          service_type VARCHAR(80) NOT NULL,
+          status VARCHAR(24) NOT NULL DEFAULT 'confirmed',
+          notes TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT uq_station_slot UNIQUE (station_id, appointment_date, slot_time)
+        )
+      `);
+      await queryRunner.query(
+        `CREATE INDEX IF NOT EXISTS idx_service_station_bookings_station_date ON service_station_bookings(station_id, appointment_date)`
+      );
+      await queryRunner.query(
+        `CREATE INDEX IF NOT EXISTS idx_service_station_bookings_user ON service_station_bookings(user_id)`
+      );
+      await queryRunner.query(
+        `ALTER TABLE service_station_bookings DROP CONSTRAINT IF EXISTS uq_station_slot`
+      );
+      await queryRunner.query(
+        `ALTER TABLE service_station_bookings ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP`
+      );
+      await queryRunner.query(
+        `ALTER TABLE service_station_bookings ADD COLUMN IF NOT EXISTS rating INT`
+      );
+      await queryRunner.query(
+        `ALTER TABLE service_station_bookings ADD COLUMN IF NOT EXISTS feedback TEXT`
+      );
       
       // Create trigger function for vehicle_profiles if not exists
       await queryRunner.query(`

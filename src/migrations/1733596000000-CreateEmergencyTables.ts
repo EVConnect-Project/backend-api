@@ -6,7 +6,7 @@ export class CreateEmergencyTables1733596000000 implements MigrationInterface {
     public async up(queryRunner: QueryRunner): Promise<void> {
         // Create emergency_requests table
         await queryRunner.query(`
-            CREATE TABLE "emergency_requests" (
+            CREATE TABLE IF NOT EXISTS "emergency_requests" (
                 "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
                 "userId" uuid NOT NULL,
                 "latitude" numeric(10,7) NOT NULL,
@@ -27,7 +27,7 @@ export class CreateEmergencyTables1733596000000 implements MigrationInterface {
 
         // Create mechanic_responses table
         await queryRunner.query(`
-            CREATE TABLE "mechanic_responses" (
+            CREATE TABLE IF NOT EXISTS "mechanic_responses" (
                 "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
                 "emergencyRequestId" uuid NOT NULL,
                 "mechanicId" uuid NOT NULL,
@@ -44,63 +44,103 @@ export class CreateEmergencyTables1733596000000 implements MigrationInterface {
         `);
 
         // Add foreign keys
-        await queryRunner.query(`
-            ALTER TABLE "emergency_requests"
-            ADD CONSTRAINT "FK_emergency_requests_user"
-            FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE
-        `);
+                await queryRunner.query(`
+                        DO $$
+                        BEGIN
+                            IF NOT EXISTS (
+                                SELECT 1 FROM pg_constraint WHERE conname = 'FK_emergency_requests_user'
+                            ) AND EXISTS (
+                                SELECT 1 FROM information_schema.columns
+                                WHERE table_name = 'emergency_requests' AND column_name = 'userId'
+                            ) THEN
+                                ALTER TABLE "emergency_requests"
+                                ADD CONSTRAINT "FK_emergency_requests_user"
+                                FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE;
+                            END IF;
+                        END $$;
+                `);
 
-        await queryRunner.query(`
-            ALTER TABLE "emergency_requests"
-            ADD CONSTRAINT "FK_emergency_requests_mechanic"
-            FOREIGN KEY ("selectedMechanicId") REFERENCES "mechanics"("id") ON DELETE SET NULL
-        `);
+                await queryRunner.query(`
+                        DO $$
+                        BEGIN
+                            IF NOT EXISTS (
+                                SELECT 1 FROM pg_constraint WHERE conname = 'FK_emergency_requests_mechanic'
+                            ) AND EXISTS (
+                                SELECT 1 FROM information_schema.columns
+                                WHERE table_name = 'emergency_requests' AND column_name = 'selectedMechanicId'
+                            ) THEN
+                                ALTER TABLE "emergency_requests"
+                                ADD CONSTRAINT "FK_emergency_requests_mechanic"
+                                FOREIGN KEY ("selectedMechanicId") REFERENCES "mechanics"("id") ON DELETE SET NULL;
+                            END IF;
+                        END $$;
+                `);
 
-        await queryRunner.query(`
-            ALTER TABLE "mechanic_responses"
-            ADD CONSTRAINT "FK_mechanic_responses_emergency"
-            FOREIGN KEY ("emergencyRequestId") REFERENCES "emergency_requests"("id") ON DELETE CASCADE
-        `);
+                await queryRunner.query(`
+                        DO $$
+                        BEGIN
+                            IF NOT EXISTS (
+                                SELECT 1 FROM pg_constraint WHERE conname = 'FK_mechanic_responses_emergency'
+                            ) AND EXISTS (
+                                SELECT 1 FROM information_schema.columns
+                                WHERE table_name = 'mechanic_responses' AND column_name = 'emergencyRequestId'
+                            ) THEN
+                                ALTER TABLE "mechanic_responses"
+                                ADD CONSTRAINT "FK_mechanic_responses_emergency"
+                                FOREIGN KEY ("emergencyRequestId") REFERENCES "emergency_requests"("id") ON DELETE CASCADE;
+                            END IF;
+                        END $$;
+                `);
 
-        await queryRunner.query(`
-            ALTER TABLE "mechanic_responses"
-            ADD CONSTRAINT "FK_mechanic_responses_mechanic"
-            FOREIGN KEY ("mechanicId") REFERENCES "mechanics"("id") ON DELETE CASCADE
-        `);
+                await queryRunner.query(`
+                        DO $$
+                        BEGIN
+                            IF NOT EXISTS (
+                                SELECT 1 FROM pg_constraint WHERE conname = 'FK_mechanic_responses_mechanic'
+                            ) AND EXISTS (
+                                SELECT 1 FROM information_schema.columns
+                                WHERE table_name = 'mechanic_responses' AND column_name = 'mechanicId'
+                            ) THEN
+                                ALTER TABLE "mechanic_responses"
+                                ADD CONSTRAINT "FK_mechanic_responses_mechanic"
+                                FOREIGN KEY ("mechanicId") REFERENCES "mechanics"("id") ON DELETE CASCADE;
+                            END IF;
+                        END $$;
+                `);
 
         // Create indexes for better query performance
         await queryRunner.query(`
-            CREATE INDEX "IDX_emergency_requests_userId" ON "emergency_requests" ("userId")
+            CREATE INDEX IF NOT EXISTS "IDX_emergency_requests_userId" ON "emergency_requests" ("userId")
         `);
 
         await queryRunner.query(`
-            CREATE INDEX "IDX_emergency_requests_status" ON "emergency_requests" ("status")
+            CREATE INDEX IF NOT EXISTS "IDX_emergency_requests_status" ON "emergency_requests" ("status")
         `);
 
         await queryRunner.query(`
-            CREATE INDEX "IDX_mechanic_responses_emergencyRequestId" ON "mechanic_responses" ("emergencyRequestId")
+            CREATE INDEX IF NOT EXISTS "IDX_mechanic_responses_emergencyRequestId" ON "mechanic_responses" ("emergencyRequestId")
         `);
 
         await queryRunner.query(`
-            CREATE INDEX "IDX_mechanic_responses_mechanicId" ON "mechanic_responses" ("mechanicId")
+            CREATE INDEX IF NOT EXISTS "IDX_mechanic_responses_mechanicId" ON "mechanic_responses" ("mechanicId")
         `);
     }
 
     public async down(queryRunner: QueryRunner): Promise<void> {
         // Drop indexes
-        await queryRunner.query(`DROP INDEX "IDX_mechanic_responses_mechanicId"`);
-        await queryRunner.query(`DROP INDEX "IDX_mechanic_responses_emergencyRequestId"`);
-        await queryRunner.query(`DROP INDEX "IDX_emergency_requests_status"`);
-        await queryRunner.query(`DROP INDEX "IDX_emergency_requests_userId"`);
+        await queryRunner.query(`DROP INDEX IF EXISTS "IDX_mechanic_responses_mechanicId"`);
+        await queryRunner.query(`DROP INDEX IF EXISTS "IDX_mechanic_responses_emergencyRequestId"`);
+        await queryRunner.query(`DROP INDEX IF EXISTS "IDX_emergency_requests_status"`);
+        await queryRunner.query(`DROP INDEX IF EXISTS "IDX_emergency_requests_userId"`);
 
         // Drop foreign keys
-        await queryRunner.query(`ALTER TABLE "mechanic_responses" DROP CONSTRAINT "FK_mechanic_responses_mechanic"`);
-        await queryRunner.query(`ALTER TABLE "mechanic_responses" DROP CONSTRAINT "FK_mechanic_responses_emergency"`);
-        await queryRunner.query(`ALTER TABLE "emergency_requests" DROP CONSTRAINT "FK_emergency_requests_mechanic"`);
-        await queryRunner.query(`ALTER TABLE "emergency_requests" DROP CONSTRAINT "FK_emergency_requests_user"`);
+        await queryRunner.query(`ALTER TABLE "mechanic_responses" DROP CONSTRAINT IF EXISTS "FK_mechanic_responses_mechanic"`);
+        await queryRunner.query(`ALTER TABLE "mechanic_responses" DROP CONSTRAINT IF EXISTS "FK_mechanic_responses_emergency"`);
+        await queryRunner.query(`ALTER TABLE "emergency_requests" DROP CONSTRAINT IF EXISTS "FK_emergency_requests_mechanic"`);
+        await queryRunner.query(`ALTER TABLE "emergency_requests" DROP CONSTRAINT IF EXISTS "FK_emergency_requests_user"`);
 
         // Drop tables
-        await queryRunner.query(`DROP TABLE "mechanic_responses"`);
-        await queryRunner.query(`DROP TABLE "emergency_requests"`);
+        await queryRunner.query(`DROP TABLE IF EXISTS "mechanic_responses"`);
+        await queryRunner.query(`DROP TABLE IF EXISTS "emergency_requests"`);
     }
 }

@@ -4,7 +4,7 @@ export class CreateMarketplaceTables1731801600000 implements MigrationInterface 
   public async up(queryRunner: QueryRunner): Promise<void> {
     // Create marketplace_listings table
     await queryRunner.query(`
-      CREATE TABLE marketplace_listings (
+      CREATE TABLE IF NOT EXISTS marketplace_listings (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         title VARCHAR NOT NULL,
         description TEXT NOT NULL,
@@ -24,7 +24,7 @@ export class CreateMarketplaceTables1731801600000 implements MigrationInterface 
 
     // Create marketplace_images table
     await queryRunner.query(`
-      CREATE TABLE marketplace_images (
+      CREATE TABLE IF NOT EXISTS marketplace_images (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         "imageUrl" VARCHAR NOT NULL,
         "listingId" UUID NOT NULL,
@@ -34,31 +34,31 @@ export class CreateMarketplaceTables1731801600000 implements MigrationInterface 
 
     // Create indexes for better query performance
     await queryRunner.query(`
-      CREATE INDEX "IDX_marketplace_listings_seller" ON marketplace_listings ("sellerId")
+      CREATE INDEX IF NOT EXISTS "IDX_marketplace_listings_seller" ON marketplace_listings ("sellerId")
     `);
 
     await queryRunner.query(`
-      CREATE INDEX "IDX_marketplace_listings_status" ON marketplace_listings (status)
+      CREATE INDEX IF NOT EXISTS "IDX_marketplace_listings_status" ON marketplace_listings (status)
     `);
 
     await queryRunner.query(`
-      CREATE INDEX "IDX_marketplace_listings_category" ON marketplace_listings (category)
+      CREATE INDEX IF NOT EXISTS "IDX_marketplace_listings_category" ON marketplace_listings (category)
     `);
 
     await queryRunner.query(`
-      CREATE INDEX "IDX_marketplace_images_listing" ON marketplace_images ("listingId")
+      CREATE INDEX IF NOT EXISTS "IDX_marketplace_images_listing" ON marketplace_images ("listingId")
     `);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     // Drop indexes
-    await queryRunner.query(`DROP INDEX "IDX_marketplace_images_listing"`);
-    await queryRunner.query(`DROP INDEX "IDX_marketplace_listings_category"`);
-    await queryRunner.query(`DROP INDEX "IDX_marketplace_listings_status"`);
-    await queryRunner.query(`DROP INDEX "IDX_marketplace_listings_seller"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_marketplace_images_listing"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_marketplace_listings_category"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_marketplace_listings_status"`);
+    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_marketplace_listings_seller"`);
 
     // Drop tables
-    await queryRunner.query(`DROP TABLE marketplace_images`);
-    await queryRunner.query(`DROP TABLE marketplace_listings`);
+    await queryRunner.query(`DROP TABLE IF EXISTS marketplace_images`);
+    await queryRunner.query(`DROP TABLE IF EXISTS marketplace_listings`);
   }
 }

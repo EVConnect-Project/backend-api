@@ -19,6 +19,7 @@ import { CreateChargerDto } from '../charger/dto/create-charger.dto';
 import { UpdateChargerDto } from '../charger/dto/update-charger.dto';
 import { CreateIndividualChargerDto } from './dto/create-individual-charger.dto';
 import { CreateStationDto } from './dto/create-station.dto';
+import { CreateServiceStationDto } from './dto/create-service-station.dto';
 
 /**
  * Owner Controller
@@ -82,6 +83,25 @@ export class OwnerController {
       console.error('❌ [OwnerController] Error stack:', error.stack);
       throw error;
     }
+  }
+
+  /**
+   * Register a service station (listed in Vehicle Services, no charger config required)
+   */
+  @Post('service-stations')
+  async registerServiceStation(
+    @Body() dto: CreateServiceStationDto,
+    @Request() req,
+  ) {
+    return this.ownerService.registerServiceStation(dto, req.user.userId);
+  }
+
+  /**
+   * Get service stations registered by current user
+   */
+  @Get('service-stations')
+  async getMyServiceStations(@Request() req) {
+    return this.ownerService.getMyServiceStations(req.user.userId);
   }
 
   /**

@@ -14,6 +14,8 @@ import { ChargerSocket } from './entities/charger-socket.entity';
 import { ChargingStation } from './entities/charging-station.entity';
 import { Station } from '../station/entities/station.entity';
 import { ChargerModule } from '../charger/charger.module';
+import { ServiceStationApplicationEntity } from '../service-stations/entities/service-station-application.entity';
+import { ServiceStationEntity } from '../service-stations/entities/service-station.entity';
 
 @Module({
   imports: [
@@ -25,6 +27,8 @@ import { ChargerModule } from '../charger/charger.module';
       ChargerSocket,
       ChargingStation,
       Station,
+      ServiceStationApplicationEntity,
+      ServiceStationEntity,
     ]),
     HttpModule,
     ChargerModule,
