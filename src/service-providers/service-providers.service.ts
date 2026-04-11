@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { MechanicEntity } from '../mechanics/entities/mechanic.entity';
@@ -187,6 +187,38 @@ export class ServiceProvidersService {
 
     await this.providerSignalRepository.save(payload);
     return { ok: true };
+  }
+
+  async getStationById(id: string) {
+    const station = await this.stationRepository.findOne({ where: { id } });
+
+    if (!station || station.isBanned) {
+      throw new NotFoundException('Service station not found');
+    }
+
+    return {
+      id: station.id,
+      providerType: 'service_station',
+      name: station.stationName,
+      services: (station.serviceCategories ?? []) as string[],
+      serviceCategories: (station.serviceCategories ?? []) as string[],
+      amenities: (station.amenities ?? []) as string[],
+      images: (station.images ?? []) as string[],
+      lat: this.toNumber(station.lat),
+      lng: this.toNumber(station.lng),
+      rating: 0,
+      reviewCount: 0,
+      phone: null,
+      description: station.description,
+      available: true,
+      pricePerHour: null,
+      address: station.address,
+      city: station.city,
+      verified: station.verified === true,
+      distance: null,
+      estimatedArrivalMinutes: null,
+      responseSlaMinutes: null,
+    };
   }
 
   private async getUserSignalProfile(userId: string, mode: ServiceMode): Promise<UserSignalProfile> {

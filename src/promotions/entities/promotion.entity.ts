@@ -19,6 +19,7 @@ export enum AdPlacement {
   HOME_BANNER = 'home_banner',
   HOME_NATIVE = 'home_native',
   SEARCH_SPONSORED = 'search_sponsored',
+  SERVICE_STATION_LIST = 'service_station_list',
 }
 
 export enum AdFormat {

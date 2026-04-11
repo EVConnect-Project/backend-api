@@ -105,6 +105,45 @@ export class OwnerController {
   }
 
   /**
+   * Update details for a service station application owned by current user
+   */
+  @Patch('service-stations/:id')
+  async updateMyServiceStation(
+    @Param('id') id: string,
+    @Body() body: {
+      stationName?: string;
+      city?: string;
+      phoneNumber?: string;
+      description?: string;
+      openingHours?: {
+        is24Hours?: boolean;
+        schedule?: {
+          [key: string]: { open: string; close: string; closed?: boolean };
+        };
+      };
+    },
+    @Request() req,
+  ) {
+    return this.ownerService.updateMyServiceStation(id, req.user.userId, body);
+  }
+
+  /**
+   * Toggle service station open/closed status manually (owner override)
+   */
+  @Patch('service-stations/:id/open-status')
+  async updateMyServiceStationOpenStatus(
+    @Param('id') id: string,
+    @Body() body: { isOpen: boolean },
+    @Request() req,
+  ) {
+    return this.ownerService.updateMyServiceStationOpenStatus(
+      id,
+      req.user.userId,
+      body.isOpen,
+    );
+  }
+
+  /**
    * Get all chargers owned by the current user
    * Accessible to all authenticated users to check their charger status
    * Temporarily removed role restriction to debug 403 error

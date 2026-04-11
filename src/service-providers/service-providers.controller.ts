@@ -45,6 +45,11 @@ export class ServiceProvidersController {
     });
   }
 
+  @Get('stations/:id')
+  async getStationById(@Param('id') id: string) {
+    return this.serviceProvidersService.getStationById(id);
+  }
+
   @Post('signals')
   @UseGuards(JwtAuthGuard)
   async recordProviderSignal(
