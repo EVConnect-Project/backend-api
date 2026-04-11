@@ -1148,49 +1148,80 @@ export class OwnerService {
         }
       }
       
-      let coordMatch: RegExpMatchArray | null = null;
-      
-      // Try to match coordinates with @ symbol (e.g., /@6.9271,79.8612,17z or /@6.9271,79.8612/)
-      coordMatch = urlToCheck.match(/@(-?\d+\.?\d+),(-?\d+\.?\d+)/);
-      
-      // Try to match coordinates with ?q= (e.g., ?q=6.9271,79.8612)
-      if (!coordMatch) {
-        coordMatch = urlToCheck.match(/[\?&]q=(-?\d+\.?\d+),(-?\d+\.?\d+)/);
-      }
-      
-      // Try to match coordinates with ?ll= (e.g., ?ll=6.9271,79.8612)
-      if (!coordMatch) {
-        coordMatch = urlToCheck.match(/[\?&]ll=(-?\d+\.?\d+),(-?\d+\.?\d+)/);
-      }
-      
-      // Try to match just coordinates (e.g., 6.9271,79.8612)
-      if (!coordMatch) {
-        coordMatch = urlToCheck.match(/^(-?\d+\.?\d+),\s*(-?\d+\.?\d+)$/);
-      }
-      
-      // Try to match coordinates anywhere in the string (fallback)
-      if (!coordMatch) {
-        coordMatch = urlToCheck.match(/(-?\d+\.?\d+),\s*(-?\d+\.?\d+)/);
-      }
-      
-      if (coordMatch && coordMatch[1] && coordMatch[2]) {
-        const lat = parseFloat(coordMatch[1]);
-        const lng = parseFloat(coordMatch[2]);
-        
-        console.log('✅ Extracted coordinates:', { lat, lng });
-        
-        // Validate coordinates are reasonable
-        if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
-          return {
-            lat,
-            lng,
-            address: trimmed,
-          };
-        } else {
-          throw new BadRequestException(
-            `Invalid coordinates: lat=${lat}, lng=${lng}. Latitude must be between -90 and 90, longitude between -180 and 180.`,
-          );
+      const extractCoordinates = (input: string): { lat: number; lng: number } | null => {
+        const parsePair = (latRaw: string, lngRaw: string): { lat: number; lng: number } | null => {
+          const lat = parseFloat(latRaw);
+          const lng = parseFloat(lngRaw);
+          if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+            return null;
+          }
+          if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+            return null;
+          }
+          return { lat, lng };
+        };
+
+        const parseFromText = (text: string): { lat: number; lng: number } | null => {
+          const match = text.match(/(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/);
+          if (!match) return null;
+          return parsePair(match[1], match[2]);
+        };
+
+        // 1) Plain coordinates: "lat,lng"
+        const plain = input.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
+        if (plain) {
+          const parsed = parsePair(plain[1], plain[2]);
+          if (parsed) return parsed;
         }
+
+        // 2) /@lat,lng pattern
+        const atMatch = input.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
+        if (atMatch) {
+          const parsed = parsePair(atMatch[1], atMatch[2]);
+          if (parsed) return parsed;
+        }
+
+        // 3) Google Maps !3dLAT!4dLNG pattern
+        const bangMatch = input.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/);
+        if (bangMatch) {
+          const parsed = parsePair(bangMatch[1], bangMatch[2]);
+          if (parsed) return parsed;
+        }
+
+        // 4) Query params that can contain coordinates.
+        try {
+          const uri = new URL(input);
+          const candidateKeys = ['q', 'll', 'query', 'destination', 'daddr'];
+          for (const key of candidateKeys) {
+            const value = uri.searchParams.get(key);
+            if (!value) continue;
+            const parsed = parseFromText(value);
+            if (parsed) return parsed;
+          }
+        } catch {
+          // Not a full URL; ignore and continue with explicit patterns only.
+        }
+
+        // 5) Encoded query fragments in raw text.
+        const queryLike = input.match(/[?&](?:q|ll|query|destination|daddr)=([^&]+)/i);
+        if (queryLike?.[1]) {
+          const decoded = decodeURIComponent(queryLike[1]);
+          const parsed = parseFromText(decoded);
+          if (parsed) return parsed;
+        }
+
+        return null;
+      };
+
+      const coordinates = extractCoordinates(urlToCheck);
+
+      if (coordinates) {
+        console.log('✅ Extracted coordinates:', coordinates);
+        return {
+          lat: coordinates.lat,
+          lng: coordinates.lng,
+          address: trimmed,
+        };
       }
 
       // If no coordinates found, throw error with hint
