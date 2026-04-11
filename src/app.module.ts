@@ -94,6 +94,87 @@ import { ServiceProvidersModule } from './service-providers/service-providers.mo
 export class AppModule implements OnModuleInit {
   constructor(private dataSource: DataSource) {}
 
+  private async runSchemaHealthCheck(queryRunner: any): Promise<void> {
+    const requiredColumns: Record<string, string[]> = {
+      users: [
+        'id',
+        'phone',
+        'countryCode',
+        'password',
+        'name',
+        'role',
+        'isVerified',
+        'isBanned',
+        'createdAt',
+        'updatedAt',
+      ],
+      bookings: [
+        'id',
+        'userId',
+        'chargerId',
+        'socket_id',
+        'startTime',
+        'endTime',
+        'status',
+        'price',
+        'energyConsumed',
+        'paymentStatus',
+        'checkInTime',
+        'gracePeriodExpiresAt',
+        'createdAt',
+        'updatedAt',
+      ],
+    };
+
+    const mismatches: Array<{ table: string; missing: string[] }> = [];
+
+    for (const [tableName, expected] of Object.entries(requiredColumns)) {
+      const rows = await queryRunner.query(
+        `
+          SELECT column_name
+          FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = $1
+        `,
+        [tableName],
+      );
+
+      const existing = new Set(rows.map((row: { column_name: string }) => row.column_name));
+      const missing = expected.filter((column) => !existing.has(column));
+
+      if (missing.length > 0) {
+        mismatches.push({ table: tableName, missing });
+      }
+    }
+
+    if (mismatches.length === 0) {
+      console.log('✅ Schema health check passed for critical users/bookings columns');
+    } else {
+      console.error('⚠️ Schema health check detected mismatched columns:');
+      for (const mismatch of mismatches) {
+        console.error(`   - ${mismatch.table}: missing [${mismatch.missing.join(', ')}]`);
+      }
+      console.error('⚠️ Fix entity mappings or apply migrations before using affected endpoints.');
+    }
+
+    const requiredTables = ['ad_impressions', 'ab_tests', 'ad_revenue_ledger'];
+    const tableRows = await queryRunner.query(
+      `
+        SELECT table_name
+        FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = ANY($1::text[])
+      `,
+      [requiredTables],
+    );
+    const existingTables = new Set(tableRows.map((row: { table_name: string }) => row.table_name));
+    const missingTables = requiredTables.filter((table) => !existingTables.has(table));
+
+    if (missingTables.length === 0) {
+      console.log('✅ Schema health check passed for promotion analytics tables');
+    } else {
+      console.error(`⚠️ Missing promotion analytics tables: [${missingTables.join(', ')}]`);
+    }
+  }
+
   async onModuleInit() {
     console.log('🔧 Fixing schema after TypeORM initialization...');
     
@@ -270,16 +351,87 @@ export class AppModule implements OnModuleInit {
       await queryRunner.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS accepted_privacy_policy BOOLEAN DEFAULT false`);
       await queryRunner.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_accepted_at TIMESTAMP`);
 
+      // Bookings compatibility columns observed in production-like local schema
+      await queryRunner.query(`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS "paymentStatus" VARCHAR(50) DEFAULT 'pending'`);
+
+      // Promotions analytics tables required by PromotionsService event tracking
+      await queryRunner.query(`
+        CREATE TABLE IF NOT EXISTS ad_impressions (
+          id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+          "userId" UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          "promotionId" UUID NOT NULL REFERENCES promotions(id) ON DELETE CASCADE,
+          "eventType" VARCHAR(24) NOT NULL,
+          placement VARCHAR(50),
+          metadata JSONB,
+          "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      await queryRunner.query(`
+        CREATE TABLE IF NOT EXISTS ab_tests (
+          id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+          name VARCHAR(255) NOT NULL,
+          description TEXT,
+          status VARCHAR(24) NOT NULL DEFAULT 'draft',
+          "variantIds" JSONB NOT NULL DEFAULT '[]'::jsonb,
+          "trafficSplit" JSONB NOT NULL DEFAULT '[]'::jsonb,
+          "variantLabels" JSONB NOT NULL DEFAULT '[]'::jsonb,
+          "goalMetric" VARCHAR(32) NOT NULL DEFAULT 'ctr',
+          "minSampleSize" INT NOT NULL DEFAULT 100,
+          "confidenceThreshold" INT NOT NULL DEFAULT 95,
+          "winnerId" UUID,
+          "startDate" TIMESTAMP,
+          "endDate" TIMESTAMP,
+          "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      await queryRunner.query(`
+        CREATE TABLE IF NOT EXISTS ad_revenue_ledger (
+          id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+          "promotionId" UUID NOT NULL REFERENCES promotions(id) ON DELETE CASCADE,
+          "eventType" VARCHAR(24) NOT NULL,
+          "eventCount" INT NOT NULL DEFAULT 1,
+          "unitRate" DECIMAL(10, 4) NOT NULL,
+          amount DECIMAL(12, 4) NOT NULL,
+          "billingModel" VARCHAR(24) NOT NULL,
+          "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      await queryRunner.query(`
+        CREATE TABLE IF NOT EXISTS service_provider_signals (
+          id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+          user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          provider_id UUID NOT NULL,
+          provider_type VARCHAR(32) NOT NULL,
+          mode VARCHAR(16) NOT NULL,
+          issue_type VARCHAR(80),
+          action VARCHAR(40) NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
       // Charger/Station city fields for display-friendly location text
       await queryRunner.query(`ALTER TABLE chargers ADD COLUMN IF NOT EXISTS city VARCHAR(120)`);
       await queryRunner.query(`ALTER TABLE charging_stations ADD COLUMN IF NOT EXISTS city VARCHAR(120)`);
       
       // Create indexes
       await queryRunner.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_phone_users ON users(phone) WHERE phone IS NOT NULL`);
+      await queryRunner.query(`CREATE INDEX IF NOT EXISTS idx_ad_impressions_user_promo_event ON ad_impressions("userId", "promotionId", "eventType")`);
+      await queryRunner.query(`CREATE INDEX IF NOT EXISTS idx_ad_impressions_promo_event_created ON ad_impressions("promotionId", "eventType", "createdAt")`);
+      await queryRunner.query(`CREATE INDEX IF NOT EXISTS idx_ab_tests_status ON ab_tests(status)`);
+      await queryRunner.query(`CREATE INDEX IF NOT EXISTS idx_ad_revenue_ledger_promo_created ON ad_revenue_ledger("promotionId", "createdAt")`);
+      await queryRunner.query(`CREATE INDEX IF NOT EXISTS idx_service_provider_signals_user_mode_created ON service_provider_signals(user_id, mode, created_at DESC)`);
+
+      // Validate critical schema columns to surface mapping issues during startup.
+      await this.runSchemaHealthCheck(queryRunner);
       
       console.log('✅ Schema fixes applied successfully');
     } catch (error) {
-      console.error('❌ Error applying schema fixes:', error.message);
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('❌ Error applying schema fixes:', message);
     } finally {
       await queryRunner.release();
     }

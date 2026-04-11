@@ -545,7 +545,7 @@ export class BookingsService {
 
     // Filter by socket if provided
     if (dto.socketId) {
-      overlapQuery.andWhere('booking.socketId = :socketId', { socketId: dto.socketId });
+      overlapQuery.andWhere('booking.socket_id = :socketId', { socketId: dto.socketId });
     }
 
     const activePreBooking = await overlapQuery.getOne();
@@ -702,7 +702,7 @@ export class BookingsService {
 
     // Filter by socket if provided (allows parallel bookings on different sockets)
     if (dto.socketId) {
-      overlapQuery.andWhere('booking.socketId = :socketId', { socketId: dto.socketId });
+      overlapQuery.andWhere('booking.socket_id = :socketId', { socketId: dto.socketId });
     }
 
     const overlapping = await overlapQuery.getOne();

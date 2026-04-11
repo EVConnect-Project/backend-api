@@ -14,11 +14,11 @@ export class ServiceStationEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ name: 'owner_id', type: 'uuid' })
+  @Column({ name: 'owner_user_id', type: 'uuid' })
   ownerId: string;
 
   @ManyToOne(() => UserEntity)
-  @JoinColumn({ name: 'owner_id' })
+  @JoinColumn({ name: 'owner_user_id' })
   owner: UserEntity;
 
   @Column({ name: 'application_id', type: 'uuid', nullable: true, unique: true })
@@ -42,7 +42,7 @@ export class ServiceStationEntity {
   @Column({ name: 'city', type: 'varchar', length: 120, nullable: true })
   city: string | null;
 
-  @Column({ name: 'phone_number', type: 'varchar', length: 24, nullable: true })
+  @Column({ name: 'contact_phone', type: 'varchar', length: 24, nullable: true })
   phoneNumber: string | null;
 
   @Column({ type: 'text', nullable: true })
