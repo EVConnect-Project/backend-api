@@ -221,6 +221,7 @@ export class OwnerService {
       stationName: application.stationName,
       city: application.city,
       address: application.address,
+      phoneNumber: application.phoneNumber,
       verified: application.applicationStatus === 'approved',
       status: application.applicationStatus,
       reviewNotes: application.reviewNotes,
@@ -229,11 +230,153 @@ export class OwnerService {
       description: application.description,
       serviceCategories: application.serviceCategories ?? [],
       amenities: application.amenities ?? [],
+      openingHours: application.openingHours,
+      isOpen: this.computeCurrentOpenState(application.openingHours),
       images: application.images ?? [],
       createdAt: application.createdAt,
       updatedAt: application.updatedAt,
       approvedStationId: approvedByApplicationId.get(application.id)?.id ?? null,
     }));
+  }
+
+  async updateMyServiceStation(
+    applicationId: string,
+    userId: string,
+    payload: {
+      stationName?: string;
+      city?: string;
+      phoneNumber?: string;
+      description?: string;
+      openingHours?: {
+        is24Hours?: boolean;
+        schedule?: {
+          [key: string]: { open: string; close: string; closed?: boolean };
+        };
+      };
+    },
+  ) {
+    const application = await this.serviceStationApplicationRepository.findOne({
+      where: { id: applicationId, userId },
+    });
+
+    if (!application) {
+      throw new NotFoundException('Service station application not found');
+    }
+
+    if (payload.stationName != null) {
+      application.stationName = payload.stationName.trim();
+    }
+    if (payload.city != null) {
+      application.city = payload.city.trim();
+    }
+    if (payload.phoneNumber != null) {
+      application.phoneNumber = payload.phoneNumber.trim() || null;
+    }
+    if (payload.description != null) {
+      application.description = payload.description.trim() || null;
+    }
+    if (payload.openingHours != null) {
+      application.openingHours = {
+        ...(application.openingHours ?? { is24Hours: true, schedule: {} }),
+        ...payload.openingHours,
+      };
+    }
+
+    const saved = await this.serviceStationApplicationRepository.save(application);
+    return {
+      id: saved.id,
+      stationName: saved.stationName,
+      city: saved.city,
+      phoneNumber: saved.phoneNumber,
+      description: saved.description,
+      openingHours: saved.openingHours,
+      isOpen: this.computeCurrentOpenState(saved.openingHours),
+      updatedAt: saved.updatedAt,
+    };
+  }
+
+  async updateMyServiceStationOpenStatus(
+    applicationId: string,
+    userId: string,
+    isOpen: boolean,
+  ) {
+    const application = await this.serviceStationApplicationRepository.findOne({
+      where: { id: applicationId, userId },
+    });
+
+    if (!application) {
+      throw new NotFoundException('Service station application not found');
+    }
+
+    const current = application.openingHours ?? { is24Hours: true, schedule: {} };
+    application.openingHours = {
+      ...current,
+      manualOverrideOpen: isOpen,
+      manualOverrideUpdatedAt: new Date().toISOString(),
+    } as any;
+
+    const saved = await this.serviceStationApplicationRepository.save(application);
+    return {
+      id: saved.id,
+      isOpen,
+      openingHours: saved.openingHours,
+      updatedAt: saved.updatedAt,
+    };
+  }
+
+  private computeCurrentOpenState(openingHours?: {
+    is24Hours?: boolean;
+    schedule?: {
+      [key: string]: { open: string; close: string; closed?: boolean };
+    };
+    manualOverrideOpen?: boolean;
+  }): boolean {
+    if (!openingHours) return true;
+    if (typeof openingHours.manualOverrideOpen === 'boolean') {
+      return openingHours.manualOverrideOpen;
+    }
+
+    if (openingHours.is24Hours) {
+      return true;
+    }
+
+    const schedule = openingHours.schedule ?? {};
+    const now = new Date();
+    const dayNames = [
+      'sunday',
+      'monday',
+      'tuesday',
+      'wednesday',
+      'thursday',
+      'friday',
+      'saturday',
+    ];
+    const dayKey = dayNames[now.getDay()];
+    const today = schedule[dayKey];
+    if (!today) return false;
+    if (today.closed == true) return false;
+
+    const toMinutes = (value?: string) => {
+      if (!value) return -1;
+      const parts = value.split(':');
+      if (parts.length != 2) return -1;
+      const hour = parseInt(parts[0], 10);
+      const minute = parseInt(parts[1], 10);
+      if (Number.isNaN(hour) || Number.isNaN(minute)) return -1;
+      return hour * 60 + minute;
+    };
+
+    const open = toMinutes(today.open);
+    const close = toMinutes(today.close);
+    if (open < 0 || close < 0) return false;
+
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+    if (close >= open) {
+      return nowMinutes >= open && nowMinutes <= close;
+    }
+
+    // Overnight window (e.g. 22:00 - 06:00)
+    return nowMinutes >= open || nowMinutes <= close;
   }
 
   /**
