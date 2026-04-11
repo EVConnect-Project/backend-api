@@ -115,6 +115,7 @@ export class OwnerController {
       city?: string;
       phoneNumber?: string;
       description?: string;
+      images?: string[];
       openingHours?: {
         is24Hours?: boolean;
         schedule?: {

@@ -905,20 +905,31 @@ export class BookingsService {
    */
   @Cron('*/2 * * * *')
   async handleExpiredGracePeriods() {
-    const now = new Date();
+    try {
+      const now = new Date();
 
-    const expiredBookings = await this.bookingRepository
-      .createQueryBuilder('booking')
-      .where('booking.bookingType = :bookingType', { bookingType: BookingType.PRE_BOOKING })
-      .andWhere('booking.status = :status', { status: 'confirmed' })
-      .andWhere('booking.gracePeriodExpiresAt < :now', { now })
-      .andWhere('booking.checkInTime IS NULL')
-      .getMany();
+      const expiredBookings = await this.bookingRepository
+        .createQueryBuilder('booking')
+        .where('booking.bookingType = :bookingType', { bookingType: BookingType.PRE_BOOKING })
+        .andWhere('booking.status = :status', { status: 'confirmed' })
+        .andWhere('booking.gracePeriodExpiresAt < :now', { now })
+        .andWhere('booking.checkInTime IS NULL')
+        .getMany();
 
-    this.logger.log(`Processing ${expiredBookings.length} expired grace periods`);
+      this.logger.log(`Processing ${expiredBookings.length} expired grace periods`);
 
-    for (const booking of expiredBookings) {
-      await this.handleNoShow(booking.id);
+      for (const booking of expiredBookings) {
+        await this.handleNoShow(booking.id);
+      }
+    } catch (error) {
+      const code = (error as { code?: string }).code;
+      if (code === '42703') {
+        this.logger.error(
+          'Bookings schema is missing expected columns. Run pending TypeORM migrations (npm run migration:run).',
+        );
+        return;
+      }
+      throw error;
     }
   }
 }

@@ -79,7 +79,28 @@ export class CreateServiceStationDomain1776000000000
       )
     `);
     await queryRunner.query(
-      `CREATE INDEX IF NOT EXISTS idx_service_stations_owner ON service_stations(owner_id)`,
+      `
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1
+          FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'service_stations'
+            AND column_name = 'owner_id'
+        ) THEN
+          EXECUTE 'CREATE INDEX IF NOT EXISTS idx_service_stations_owner ON service_stations(owner_id)';
+        ELSIF EXISTS (
+          SELECT 1
+          FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'service_stations'
+            AND column_name = 'owner_user_id'
+        ) THEN
+          EXECUTE 'CREATE INDEX IF NOT EXISTS idx_service_stations_owner_user ON service_stations(owner_user_id)';
+        END IF;
+      END $$;
+      `,
     );
     await queryRunner.query(
       `CREATE INDEX IF NOT EXISTS idx_service_stations_verified ON service_stations(verified, is_banned)`,
@@ -87,68 +108,104 @@ export class CreateServiceStationDomain1776000000000
 
     // Backfill legacy service_station records that were stored in charging_stations.
     await queryRunner.query(`
-      INSERT INTO service_station_applications (
-        id, user_id, station_name, location_url, lat, lng, address, city,
-        description, service_categories, amenities, opening_hours,
-        application_status, review_notes, reviewed_by, reviewed_at,
-        created_at, updated_at
-      )
-      SELECT
-        cs.id,
-        cs.owner_id,
-        cs.station_name,
-        cs.location_url,
-        cs.lat,
-        cs.lng,
-        cs.address,
-        cs.city,
-        cs.description,
-        COALESCE(cs.amenities, '[]'::jsonb),
-        COALESCE(cs.amenities, '[]'::jsonb),
-        COALESCE(cs.opening_hours, '{"is24Hours": true, "schedule": {}}'::jsonb),
-        CASE
-          WHEN cs.verified = true THEN 'approved'
-          ELSE 'pending'
-        END,
-        NULL,
-        NULL,
-        NULL,
-        cs.created_at,
-        cs.updated_at
-      FROM charging_stations cs
-      WHERE cs.station_type = 'service_station'
-      ON CONFLICT (id) DO NOTHING
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1
+          FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'service_station_applications'
+            AND column_name = 'user_id'
+        )
+        AND EXISTS (
+          SELECT 1
+          FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'charging_stations'
+            AND column_name = 'owner_id'
+        ) THEN
+          INSERT INTO service_station_applications (
+            id, user_id, station_name, location_url, lat, lng, address, city,
+            description, service_categories, amenities, opening_hours,
+            application_status, review_notes, reviewed_by, reviewed_at,
+            created_at, updated_at
+          )
+          SELECT
+            cs.id,
+            cs.owner_id,
+            cs.station_name,
+            cs.location_url,
+            cs.lat,
+            cs.lng,
+            cs.address,
+            cs.city,
+            cs.description,
+            COALESCE(cs.amenities, '[]'::jsonb),
+            COALESCE(cs.amenities, '[]'::jsonb),
+            COALESCE(cs.opening_hours, '{"is24Hours": true, "schedule": {}}'::jsonb),
+            CASE
+              WHEN cs.verified = true THEN 'approved'
+              ELSE 'pending'
+            END,
+            NULL,
+            NULL,
+            NULL,
+            cs.created_at,
+            cs.updated_at
+          FROM charging_stations cs
+          WHERE cs.station_type = 'service_station'
+          ON CONFLICT (id) DO NOTHING;
+        END IF;
+      END $$;
     `);
 
     await queryRunner.query(`
-      INSERT INTO service_stations (
-        owner_id, application_id, station_name, location_url, lat, lng,
-        address, city, description, service_categories, amenities,
-        opening_hours, images, verified, is_banned, created_at, updated_at
-      )
-      SELECT
-        ssa.user_id,
-        ssa.id,
-        ssa.station_name,
-        ssa.location_url,
-        ssa.lat,
-        ssa.lng,
-        ssa.address,
-        ssa.city,
-        ssa.description,
-        COALESCE(ssa.service_categories, '[]'::jsonb),
-        COALESCE(ssa.amenities, '[]'::jsonb),
-        COALESCE(ssa.opening_hours, '{"is24Hours": true, "schedule": {}}'::jsonb),
-        '[]'::jsonb,
-        true,
-        false,
-        ssa.created_at,
-        ssa.updated_at
-      FROM service_station_applications ssa
-      WHERE ssa.application_status = 'approved'
-        AND NOT EXISTS (
-          SELECT 1 FROM service_stations ss WHERE ss.application_id = ssa.id
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1
+          FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'service_stations'
+            AND column_name = 'owner_id'
         )
+        AND EXISTS (
+          SELECT 1
+          FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'service_stations'
+            AND column_name = 'application_id'
+        ) THEN
+          INSERT INTO service_stations (
+            owner_id, application_id, station_name, location_url, lat, lng,
+            address, city, description, service_categories, amenities,
+            opening_hours, images, verified, is_banned, created_at, updated_at
+          )
+          SELECT
+            ssa.user_id,
+            ssa.id,
+            ssa.station_name,
+            ssa.location_url,
+            ssa.lat,
+            ssa.lng,
+            ssa.address,
+            ssa.city,
+            ssa.description,
+            COALESCE(ssa.service_categories, '[]'::jsonb),
+            COALESCE(ssa.amenities, '[]'::jsonb),
+            COALESCE(ssa.opening_hours, '{"is24Hours": true, "schedule": {}}'::jsonb),
+            '[]'::jsonb,
+            true,
+            false,
+            ssa.created_at,
+            ssa.updated_at
+          FROM service_station_applications ssa
+          WHERE ssa.application_status = 'approved'
+            AND NOT EXISTS (
+              SELECT 1 FROM service_stations ss WHERE ss.application_id = ssa.id
+            );
+        END IF;
+      END $$;
     `);
   }
 

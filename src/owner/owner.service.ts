@@ -247,6 +247,7 @@ export class OwnerService {
       city?: string;
       phoneNumber?: string;
       description?: string;
+      images?: string[];
       openingHours?: {
         is24Hours?: boolean;
         schedule?: {
@@ -275,11 +276,16 @@ export class OwnerService {
     if (payload.description != null) {
       application.description = payload.description.trim() || null;
     }
+    if (payload.images != null) {
+      application.images = payload.images;
+    }
     if (payload.openingHours != null) {
       application.openingHours = {
         ...(application.openingHours ?? { is24Hours: true, schedule: {} }),
         ...payload.openingHours,
       };
+      delete (application.openingHours as any).manualOverrideOpen;
+      delete (application.openingHours as any).manualOverrideUpdatedAt;
     }
 
     const saved = await this.serviceStationApplicationRepository.save(application);
@@ -289,6 +295,7 @@ export class OwnerService {
       city: saved.city,
       phoneNumber: saved.phoneNumber,
       description: saved.description,
+      images: saved.images ?? [],
       openingHours: saved.openingHours,
       isOpen: this.computeCurrentOpenState(saved.openingHours),
       updatedAt: saved.updatedAt,
@@ -329,12 +336,8 @@ export class OwnerService {
     schedule?: {
       [key: string]: { open: string; close: string; closed?: boolean };
     };
-    manualOverrideOpen?: boolean;
   }): boolean {
     if (!openingHours) return true;
-    if (typeof openingHours.manualOverrideOpen === 'boolean') {
-      return openingHours.manualOverrideOpen;
-    }
 
     if (openingHours.is24Hours) {
       return true;
