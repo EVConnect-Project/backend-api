@@ -1644,7 +1644,11 @@ export class AdminService {
         total,
       };
     } catch (error) {
-      console.error('Error fetching mechanic applications:', error);
+      console.error('Error fetching mechanic applications (ORM), trying schema-safe fallback:', error?.message || error);
+      const fallback = await this.getMechanicApplicationsFallback(params);
+      if (fallback) {
+        return fallback;
+      }
       throw error;
     }
   }
@@ -1688,10 +1692,278 @@ export class AdminService {
         } : null,
       };
     } catch (error) {
-      console.error('Error fetching mechanic application:', error);
+      console.error('Error fetching mechanic application (ORM), trying schema-safe fallback:', error?.message || error);
+      const fallback = await this.getMechanicApplicationByIdFallback(id);
+      if (fallback) {
+        return fallback;
+      }
       throw error;
     }
 
+  }
+
+  private async getMechanicApplicationsFallback(params: {
+    page: number;
+    limit: number;
+    status?: string;
+    search?: string;
+  }): Promise<{ applications: any[]; total: number } | null> {
+    const { page, limit, status, search } = params;
+    const skip = (page - 1) * limit;
+
+    const columnsResult: Array<{ column_name: string }> =
+      await this.mechanicApplicationRepository.query(
+        `SELECT column_name FROM information_schema.columns WHERE table_name = 'mechanic_applications'`,
+      );
+
+    const columnNames = new Set(columnsResult.map((column) => column.column_name));
+    if (columnNames.size === 0) return null;
+
+    const toIdentifier = (column: string) =>
+      /^[a-z_][a-z0-9_]*$/.test(column) ? column : `"${column}"`;
+
+    const pick = (candidates: string[]): string | null => {
+      const found = candidates.find((candidate) => columnNames.has(candidate));
+      return found ? toIdentifier(found) : null;
+    };
+
+    const userIdCol = pick(['user_id', 'userId']);
+    if (!userIdCol) return null;
+
+    const nameCol = pick(['name', 'full_name', 'fullName']);
+    const phoneCol = pick(['phone', 'phone_number', 'phoneNumber']);
+    const servicesCol = pick(['services', 'skills']);
+    const yearsCol = pick(['years_of_experience', 'yearsOfExperience']);
+    const certCol = pick(['certifications']);
+    const addressCol = pick(['address', 'service_area', 'serviceArea']);
+    const latCol = pick(['lat', 'service_lat', 'serviceLat']);
+    const lngCol = pick(['lng', 'service_lng', 'serviceLng']);
+    const licenseCol = pick(['license_number', 'licenseNumber']);
+    const descriptionCol = pick(['description', 'additional_info', 'additionalInfo']);
+    const statusCol = pick(['status']);
+    const reviewedByCol = pick(['reviewed_by', 'reviewedBy']);
+    const reviewNotesCol = pick(['review_notes', 'reviewNotes']);
+    const reviewedAtCol = pick(['reviewed_at', 'reviewedAt']);
+    const createdAtCol = pick(['created_at', 'createdAt']);
+    const updatedAtCol = pick(['updated_at', 'updatedAt']);
+
+    const whereParts: string[] = [];
+    const values: any[] = [];
+
+    if (search?.trim()) {
+      const searchTerm = `%${search.trim()}%`;
+      values.push(searchTerm);
+      const p = `$${values.length}`;
+      const searchParts: string[] = [];
+      if (nameCol) searchParts.push(`CAST(application.${nameCol} AS TEXT) ILIKE ${p}`);
+      if (phoneCol) searchParts.push(`CAST(application.${phoneCol} AS TEXT) ILIKE ${p}`);
+      if (servicesCol) searchParts.push(`CAST(application.${servicesCol} AS TEXT) ILIKE ${p}`);
+      if (searchParts.length > 0) {
+        whereParts.push(`(${searchParts.join(' OR ')})`);
+      }
+    }
+
+    if (status?.trim()) {
+      const statuses = status
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (statuses.length > 0 && statusCol) {
+        const placeholders: string[] = [];
+        for (const s of statuses) {
+          values.push(s);
+          placeholders.push(`$${values.length}`);
+        }
+        whereParts.push(`application.${statusCol} IN (${placeholders.join(', ')})`);
+      }
+    }
+
+    values.push(limit);
+    const limitParam = `$${values.length}`;
+    values.push(skip);
+    const offsetParam = `$${values.length}`;
+
+    const whereClause = whereParts.length > 0 ? `WHERE ${whereParts.join(' AND ')}` : '';
+    const orderByCol = createdAtCol ? `application.${createdAtCol}` : 'application.id';
+
+    const rows: Array<Record<string, any>> = await this.mechanicApplicationRepository.query(
+      `
+        SELECT
+          application.id AS "id",
+          application.${userIdCol} AS "userId",
+          ${nameCol ? `application.${nameCol}` : `NULL`} AS "fullName",
+          ${phoneCol ? `application.${phoneCol}` : `NULL`} AS "phoneNumber",
+          ${servicesCol ? `application.${servicesCol}` : `NULL`} AS "skillsRaw",
+          ${yearsCol ? `application.${yearsCol}` : `NULL`} AS "yearsOfExperience",
+          ${certCol ? `application.${certCol}` : `NULL`} AS "certifications",
+          ${addressCol ? `application.${addressCol}` : `NULL`} AS "serviceArea",
+          ${latCol ? `application.${latCol}` : `NULL`} AS "serviceLat",
+          ${lngCol ? `application.${lngCol}` : `NULL`} AS "serviceLng",
+          ${licenseCol ? `application.${licenseCol}` : `NULL`} AS "licenseNumber",
+          ${descriptionCol ? `application.${descriptionCol}` : `NULL`} AS "additionalInfo",
+          ${statusCol ? `application.${statusCol}` : `'pending'`} AS "status",
+          ${reviewedByCol ? `application.${reviewedByCol}` : `NULL`} AS "reviewedBy",
+          ${reviewNotesCol ? `application.${reviewNotesCol}` : `NULL`} AS "reviewNotes",
+          ${reviewedAtCol ? `application.${reviewedAtCol}` : `NULL`} AS "reviewedAt",
+          ${createdAtCol ? `application.${createdAtCol}` : `NULL`} AS "createdAt",
+          ${updatedAtCol ? `application.${updatedAtCol}` : `NULL`} AS "updatedAt",
+          "user".id AS "userRefId",
+          "user".name AS "userName",
+          "user".phone AS "userPhone",
+          COUNT(*) OVER()::int AS "__total"
+        FROM mechanic_applications application
+        LEFT JOIN users "user" ON "user".id = application.${userIdCol}
+        ${whereClause}
+        ORDER BY ${orderByCol} DESC
+        LIMIT ${limitParam}
+        OFFSET ${offsetParam}
+      `,
+      values,
+    );
+
+    const applications = rows.map((row) => {
+      const rawSkills = row.skillsRaw;
+      const skills = Array.isArray(rawSkills)
+        ? rawSkills.join(', ')
+        : (rawSkills ?? '').toString();
+
+      return {
+        id: row.id,
+        userId: row.userId,
+        fullName: (row.fullName ?? '').toString(),
+        phoneNumber: (row.phoneNumber ?? '').toString(),
+        skills,
+        yearsOfExperience: row.yearsOfExperience != null ? Number(row.yearsOfExperience) : 0,
+        certifications: row.certifications ?? null,
+        serviceArea: (row.serviceArea ?? '').toString(),
+        serviceLat: row.serviceLat != null ? Number(row.serviceLat) : null,
+        serviceLng: row.serviceLng != null ? Number(row.serviceLng) : null,
+        licenseNumber: row.licenseNumber ?? null,
+        additionalInfo: row.additionalInfo ?? null,
+        status: (row.status ?? 'pending').toString(),
+        reviewedBy: row.reviewedBy ?? null,
+        reviewNotes: row.reviewNotes ?? null,
+        reviewedAt: row.reviewedAt ?? null,
+        createdAt: row.createdAt ?? null,
+        updatedAt: row.updatedAt ?? null,
+        user: row.userRefId
+          ? {
+              id: row.userRefId,
+              name: (row.userName ?? '').toString(),
+              phone: (row.userPhone ?? '').toString(),
+            }
+          : null,
+      };
+    });
+
+    const total = rows.length > 0 ? Number(rows[0].__total ?? 0) : 0;
+    return { applications, total };
+  }
+
+  private async getMechanicApplicationByIdFallback(id: string): Promise<any | null> {
+    const columnsResult: Array<{ column_name: string }> =
+      await this.mechanicApplicationRepository.query(
+        `SELECT column_name FROM information_schema.columns WHERE table_name = 'mechanic_applications'`,
+      );
+
+    const columnNames = new Set(columnsResult.map((column) => column.column_name));
+    if (columnNames.size === 0) return null;
+
+    const toIdentifier = (column: string) =>
+      /^[a-z_][a-z0-9_]*$/.test(column) ? column : `"${column}"`;
+
+    const pick = (candidates: string[]): string | null => {
+      const found = candidates.find((candidate) => columnNames.has(candidate));
+      return found ? toIdentifier(found) : null;
+    };
+
+    const userIdCol = pick(['user_id', 'userId']);
+    if (!userIdCol) return null;
+
+    const nameCol = pick(['name', 'full_name', 'fullName']);
+    const phoneCol = pick(['phone', 'phone_number', 'phoneNumber']);
+    const servicesCol = pick(['services', 'skills']);
+    const yearsCol = pick(['years_of_experience', 'yearsOfExperience']);
+    const certCol = pick(['certifications']);
+    const addressCol = pick(['address', 'service_area', 'serviceArea']);
+    const latCol = pick(['lat', 'service_lat', 'serviceLat']);
+    const lngCol = pick(['lng', 'service_lng', 'serviceLng']);
+    const licenseCol = pick(['license_number', 'licenseNumber']);
+    const descriptionCol = pick(['description', 'additional_info', 'additionalInfo']);
+    const statusCol = pick(['status']);
+    const reviewedByCol = pick(['reviewed_by', 'reviewedBy']);
+    const reviewNotesCol = pick(['review_notes', 'reviewNotes']);
+    const reviewedAtCol = pick(['reviewed_at', 'reviewedAt']);
+    const createdAtCol = pick(['created_at', 'createdAt']);
+    const updatedAtCol = pick(['updated_at', 'updatedAt']);
+
+    const rows: Array<Record<string, any>> = await this.mechanicApplicationRepository.query(
+      `
+        SELECT
+          application.id AS "id",
+          application.${userIdCol} AS "userId",
+          ${nameCol ? `application.${nameCol}` : `NULL`} AS "fullName",
+          ${phoneCol ? `application.${phoneCol}` : `NULL`} AS "phoneNumber",
+          ${servicesCol ? `application.${servicesCol}` : `NULL`} AS "skillsRaw",
+          ${yearsCol ? `application.${yearsCol}` : `NULL`} AS "yearsOfExperience",
+          ${certCol ? `application.${certCol}` : `NULL`} AS "certifications",
+          ${addressCol ? `application.${addressCol}` : `NULL`} AS "serviceArea",
+          ${latCol ? `application.${latCol}` : `NULL`} AS "serviceLat",
+          ${lngCol ? `application.${lngCol}` : `NULL`} AS "serviceLng",
+          ${licenseCol ? `application.${licenseCol}` : `NULL`} AS "licenseNumber",
+          ${descriptionCol ? `application.${descriptionCol}` : `NULL`} AS "additionalInfo",
+          ${statusCol ? `application.${statusCol}` : `'pending'`} AS "status",
+          ${reviewedByCol ? `application.${reviewedByCol}` : `NULL`} AS "reviewedBy",
+          ${reviewNotesCol ? `application.${reviewNotesCol}` : `NULL`} AS "reviewNotes",
+          ${reviewedAtCol ? `application.${reviewedAtCol}` : `NULL`} AS "reviewedAt",
+          ${createdAtCol ? `application.${createdAtCol}` : `NULL`} AS "createdAt",
+          ${updatedAtCol ? `application.${updatedAtCol}` : `NULL`} AS "updatedAt",
+          "user".id AS "userRefId",
+          "user".name AS "userName",
+          "user".phone AS "userPhone"
+        FROM mechanic_applications application
+        LEFT JOIN users "user" ON "user".id = application.${userIdCol}
+        WHERE application.id = $1
+        LIMIT 1
+      `,
+      [id],
+    );
+
+    const row = rows[0];
+    if (!row) return null;
+
+    const rawSkills = row.skillsRaw;
+    const skills = Array.isArray(rawSkills)
+      ? rawSkills.join(', ')
+      : (rawSkills ?? '').toString();
+
+    return {
+      id: row.id,
+      userId: row.userId,
+      fullName: (row.fullName ?? '').toString(),
+      phoneNumber: (row.phoneNumber ?? '').toString(),
+      skills,
+      yearsOfExperience: row.yearsOfExperience != null ? Number(row.yearsOfExperience) : 0,
+      certifications: row.certifications ?? null,
+      serviceArea: (row.serviceArea ?? '').toString(),
+      serviceLat: row.serviceLat != null ? Number(row.serviceLat) : null,
+      serviceLng: row.serviceLng != null ? Number(row.serviceLng) : null,
+      licenseNumber: row.licenseNumber ?? null,
+      additionalInfo: row.additionalInfo ?? null,
+      status: (row.status ?? 'pending').toString(),
+      reviewedBy: row.reviewedBy ?? null,
+      reviewNotes: row.reviewNotes ?? null,
+      reviewedAt: row.reviewedAt ?? null,
+      createdAt: row.createdAt ?? null,
+      updatedAt: row.updatedAt ?? null,
+      user: row.userRefId
+        ? {
+            id: row.userRefId,
+            name: (row.userName ?? '').toString(),
+            phone: (row.userPhone ?? '').toString(),
+          }
+        : null,
+    };
   }
 
   async approveMechanicApplication(
