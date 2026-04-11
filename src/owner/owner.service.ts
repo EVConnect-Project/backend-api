@@ -331,6 +331,32 @@ export class OwnerService {
     };
   }
 
+  async deleteMyServiceStation(applicationId: string, userId: string) {
+    const application = await this.serviceStationApplicationRepository.findOne({
+      where: { id: applicationId, userId },
+    });
+
+    if (!application) {
+      throw new NotFoundException('Service station application not found');
+    }
+
+    const approvedStation = await this.serviceStationRepository.findOne({
+      where: { applicationId: application.id, ownerId: userId },
+    });
+
+    if (approvedStation) {
+      await this.serviceStationRepository.remove(approvedStation);
+    }
+
+    await this.serviceStationApplicationRepository.remove(application);
+
+    return {
+      message: 'Service station deleted successfully',
+      deletedApplicationId: applicationId,
+      deletedStationId: approvedStation?.id ?? null,
+    };
+  }
+
   private computeCurrentOpenState(openingHours?: {
     is24Hours?: boolean;
     schedule?: {
@@ -566,6 +592,7 @@ export class OwnerService {
       if (!chargerIds.includes(chargerId)) {
         throw new ForbiddenException('Charger not found or not owned by you');
       }
+
       whereConditions.chargerId = chargerId;
     } else {
       // Get bookings for all owned chargers

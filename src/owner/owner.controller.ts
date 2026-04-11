@@ -145,6 +145,17 @@ export class OwnerController {
   }
 
   /**
+   * Delete a service station application and its approved station record (if exists)
+   */
+  @Delete('service-stations/:id')
+  async deleteMyServiceStation(
+    @Param('id') id: string,
+    @Request() req,
+  ) {
+    return this.ownerService.deleteMyServiceStation(id, req.user.userId);
+  }
+
+  /**
    * Get all chargers owned by the current user
    * Accessible to all authenticated users to check their charger status
    * Temporarily removed role restriction to debug 403 error

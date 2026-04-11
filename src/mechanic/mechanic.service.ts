@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -87,21 +88,191 @@ export class MechanicService {
           'Application submitted successfully. You will be notified once reviewed.',
       };
     } catch (error) {
-      console.error('❌ Error in applyAsMechanic:', error);
-      
+      console.error('❌ Error in applyAsMechanic (ORM path):', error);
+
       if (error instanceof BadRequestException) {
         throw error; // Re-throw BadRequestException
       }
-      
-      // For any other error, throw a generic internal server error
-      console.error('❌ Full error details:', {
-        message: error.message,
-        stack: error.stack,
-        name: error.name,
-        ...error
-      });
-      throw new Error(`Failed to submit mechanic application: ${error.message}`);
+
+      // Fallback for schema-drifted mechanic_applications tables.
+      try {
+        return await this.applyAsMechanicFallback(createDto, userId);
+      } catch (fallbackError) {
+        if (fallbackError instanceof BadRequestException) {
+          throw fallbackError;
+        }
+
+        console.error('❌ Error in applyAsMechanic fallback:', {
+          message: fallbackError?.message,
+          stack: fallbackError?.stack,
+          name: fallbackError?.name,
+        });
+
+        throw new InternalServerErrorException('Failed to submit mechanic application');
+      }
     }
+  }
+
+  private async applyAsMechanicFallback(
+    createDto: CreateMechanicApplicationDto,
+    userId: string,
+  ) {
+    const columnsResult: Array<{ column_name: string }> =
+      await this.applicationRepository.query(
+        `SELECT column_name FROM information_schema.columns WHERE table_name = 'mechanic_applications'`,
+      );
+
+    const columnNames = new Set(columnsResult.map((column) => column.column_name));
+    if (columnNames.size === 0) {
+      throw new InternalServerErrorException('mechanic_applications schema not found');
+    }
+
+    const toIdentifier = (column: string) =>
+      /^[a-z_][a-z0-9_]*$/.test(column) ? column : `"${column}"`;
+
+    const pick = (candidates: string[]): string | null => {
+      const found = candidates.find((candidate) => columnNames.has(candidate));
+      return found ? toIdentifier(found) : null;
+    };
+
+    const userIdCol = pick(['user_id', 'userId']);
+    if (!userIdCol) {
+      throw new InternalServerErrorException('No user id column in mechanic_applications');
+    }
+
+    const statusCol = pick(['status']) || 'status';
+    const createdAtCol = pick(['created_at', 'createdAt']) || 'id';
+
+    const existingRows: Array<{ id: string; status: string }> = await this.applicationRepository.query(
+      `
+        SELECT id, ${statusCol}::text AS status
+        FROM mechanic_applications
+        WHERE ${userIdCol} = $1
+        ORDER BY ${createdAtCol} DESC
+        LIMIT 1
+      `,
+      [userId],
+    );
+
+    const existing = existingRows[0];
+    if (existing) {
+      if (existing.status === ApplicationStatus.PENDING) {
+        throw new BadRequestException('You already have a pending application');
+      }
+
+      if (existing.status === ApplicationStatus.APPROVED) {
+        const mechanicProfile = await this.mechanicRepository.findOne({
+          where: { userId },
+        });
+
+        if (mechanicProfile) {
+          throw new BadRequestException(
+            'You are already approved as a mechanic. Use the mechanic dashboard to manage your profile.',
+          );
+        }
+
+        // Previously approved but profile removed - allow reapplication.
+        await this.applicationRepository.query(
+          `DELETE FROM mechanic_applications WHERE id = $1`,
+          [existing.id],
+        );
+      }
+    }
+
+    const nameCol = pick(['name', 'full_name', 'fullName']);
+    const phoneCol = pick(['phone', 'phone_number', 'phoneNumber']);
+    const emailCol = pick(['email']);
+    const addressCol = pick(['address', 'service_area', 'serviceArea']);
+    const latCol = pick(['lat', 'service_lat', 'serviceLat']);
+    const lngCol = pick(['lng', 'service_lng', 'serviceLng']);
+    const servicesCol = pick(['services', 'skills']);
+    const yearsCol = pick(['years_of_experience', 'yearsOfExperience']);
+    const certCol = pick(['certifications']);
+    const descriptionCol = pick(['description', 'additional_info', 'additionalInfo']);
+    const priceCol = pick(['price_per_hour', 'pricePerHour']);
+    const licenseCol = pick(['license_number', 'licenseNumber']);
+
+    const insertColumns: string[] = [userIdCol, statusCol];
+    const insertValues: string[] = [];
+    const params: any[] = [];
+    const pushParam = (value: any) => {
+      params.push(value);
+      return `$${params.length}`;
+    };
+
+    insertValues.push(pushParam(userId));
+    insertValues.push(pushParam(ApplicationStatus.PENDING));
+
+    if (nameCol) {
+      insertColumns.push(nameCol);
+      insertValues.push(pushParam(createDto.name));
+    }
+    if (phoneCol) {
+      insertColumns.push(phoneCol);
+      insertValues.push(pushParam(createDto.phone));
+    }
+    if (emailCol) {
+      insertColumns.push(emailCol);
+      insertValues.push(pushParam(createDto.email ?? null));
+    }
+    if (addressCol) {
+      insertColumns.push(addressCol);
+      insertValues.push(pushParam(createDto.address));
+    }
+    if (latCol) {
+      insertColumns.push(latCol);
+      insertValues.push(pushParam(createDto.lat));
+    }
+    if (lngCol) {
+      insertColumns.push(lngCol);
+      insertValues.push(pushParam(createDto.lng));
+    }
+    if (servicesCol) {
+      insertColumns.push(servicesCol);
+      // Some deployments use text[] (services), older ones use text (skills).
+      const rawServicesColumn = servicesCol.replaceAll('"', '');
+      const serviceValue = rawServicesColumn === 'services'
+        ? createDto.services
+        : createDto.services.join(', ');
+      insertValues.push(pushParam(serviceValue));
+    }
+    if (yearsCol) {
+      insertColumns.push(yearsCol);
+      insertValues.push(pushParam(createDto.yearsOfExperience));
+    }
+    if (certCol) {
+      insertColumns.push(certCol);
+      insertValues.push(pushParam(createDto.certifications ?? null));
+    }
+    if (descriptionCol) {
+      insertColumns.push(descriptionCol);
+      insertValues.push(pushParam(createDto.description ?? null));
+    }
+    if (priceCol) {
+      insertColumns.push(priceCol);
+      insertValues.push(pushParam(createDto.pricePerHour));
+    }
+    if (licenseCol) {
+      insertColumns.push(licenseCol);
+      insertValues.push(pushParam(createDto.licenseNumber ?? null));
+    }
+
+    const rows = await this.applicationRepository.query(
+      `
+        INSERT INTO mechanic_applications (${insertColumns.join(', ')})
+        VALUES (${insertValues.join(', ')})
+        RETURNING id
+      `,
+      params,
+    );
+
+    return {
+      id: rows?.[0]?.id ?? null,
+      userId,
+      status: ApplicationStatus.PENDING,
+      message:
+        'Application submitted successfully. You will be notified once reviewed.',
+    };
   }
 
   /**

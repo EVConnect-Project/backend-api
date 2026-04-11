@@ -181,8 +181,13 @@ export class MechanicsService {
       throw new NotFoundException(`Mechanic profile not found for user ${userId}`);
     }
 
+    // Keep both static and live coordinates in sync for backward compatibility
+    // with existing nearby/mechanic discovery queries.
     mechanic.lat = lat;
     mechanic.lng = lng;
+    mechanic.currentLocationLat = lat;
+    mechanic.currentLocationLng = lng;
+    mechanic.lastOnlineAt = new Date();
     return this.mechanicRepository.save(mechanic);
   }
 
