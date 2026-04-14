@@ -28,6 +28,7 @@ export class AuthController {
       user: {
         id: user.id,
         name: user.name,
+        gender: user.gender,
         role: user.role,
         phone: user.phoneNumber,
         countryCode: user.countryCode,
@@ -130,6 +131,7 @@ export class AuthController {
       user: {
         id: user.id,
         name: user.name,
+        gender: user.gender,
         role: user.role,
         phone: user.phoneNumber,
         countryCode: user.countryCode,

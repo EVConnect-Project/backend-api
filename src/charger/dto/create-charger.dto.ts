@@ -1,5 +1,15 @@
 import { IsNotEmpty, IsNumber, IsOptional, IsString, Min, Max, IsUUID, ValidateIf, IsEnum, IsArray } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { BookingMode } from '../enums/booking-mode.enum';
+
+// Transform function to parse flexible price formats (100000, 100,000, 100,000.50, etc)
+const parsePriceFormat = (value: any): number => {
+  if (value === null || value === undefined || value === '') return 0;
+  // Convert to string and remove commas, spaces, and other non-numeric characters (except decimal point)
+  const cleaned = value.toString().trim().replace(/[^0-9.]/g, '');
+  const parsed = parseFloat(cleaned);
+  return isNaN(parsed) ? 0 : parsed;
+};
 
 export class CreateChargerDto {
   @IsNumber()
@@ -22,6 +32,7 @@ export class CreateChargerDto {
   @IsNumber()
   @IsNotEmpty()
   @Min(0)
+  @Transform(({ value }) => parsePriceFormat(value))
   pricePerKwh: number;
 
   @IsString()

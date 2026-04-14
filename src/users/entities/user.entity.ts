@@ -19,6 +19,9 @@ export class UserEntity {
   @Column()
   name: string;
 
+  @Column({ nullable: true })
+  gender: string;
+
   @Column({ default: 'user' })
   role: string;
 

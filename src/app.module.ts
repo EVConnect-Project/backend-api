@@ -416,6 +416,11 @@ export class AppModule implements OnModuleInit {
       // Charger/Station city fields for display-friendly location text
       await queryRunner.query(`ALTER TABLE chargers ADD COLUMN IF NOT EXISTS city VARCHAR(120)`);
       await queryRunner.query(`ALTER TABLE charging_stations ADD COLUMN IF NOT EXISTS city VARCHAR(120)`);
+      await queryRunner.query(`ALTER TABLE IF EXISTS trip_plans ADD COLUMN IF NOT EXISTS "currentLat" DECIMAL(10,7)`);
+      await queryRunner.query(`ALTER TABLE IF EXISTS trip_plans ADD COLUMN IF NOT EXISTS "currentLng" DECIMAL(10,7)`);
+      await queryRunner.query(`ALTER TABLE IF EXISTS trip_plans ADD COLUMN IF NOT EXISTS "currentHeading" DECIMAL(6,2)`);
+      await queryRunner.query(`ALTER TABLE IF EXISTS trip_plans ADD COLUMN IF NOT EXISTS "currentSpeedKph" DECIMAL(7,2)`);
+      await queryRunner.query(`ALTER TABLE IF EXISTS trip_plans ADD COLUMN IF NOT EXISTS "lastLocationAt" TIMESTAMP`);
       
       // Create indexes
       await queryRunner.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_phone_users ON users(phone) WHERE phone IS NOT NULL`);

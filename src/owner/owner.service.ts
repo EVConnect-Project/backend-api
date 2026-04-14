@@ -124,6 +124,7 @@ export class OwnerService {
           id: charger.id,
           name: charger.name,
           address: charger.address,
+          city: charger.city,
           latitude: charger.lat,
           longitude: charger.lng,
           status: charger.status,
@@ -219,6 +220,9 @@ export class OwnerService {
     return applications.map((application) => ({
       id: application.id,
       stationName: application.stationName,
+      locationUrl: application.locationUrl,
+      lat: application.lat,
+      lng: application.lng,
       city: application.city,
       address: application.address,
       phoneNumber: application.phoneNumber,
@@ -244,9 +248,12 @@ export class OwnerService {
     userId: string,
     payload: {
       stationName?: string;
+      locationUrl?: string;
       city?: string;
       phoneNumber?: string;
       description?: string;
+      serviceCategories?: string[];
+      amenities?: string[];
       images?: string[];
       openingHours?: {
         is24Hours?: boolean;
@@ -267,6 +274,13 @@ export class OwnerService {
     if (payload.stationName != null) {
       application.stationName = payload.stationName.trim();
     }
+    if (payload.locationUrl != null && payload.locationUrl.trim().length > 0) {
+      const { lat, lng, address } = await this.parseLocationUrl(payload.locationUrl);
+      application.locationUrl = payload.locationUrl.trim();
+      application.lat = lat;
+      application.lng = lng;
+      application.address = address;
+    }
     if (payload.city != null) {
       application.city = payload.city.trim();
     }
@@ -275,6 +289,12 @@ export class OwnerService {
     }
     if (payload.description != null) {
       application.description = payload.description.trim() || null;
+    }
+    if (payload.serviceCategories != null) {
+      application.serviceCategories = payload.serviceCategories;
+    }
+    if (payload.amenities != null) {
+      application.amenities = payload.amenities;
     }
     if (payload.images != null) {
       application.images = payload.images;
@@ -289,12 +309,38 @@ export class OwnerService {
     }
 
     const saved = await this.serviceStationApplicationRepository.save(application);
+
+    const approvedStation = await this.serviceStationRepository.findOne({
+      where: { applicationId: saved.id, ownerId: userId },
+    });
+
+    if (approvedStation) {
+      approvedStation.stationName = saved.stationName;
+      approvedStation.locationUrl = saved.locationUrl;
+      approvedStation.lat = saved.lat;
+      approvedStation.lng = saved.lng;
+      approvedStation.address = saved.address;
+      approvedStation.city = saved.city;
+      approvedStation.phoneNumber = saved.phoneNumber;
+      approvedStation.description = saved.description;
+      approvedStation.serviceCategories = saved.serviceCategories ?? [];
+      approvedStation.amenities = saved.amenities ?? [];
+      approvedStation.images = saved.images ?? [];
+      approvedStation.openingHours = saved.openingHours;
+      await this.serviceStationRepository.save(approvedStation);
+    }
+
     return {
       id: saved.id,
       stationName: saved.stationName,
+      locationUrl: saved.locationUrl,
+      lat: saved.lat,
+      lng: saved.lng,
       city: saved.city,
       phoneNumber: saved.phoneNumber,
       description: saved.description,
+      serviceCategories: saved.serviceCategories ?? [],
+      amenities: saved.amenities ?? [],
       images: saved.images ?? [],
       openingHours: saved.openingHours,
       isOpen: this.computeCurrentOpenState(saved.openingHours),

@@ -1972,51 +1972,56 @@ export class AdminService {
     reviewedBy: string,
   ) {
     try {
-      const application = await this.mechanicApplicationRepository.findOne({
-        where: { id },
-        relations: ['user'],
-      });
+      const application = await this.getMechanicApplicationByIdFallback(id);
 
       if (!application) {
         throw new NotFoundException('Mechanic application not found');
       }
 
-      if (application.status !== 'pending') {
+      if ((application.status ?? '').toString().toLowerCase() !== 'pending') {
         throw new BadRequestException('Only pending applications can be approved');
       }
 
-      // Safe array handling for services
-      const services = Array.isArray(application.services) ? application.services : (application.services ? [application.services] : []);
+      const services = (application.skills ?? '')
+        .toString()
+        .split(',')
+        .map((skill) => skill.trim())
+        .filter(Boolean);
 
-      // Update application status
-      application.status = ApplicationStatus.APPROVED;
-      application.reviewedBy = reviewedBy;
-      application.reviewNotes = reviewNotes;
-      application.reviewedAt = new Date();
-      await this.mechanicApplicationRepository.save(application);
+      await this.updateMechanicApplicationReviewState(
+        id,
+        ApplicationStatus.APPROVED,
+        reviewedBy,
+        reviewNotes,
+      );
 
-      // Create mechanic record
+      const existingMechanic = await this.mechanicRepository.findOne({
+        where: { userId: application.userId },
+      });
+
       const mechanic = this.mechanicRepository.create({
+        ...(existingMechanic ?? {}),
         userId: application.userId,
-        name: application.name || '',
+        name: application.fullName || '',
         specialization: services.join(', ') || 'General Auto Repair',
         yearsOfExperience: application.yearsOfExperience || 0,
-        rating: 0,
-        completedJobs: 0,
-        available: true,
-        services: services,
-        lat: application.lat ? Number(application.lat) : 0,
-        lng: application.lng ? Number(application.lng) : 0,
-        phone: application.phone || '',
+        rating: existingMechanic?.rating ?? 0,
+        completedJobs: existingMechanic?.completedJobs ?? 0,
+        available: existingMechanic?.available ?? true,
+        services,
+        lat: application.serviceLat != null ? Number(application.serviceLat) : 0,
+        lng: application.serviceLng != null ? Number(application.serviceLng) : 0,
+        phone: application.phoneNumber || '',
         licenseNumber: application.licenseNumber,
         certifications: application.certifications,
       });
       await this.mechanicRepository.save(mechanic);
 
-      // Update user role to mechanic
-      if (application.user) {
-        application.user.role = 'mechanic';
-        await this.userRepository.save(application.user);
+      if (application.userId) {
+        await this.userRepository.update(
+          { id: application.userId },
+          { role: 'mechanic' as any },
+        );
       }
 
       return { message: 'Mechanic application approved successfully' };
@@ -2032,29 +2037,80 @@ export class AdminService {
     reviewedBy: string,
   ) {
     try {
-      const application = await this.mechanicApplicationRepository.findOne({
-        where: { id },
-      });
+      const application = await this.getMechanicApplicationByIdFallback(id);
 
       if (!application) {
         throw new NotFoundException('Mechanic application not found');
       }
 
-      if (application.status !== 'pending') {
+      if ((application.status ?? '').toString().toLowerCase() !== 'pending') {
         throw new BadRequestException('Only pending applications can be rejected');
       }
 
-      application.status = ApplicationStatus.REJECTED;
-      application.reviewedBy = reviewedBy;
-      application.reviewNotes = reviewNotes;
-      application.reviewedAt = new Date();
-      await this.mechanicApplicationRepository.save(application);
+      await this.updateMechanicApplicationReviewState(
+        id,
+        ApplicationStatus.REJECTED,
+        reviewedBy,
+        reviewNotes,
+      );
 
       return { message: 'Mechanic application rejected successfully' };
     } catch (error) {
       console.error('Error rejecting mechanic application:', error);
       throw error;
     }
+  }
+
+  private async updateMechanicApplicationReviewState(
+    applicationId: string,
+    status: ApplicationStatus,
+    reviewedBy: string,
+    reviewNotes: string,
+  ) {
+    const columnsResult: Array<{ column_name: string }> =
+      await this.mechanicApplicationRepository.query(
+        `SELECT column_name FROM information_schema.columns WHERE table_name = 'mechanic_applications'`,
+      );
+
+    const columnNames = new Set(columnsResult.map((column) => column.column_name));
+    const toIdentifier = (column: string) =>
+      /^[a-z_][a-z0-9_]*$/.test(column) ? column : `"${column}"`;
+
+    const pick = (candidates: string[]) => {
+      const found = candidates.find((candidate) => columnNames.has(candidate));
+      return found ? toIdentifier(found) : null;
+    };
+
+    const statusCol = pick(['status']);
+    if (!statusCol) {
+      throw new BadRequestException('Mechanic application status column is missing');
+    }
+
+    const reviewedByCol = pick(['reviewed_by', 'reviewedBy']);
+    const reviewNotesCol = pick(['review_notes', 'reviewNotes']);
+    const reviewedAtCol = pick(['reviewed_at', 'reviewedAt']);
+
+    const values: any[] = [status];
+    const sets = [`${statusCol} = $1`];
+
+    if (reviewedByCol) {
+      values.push(reviewedBy);
+      sets.push(`${reviewedByCol} = $${values.length}`);
+    }
+    if (reviewNotesCol) {
+      values.push(reviewNotes);
+      sets.push(`${reviewNotesCol} = $${values.length}`);
+    }
+    if (reviewedAtCol) {
+      values.push(new Date());
+      sets.push(`${reviewedAtCol} = $${values.length}`);
+    }
+
+    values.push(applicationId);
+    await this.mechanicApplicationRepository.query(
+      `UPDATE mechanic_applications SET ${sets.join(', ')} WHERE id = $${values.length}`,
+      values,
+    );
   }
 
   // Mechanics Management

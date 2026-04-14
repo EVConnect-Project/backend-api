@@ -112,9 +112,12 @@ export class OwnerController {
     @Param('id') id: string,
     @Body() body: {
       stationName?: string;
+      locationUrl?: string;
       city?: string;
       phoneNumber?: string;
       description?: string;
+      serviceCategories?: string[];
+      amenities?: string[];
       images?: string[];
       openingHours?: {
         is24Hours?: boolean;

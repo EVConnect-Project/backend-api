@@ -14,7 +14,7 @@ import { MechanicEntity } from '../mechanics/entities/mechanic.entity';
 
 @Injectable()
 export class AuthService {
-    async updateUserProfile(userId: string, data: Partial<{ name: string; phoneNumber: string; countryCode: string }>) {
+    async updateUserProfile(userId: string, data: Partial<{ name: string; phoneNumber: string; countryCode: string; gender: string }>) {
       const user = await this.userRepository.findOne({ where: { id: userId } });
       if (!user) {
         throw new UnauthorizedException('User not found');
@@ -22,6 +22,13 @@ export class AuthService {
       if (data.name) user.name = data.name;
       if (data.phoneNumber) user.phoneNumber = data.phoneNumber;
       if (data.countryCode) user.countryCode = data.countryCode;
+      if (data.gender) {
+        const normalizedGender = data.gender.toLowerCase();
+        if (normalizedGender !== 'male' && normalizedGender !== 'female') {
+          throw new BadRequestException('Gender must be male or female');
+        }
+        user.gender = normalizedGender;
+      }
       await this.userRepository.save(user);
       return user;
     }
@@ -79,6 +86,7 @@ export class AuthService {
       phoneNumber: user.phoneNumber,
       phone: user.phoneNumber,
       name: user.name,
+      gender: user.gender,
       role: user.role,
       countryCode: user.countryCode,
       isVerified: user.isVerified,
@@ -89,7 +97,7 @@ export class AuthService {
   }
 
   async register(registerDto: RegisterDto) {
-    const { phoneNumber, password, name } = registerDto;
+    const { phoneNumber, password, name, gender } = registerDto;
 
     // Check if user already exists
     const existingUser = await this.userRepository.findOne({ where: { phoneNumber } });
@@ -105,6 +113,7 @@ export class AuthService {
       phoneNumber,
       password: hashedPassword,
       name,
+      gender,
     });
 
     await this.userRepository.save(user);

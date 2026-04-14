@@ -77,6 +77,14 @@ export class TripPlannerController {
     return this.tripPlanRepository.save(trip);
   }
 
+  @Post('create')
+  async createTrip(
+    @Body(ValidationPipe) saveTripDto: SaveTripDto,
+    @Request() req,
+  ): Promise<TripPlanEntity> {
+    return this.saveTrip(saveTripDto, req);
+  }
+
   /**
    * Get user's trip history
    */
@@ -115,6 +123,50 @@ export class TripPlannerController {
     return trip;
   }
 
+  @Get('trips/:id/live')
+  async getTripLiveState(
+    @Param('id') id: string,
+    @Request() req,
+  ): Promise<{
+    tripId: string;
+    status: TripPlanEntity['status'];
+    currentLat: number | null;
+    currentLng: number | null;
+    currentHeading: number | null;
+    currentSpeedKph: number | null;
+    lastLocationAt: string | null;
+    isStale: boolean;
+    heartbeatAgeSeconds: number | null;
+  }> {
+    const trip = await this.getTripById(id, req);
+    const now = Date.now();
+    const lastLocationMs = trip.lastLocationAt ? trip.lastLocationAt.getTime() : null;
+    const heartbeatAgeSeconds = lastLocationMs != null
+      ? Math.max(0, Math.floor((now - lastLocationMs) / 1000))
+      : null;
+    const isStale = heartbeatAgeSeconds != null ? heartbeatAgeSeconds > 45 : true;
+
+    return {
+      tripId: trip.id,
+      status: trip.status,
+      currentLat: trip.currentLat != null ? Number(trip.currentLat) : null,
+      currentLng: trip.currentLng != null ? Number(trip.currentLng) : null,
+      currentHeading: trip.currentHeading != null ? Number(trip.currentHeading) : null,
+      currentSpeedKph: trip.currentSpeedKph != null ? Number(trip.currentSpeedKph) : null,
+      lastLocationAt: trip.lastLocationAt ? trip.lastLocationAt.toISOString() : null,
+      isStale,
+      heartbeatAgeSeconds,
+    };
+  }
+
+  @Get(':id')
+  async getTripByIdAlias(
+    @Param('id') id: string,
+    @Request() req,
+  ): Promise<TripPlanEntity> {
+    return this.getTripById(id, req);
+  }
+
   /**
    * Update trip status (e.g., active, completed, cancelled)
    */
@@ -134,5 +186,29 @@ export class TripPlannerController {
 
     trip.status = body.status;
     return this.tripPlanRepository.save(trip);
+  }
+
+  @Post('start')
+  async startTrip(
+    @Body() body: { tripId: string },
+    @Request() req,
+  ): Promise<TripPlanEntity> {
+    return this.updateTripStatus(
+      body.tripId,
+      { status: 'active' },
+      req,
+    );
+  }
+
+  @Post('end')
+  async endTrip(
+    @Body() body: { tripId: string },
+    @Request() req,
+  ): Promise<TripPlanEntity> {
+    return this.updateTripStatus(
+      body.tripId,
+      { status: 'completed' },
+      req,
+    );
   }
 }

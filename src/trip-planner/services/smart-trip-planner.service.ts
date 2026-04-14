@@ -1,9 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Charger } from '../../charger/entities/charger.entity';
 import { VehicleProfile } from '../../auth/entities/vehicle-profile.entity';
-import { SmartTripPlanDto, DrivingMode } from '../dto/smart-trip-plan.dto';
+import { SmartTripPlanDto, DrivingMode, RouteObjective } from '../dto/smart-trip-plan.dto';
 import { RouteAlternativeDto, ChargerStopDto, SafetyWarningDto } from '../dto/route-alternative.dto';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
@@ -15,6 +15,13 @@ interface RouteSegment {
   endLng: number;
   distance: number; // km
   duration: number; // minutes
+}
+
+interface EnergyAdjustmentContext {
+  multiplier: number;
+  weatherPenalty: number;
+  elevationPenalty: number;
+  hvacPenalty: number;
 }
 
 // Energy multipliers per driving mode
@@ -37,7 +44,10 @@ const DEFAULT_CHARGING_CURVE = [
 @Injectable()
 export class SmartTripPlannerService {
   private readonly logger = new Logger(SmartTripPlannerService.name);
-  private readonly GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY || '';
+  private readonly GOOGLE_MAPS_API_KEY =
+    process.env.GOOGLE_MAPS_API_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    'AIzaSyC9HoLlBFBxkOADOS5OXBU1nF2Rbw5os6w';
   private readonly SAFETY_BUFFER = 0.8; // 20% reserve
   private readonly CHARGER_SEARCH_RADIUS = 10; // km
   private readonly ROUTE_SEGMENT_LENGTH = 25; // km
@@ -67,7 +77,27 @@ export class SmartTripPlannerService {
     }
 
     const drivingMode = dto.drivingMode || vehicle.drivingMode || DrivingMode.NORMAL;
-    const targetBattery = dto.targetBatteryPercent || 80;
+    const routeObjective = dto.routeObjective || RouteObjective.BALANCED;
+    const currentBattery = dto.currentBatteryPercent ?? 80;
+    const targetBattery = dto.targetBatteryPercent ?? 80;
+    const minChargeAtChargingStation =
+      dto.minChargeAtChargingStationPercent ?? this.MIN_BATTERY_THRESHOLD;
+    const preferredNetworks = this.normalizeNetworkKeywords(dto.preferredNetworks);
+    const excludedNetworks = this.normalizeNetworkKeywords(dto.excludedNetworks);
+
+    if (targetBattery >= currentBattery) {
+      throw new BadRequestException(
+        `targetBatteryPercent must be less than currentBatteryPercent (${currentBattery})`,
+      );
+    }
+
+    if (targetBattery <= minChargeAtChargingStation) {
+      throw new BadRequestException(
+        `targetBatteryPercent must be greater than minChargeAtChargingStationPercent (${minChargeAtChargingStation})`,
+      );
+    }
+
+    const energyAdjustment = await this.buildEnergyAdjustmentContext(dto);
 
     // 2. Get Google Maps route alternatives (up to 3) — with waypoints
     const googleRoutes = await this.getGoogleDirections(
@@ -87,12 +117,17 @@ export class SmartTripPlannerService {
       const alternative = await this.processRoute(
         googleRoute,
         vehicle,
-        dto.currentBatteryPercent || 80,
+        currentBattery,
         dto.startLat,
         dto.startLng,
         i + 1,
         drivingMode,
+        routeObjective,
+        preferredNetworks,
+        excludedNetworks,
+        minChargeAtChargingStation,
         targetBattery,
+        energyAdjustment,
       );
 
       routeAlternatives.push(alternative);
@@ -119,6 +154,13 @@ export class SmartTripPlannerService {
     destLng: number,
     waypoints?: { lat: number; lng: number; address?: string }[],
   ): Promise<any[]> {
+    const fallback = () => this.getFallbackRoute(startLat, startLng, destLat, destLng, waypoints);
+
+    if (!this.GOOGLE_MAPS_API_KEY) {
+      this.logger.warn('GOOGLE_MAPS_API_KEY not configured. Using OSRM fallback geometry.');
+      return fallback();
+    }
+
     try {
       const url = `https://maps.googleapis.com/maps/api/directions/json`;
       const params: Record<string, string> = {
@@ -149,17 +191,40 @@ export class SmartTripPlannerService {
       }
 
       this.logger.warn(`Google Directions API returned: ${response.data.status}`);
-      return this.getFallbackRoute(startLat, startLng, destLat, destLng);
+      return fallback();
     } catch (error) {
       this.logger.error(`Error calling Google Maps API: ${error.message}`);
-      return this.getFallbackRoute(startLat, startLng, destLat, destLng);
+      return fallback();
     }
   }
 
   /**
-   * Fallback route calculation using Haversine distance
+   * Fallback route calculation with real road geometry via OSRM.
+   * Falls back to direct-line estimate only if OSRM is unavailable.
    */
-  private getFallbackRoute(startLat: number, startLng: number, destLat: number, destLng: number): any[] {
+  private async getFallbackRoute(
+    startLat: number,
+    startLng: number,
+    destLat: number,
+    destLng: number,
+    waypoints?: { lat: number; lng: number; address?: string }[],
+  ): Promise<any[]> {
+    try {
+      const routeCoords = [
+        { lat: startLat, lng: startLng },
+        ...(waypoints || []).map((wp) => ({ lat: wp.lat, lng: wp.lng })),
+        { lat: destLat, lng: destLng },
+      ];
+
+      const osrmRoutes = await this.getOsrmDirections(routeCoords);
+      if (osrmRoutes.length > 0) {
+        return osrmRoutes;
+      }
+    } catch (error) {
+      this.logger.warn(`OSRM fallback failed: ${error.message}`);
+    }
+
+    // Last-resort fallback if both Google and OSRM fail.
     const distance = this.calculateHaversineDistance(startLat, startLng, destLat, destLng);
     const avgSpeedKmh = 60;
     const durationSeconds = (distance / avgSpeedKmh) * 3600;
@@ -176,6 +241,69 @@ export class SmartTripPlannerService {
     }];
   }
 
+  private async getOsrmDirections(
+    routeCoords: Array<{ lat: number; lng: number }>,
+  ): Promise<any[]> {
+    const coordinates = routeCoords
+      .map((point) => `${point.lng},${point.lat}`)
+      .join(';');
+
+    const url =
+      `https://router.project-osrm.org/route/v1/driving/${coordinates}` +
+      `?overview=full&geometries=polyline&steps=true&alternatives=true`;
+
+    const response = await firstValueFrom(this.httpService.get(url));
+    const data = response.data;
+
+    if (!data || data.code !== 'Ok' || !Array.isArray(data.routes) || data.routes.length === 0) {
+      return [];
+    }
+
+    return data.routes.map((route, index) => {
+      const legs = Array.isArray(route.legs) ? route.legs : [];
+      const totalDistance = Number(route.distance || 0);
+      const totalDuration = Number(route.duration || 0);
+
+      return {
+        legs: legs.length > 0
+          ? legs.map((leg) => ({
+              distance: {
+                value: Number(leg.distance || 0),
+                text: `${(Number(leg.distance || 0) / 1000).toFixed(1)} km`,
+              },
+              duration: {
+                value: Number(leg.duration || 0),
+                text: `${Math.round(Number(leg.duration || 0) / 60)} mins`,
+              },
+              duration_in_traffic: {
+                value: Number(leg.duration || 0),
+                text: `${Math.round(Number(leg.duration || 0) / 60)} mins`,
+              },
+              steps: leg.steps || [],
+            }))
+          : [{
+              distance: {
+                value: totalDistance,
+                text: `${(totalDistance / 1000).toFixed(1)} km`,
+              },
+              duration: {
+                value: totalDuration,
+                text: `${Math.round(totalDuration / 60)} mins`,
+              },
+              duration_in_traffic: {
+                value: totalDuration,
+                text: `${Math.round(totalDuration / 60)} mins`,
+              },
+              steps: [],
+            }],
+        overview_polyline: {
+          points: route.geometry || '',
+        },
+        summary: route.legs?.[0]?.summary || `OSRM route ${index + 1}`,
+      };
+    });
+  }
+
   /**
    * Process a single route: add charging stops, calculate score
    */
@@ -187,7 +315,12 @@ export class SmartTripPlannerService {
     startLng: number,
     routeNumber: number,
     drivingMode: string,
+    routeObjective: RouteObjective,
+    preferredNetworks: string[],
+    excludedNetworks: string[],
+    minChargeAtChargingStationPercent: number,
     targetBatteryPercent: number,
+    energyAdjustment: EnergyAdjustmentContext,
   ): Promise<RouteAlternativeDto> {
     // Sum up all legs (for multi-waypoint routes)
     let totalDistanceM = 0;
@@ -206,7 +339,8 @@ export class SmartTripPlannerService {
     
     // Apply driving mode multiplier to energy consumption
     const modeMultiplier = DRIVING_MODE_MULTIPLIERS[drivingMode] || 1.0;
-    const adjustedConsumption = (vehicle.averageConsumption || 180) * modeMultiplier;
+    const adjustedConsumption =
+      (vehicle.averageConsumption || 180) * modeMultiplier * energyAdjustment.multiplier;
 
     // Calculate usable range with safety buffer
     const usableRange = this.calculateUsableRange(
@@ -234,6 +368,9 @@ export class SmartTripPlannerService {
         startLat,
         startLng,
         adjustedConsumption,
+        preferredNetworks,
+        excludedNetworks,
+        minChargeAtChargingStationPercent,
         targetBatteryPercent,
       );
 
@@ -265,15 +402,44 @@ export class SmartTripPlannerService {
       });
     }
 
-    // Route scoring: driving_time × 0.4 + charging_time × 0.3 + stops_penalty × 0.2 + distance × 0.1
+    if (energyAdjustment.multiplier > 1.06) {
+      const percent = Math.round((energyAdjustment.multiplier - 1) * 100);
+      safetyWarnings.push({
+        type: 'weather',
+        severity: percent >= 15 ? 'high' : 'medium',
+        message: `Energy demand is adjusted by +${percent}% due to weather/elevation/HVAC conditions.`,
+      });
+    }
+
+    // Objective-based route scoring for faster/cheaper/balanced planning behavior.
     const totalChargingCostLkr = chargingStops.reduce((sum, s) => sum + s.estimatedCostLkr, 0);
-    const routeScore = 
-      (drivingDurationMinutes * 0.4) + 
-      (totalChargingTime * 0.3) + 
-      (chargingStops.length * 20 * 0.2) +
-      (totalDistanceKm * 0.1);
+    const uncertaintyPenalty = this.calculateUncertaintyPenalty(
+      safetyWarnings,
+      chargingStops,
+      energyAdjustment,
+    );
+    const routeScore = this.calculateRouteScore(
+      routeObjective,
+      drivingDurationMinutes,
+      totalChargingTime,
+      chargingStops.length,
+      totalDistanceKm,
+      totalChargingCostLkr,
+      uncertaintyPenalty,
+    );
 
     const totalDuration = drivingDurationMinutes + totalChargingTime;
+    const etaConfidencePercent = this.calculateEtaConfidencePercent(
+      safetyWarnings,
+      chargingStops,
+      drivingDurationMinutes,
+    );
+    const socConfidencePercent = this.calculateSocConfidencePercent(
+      safetyWarnings,
+      chargingStops,
+      energyAdjustment,
+      finalBatteryPercent,
+    );
 
     return {
       routeNumber,
@@ -291,7 +457,147 @@ export class SmartTripPlannerService {
       safetyWarnings,
       drivingMode,
       arrivalBatteryPercent: Math.round(Math.max(0, finalBatteryPercent)),
+      energyAdjustmentPercent: Math.max(0, (energyAdjustment.multiplier - 1) * 100),
+      weatherPenaltyPercent: Math.max(0, energyAdjustment.weatherPenalty * 100),
+      elevationPenaltyPercent: energyAdjustment.elevationPenalty * 100,
+      hvacPenaltyPercent: Math.max(0, energyAdjustment.hvacPenalty * 100),
+      etaConfidencePercent,
+      socConfidencePercent,
     };
+  }
+
+  private calculateEtaConfidencePercent(
+    warnings: SafetyWarningDto[],
+    stops: ChargerStopDto[],
+    drivingDurationMinutes: number,
+  ): number {
+    let score = 92;
+
+    const hasTrafficWarning = warnings.some(w => w.type === 'traffic');
+    const hasAvailabilityRisk = warnings.some(w => w.type === 'charger_availability_risk');
+    const hasManyStops = warnings.some(w => w.type === 'many_stops');
+
+    if (hasTrafficWarning) score -= 8;
+    if (hasAvailabilityRisk) score -= 10;
+    if (hasManyStops) score -= 4;
+
+    score -= Math.min(stops.length * 2, 10);
+
+    if (stops.length > 0) {
+      const avgReliability =
+        stops.reduce((sum, stop) => sum + (stop.reliabilityScore || 0.0), 0) / stops.length;
+
+      if (avgReliability < 0.8) score -= 8;
+      else if (avgReliability < 0.9) score -= 4;
+      else score += 2;
+    }
+
+    if (drivingDurationMinutes > 240) score -= 3;
+    if (drivingDurationMinutes > 360) score -= 3;
+
+    return Math.max(55, Math.min(98, Math.round(score)));
+  }
+
+  private calculateSocConfidencePercent(
+    warnings: SafetyWarningDto[],
+    stops: ChargerStopDto[],
+    energyAdjustment: EnergyAdjustmentContext,
+    finalBatteryPercent: number,
+  ): number {
+    let score = 90;
+
+    const hasAvailabilityRisk = warnings.some(w => w.type === 'charger_availability_risk');
+    const lowBatteryWarning = warnings.find(w => w.type === 'low_battery');
+    const energyAdjustmentPercent = Math.max(0, (energyAdjustment.multiplier - 1) * 100);
+
+    score -= Math.min(energyAdjustmentPercent * 0.6, 18);
+    score -= Math.min(stops.length * 1.5, 8);
+
+    if (hasAvailabilityRisk) score -= 10;
+    if (lowBatteryWarning?.severity === 'high') score -= 10;
+    if (lowBatteryWarning?.severity === 'medium') score -= 6;
+
+    if (stops.length > 0) {
+      const avgReliability =
+        stops.reduce((sum, stop) => sum + (stop.reliabilityScore || 0.0), 0) / stops.length;
+
+      if (avgReliability < 0.8) score -= 8;
+      else if (avgReliability >= 0.92) score += 3;
+    }
+
+    if (finalBatteryPercent < 15) score -= 8;
+    else if (finalBatteryPercent > 30) score += 2;
+
+    return Math.max(45, Math.min(97, Math.round(score)));
+  }
+
+  private calculateRouteScore(
+    routeObjective: RouteObjective,
+    drivingDurationMinutes: number,
+    totalChargingTimeMinutes: number,
+    numberOfStops: number,
+    totalDistanceKm: number,
+    totalChargingCostLkr: number,
+    uncertaintyPenalty: number,
+  ): number {
+    const costInHundreds = totalChargingCostLkr / 100;
+    const stopPenalty = numberOfStops * 20;
+
+    switch (routeObjective) {
+      case RouteObjective.FASTEST:
+        return (
+          drivingDurationMinutes * 0.55 +
+          totalChargingTimeMinutes * 0.30 +
+          stopPenalty * 0.10 +
+          totalDistanceKm * 0.05 +
+          uncertaintyPenalty
+        );
+      case RouteObjective.CHEAPEST:
+        return (
+          costInHundreds * 0.45 +
+          totalChargingTimeMinutes * 0.20 +
+          stopPenalty * 0.20 +
+          drivingDurationMinutes * 0.10 +
+          totalDistanceKm * 0.05 +
+          uncertaintyPenalty
+        );
+      case RouteObjective.BALANCED:
+      default:
+        return (
+          drivingDurationMinutes * 0.35 +
+          totalChargingTimeMinutes * 0.25 +
+          stopPenalty * 0.20 +
+          totalDistanceKm * 0.10 +
+          costInHundreds * 0.10 +
+          uncertaintyPenalty
+        );
+    }
+  }
+
+  private calculateUncertaintyPenalty(
+    warnings: SafetyWarningDto[],
+    stops: ChargerStopDto[],
+    energyAdjustment: EnergyAdjustmentContext,
+  ): number {
+    let penalty = 0;
+
+    const hasAvailabilityRisk = warnings.some(w => w.type === 'charger_availability_risk');
+    const hasNoChargerWarning = warnings.some(w => w.type === 'no_chargers');
+
+    if (hasAvailabilityRisk) penalty += 14;
+    if (hasNoChargerWarning) penalty += 22;
+
+    const adjustmentPercent = Math.max(0, (energyAdjustment.multiplier - 1) * 100);
+    penalty += Math.min(adjustmentPercent * 0.4, 10);
+
+    if (stops.length > 0) {
+      const avgReliability =
+        stops.reduce((sum, stop) => sum + (stop.reliabilityScore || 0.0), 0) / stops.length;
+      if (avgReliability < 0.8) penalty += 10;
+      else if (avgReliability < 0.9) penalty += 5;
+    }
+
+    return penalty;
   }
 
   /**
@@ -318,6 +624,9 @@ export class SmartTripPlannerService {
     startLat: number,
     startLng: number,
     adjustedConsumption: number,
+    preferredNetworks: string[],
+    excludedNetworks: string[],
+    minChargeAtChargingStationPercent: number,
     targetBatteryPercent: number,
   ): Promise<{ stops: ChargerStopDto[], totalChargingTime: number, warnings: SafetyWarningDto[], finalBatteryPercent: number }> {
     const pathPoints = this.decodePolyline(googleRoute.overview_polyline?.points || '');
@@ -327,6 +636,8 @@ export class SmartTripPlannerService {
     let distanceTraveled = 0;
     const stops: ChargerStopDto[] = [];
     const warnings: SafetyWarningDto[] = [];
+    let preferredFallbackUsed = false;
+    let availabilityFallbackUsed = false;
 
     // Pre-load chargers within a bounding box of the route to avoid repeated DB queries
     const routeChargers = await this.loadChargersAlongRoute(pathPoints, this.CHARGER_SEARCH_RADIUS);
@@ -342,7 +653,7 @@ export class SmartTripPlannerService {
       const currentBatteryPercent = (currentBatteryKwh / vehicle.batteryCapacity) * 100;
 
       // Check if we need to charge (below minimum threshold)
-      if (currentBatteryPercent < this.MIN_BATTERY_THRESHOLD) {
+      if (currentBatteryPercent < minChargeAtChargingStationPercent) {
         // Filter pre-loaded chargers by proximity to segment endpoint
         const nearbyChargers = this.filterNearbyCompatibleChargers(
           routeChargers,
@@ -350,9 +661,21 @@ export class SmartTripPlannerService {
           segment.endLng,
           vehicle.connectorType,
           this.CHARGER_SEARCH_RADIUS,
+          excludedNetworks,
         );
 
-        if (nearbyChargers.length === 0) {
+        const usableChargers = this.filterPreferredNetworkChargers(
+          nearbyChargers,
+          preferredNetworks,
+        );
+
+        if (preferredNetworks.length > 0 &&
+            usableChargers.length === nearbyChargers.length &&
+            nearbyChargers.some(charger => !this.matchesAnyNetworkKeyword(charger, preferredNetworks))) {
+          preferredFallbackUsed = true;
+        }
+
+        if (usableChargers.length === 0) {
           warnings.push({
             type: 'no_chargers',
             severity: 'high',
@@ -361,8 +684,21 @@ export class SmartTripPlannerService {
           continue;
         }
 
-        // Select best charger
-        const bestCharger = this.selectBestCharger(nearbyChargers, segment.endLat, segment.endLng);
+        // Select best charger and keep ranked backups for resiliency.
+        const rankedChargers = this.rankChargersForStop(usableChargers, segment.endLat, segment.endLng);
+        const bestCharger = rankedChargers[0];
+        const backupChargerNames = rankedChargers
+          .slice(1)
+          .filter(charger => this.getAvailabilityQuality(charger) >= 0.5)
+          .slice(0, 2)
+          .map(charger => charger.name || 'Alternative charger');
+        const availabilityConfidencePercent = Math.round(
+          Math.max(35, Math.min(96, this.getAvailabilityQuality(bestCharger) * 100)),
+        );
+
+        if (!this.isHighAvailabilityCharger(bestCharger)) {
+          availabilityFallbackUsed = true;
+        }
 
         // Calculate charging with non-linear curve
         const targetBatteryKwh = vehicle.batteryCapacity * (targetBatteryPercent / 100);
@@ -396,6 +732,8 @@ export class SmartTripPlannerService {
           connectorType: bestCharger.connectorType || vehicle.connectorType,
           reliabilityScore: Number(bestCharger.reliabilityScore) || 0.95,
           chargerType: bestCharger.chargerType || 'dc',
+          backupChargerNames,
+          availabilityConfidencePercent,
         });
 
         // Update battery after charging
@@ -409,6 +747,22 @@ export class SmartTripPlannerService {
         type: 'many_stops',
         severity: 'medium',
         message: `This route requires ${stops.length} charging stops. Consider starting with a higher battery level or choosing a different route.`,
+      });
+    }
+
+    if (preferredFallbackUsed) {
+      warnings.push({
+        type: 'charger_preference_fallback',
+        severity: 'low',
+        message: 'Preferred charging networks were not consistently available on this route. Alternatives were used where needed.',
+      });
+    }
+
+    if (availabilityFallbackUsed) {
+      warnings.push({
+        type: 'charger_availability_risk',
+        severity: 'medium',
+        message: 'Some selected charging stops may have lower real-time availability. Consider backup stations along the route.',
       });
     }
 
@@ -476,16 +830,126 @@ export class SmartTripPlannerService {
     lng: number,
     vehicleConnector: string,
     radiusKm: number,
+    excludedNetworks: string[] = [],
   ): Charger[] {
     return allChargers.filter(charger => {
-      // Check status is available
-      if (charger.status !== 'available') return false;
+      if (this.matchesAnyNetworkKeyword(charger, excludedNetworks)) return false;
+
+      const availabilityQuality = this.getAvailabilityQuality(charger);
+      if (availabilityQuality < 0.25) return false;
 
       const distance = this.calculateHaversineDistance(lat, lng, Number(charger.lat), Number(charger.lng));
       if (distance > radiusKm) return false;
 
       return this.isConnectorCompatible(charger.connectorType, vehicleConnector);
     });
+  }
+
+  private filterPreferredNetworkChargers(
+    chargers: Charger[],
+    preferredNetworks: string[],
+  ): Charger[] {
+    if (preferredNetworks.length === 0) return chargers;
+
+    const preferred = chargers.filter(charger =>
+      this.matchesAnyNetworkKeyword(charger, preferredNetworks),
+    );
+
+    return preferred.length > 0 ? preferred : chargers;
+  }
+
+  private normalizeNetworkKeywords(values?: string[]): string[] {
+    if (!values || values.length === 0) return [];
+
+    const normalized = values
+      .map(value => value.trim().toLowerCase())
+      .filter(value => value.length > 0);
+
+    return [...new Set(normalized)];
+  }
+
+  private async buildEnergyAdjustmentContext(
+    dto: SmartTripPlanDto,
+  ): Promise<EnergyAdjustmentContext> {
+    const weather = await this.resolveWeatherInputs(dto);
+
+    let weatherPenalty = 0;
+    if (weather.temperatureC < 18) {
+      weatherPenalty += Math.min((18 - weather.temperatureC) * 0.006, 0.15);
+    } else if (weather.temperatureC > 30) {
+      weatherPenalty += Math.min((weather.temperatureC - 30) * 0.004, 0.08);
+    }
+    weatherPenalty += Math.min(weather.windSpeedKph * 0.0015, 0.08);
+
+    const elevationPenalty = this.calculateElevationPenalty(dto.elevationDeltaM);
+    const hvacPenalty = Math.min((dto.hvacLoadKw ?? 0.0) * 0.02, 0.08);
+    const multiplier = Math.max(0.85, 1 + weatherPenalty + elevationPenalty + hvacPenalty);
+
+    return {
+      multiplier,
+      weatherPenalty,
+      elevationPenalty,
+      hvacPenalty,
+    };
+  }
+
+  private calculateElevationPenalty(elevationDeltaM?: number): number {
+    if (elevationDeltaM == null) return 0;
+
+    if (elevationDeltaM > 0) {
+      return Math.min((elevationDeltaM / 1000) * 0.12, 0.12);
+    }
+
+    return -Math.min((Math.abs(elevationDeltaM) / 1000) * 0.05, 0.05);
+  }
+
+  private async resolveWeatherInputs(
+    dto: SmartTripPlanDto,
+  ): Promise<{ temperatureC: number; windSpeedKph: number }> {
+    if (dto.ambientTemperatureC != null || dto.windSpeedKph != null) {
+      return {
+        temperatureC: dto.ambientTemperatureC ?? 28,
+        windSpeedKph: dto.windSpeedKph ?? 0,
+      };
+    }
+
+    // Best-effort weather lookup from Open-Meteo at route midpoint.
+    const midLat = (dto.startLat + dto.destLat) / 2;
+    const midLng = (dto.startLng + dto.destLng) / 2;
+
+    try {
+      const url = 'https://api.open-meteo.com/v1/forecast';
+      const response = await firstValueFrom(
+        this.httpService.get(url, {
+          params: {
+            latitude: midLat,
+            longitude: midLng,
+            current: 'temperature_2m,wind_speed_10m',
+            timezone: 'auto',
+          },
+          timeout: 2500,
+        }),
+      );
+
+      const current = response.data?.current;
+      const temperatureC = Number(current?.temperature_2m);
+      const windSpeedKph = Number(current?.wind_speed_10m);
+
+      if (Number.isFinite(temperatureC) && Number.isFinite(windSpeedKph)) {
+        return { temperatureC, windSpeedKph };
+      }
+    } catch (_) {
+      // Keep defaults when live weather lookup is unavailable.
+    }
+
+    return { temperatureC: 28, windSpeedKph: 0 };
+  }
+
+  private matchesAnyNetworkKeyword(charger: Charger, keywords: string[]): boolean {
+    if (keywords.length === 0) return false;
+
+    const searchText = `${charger.name || ''} ${charger.address || ''}`.toLowerCase();
+    return keywords.some(keyword => searchText.includes(keyword));
   }
 
   /**
@@ -504,10 +968,10 @@ export class SmartTripPlannerService {
 
   /**
    * Select best charger from candidates
-   * Weighted: distance 35%, power 30%, reliability 25%, status 10%
+   * Weighted blend of distance, power, reliability, and live availability quality.
    */
-  private selectBestCharger(chargers: Charger[], targetLat: number, targetLng: number): Charger {
-    return chargers.sort((a, b) => {
+  private rankChargersForStop(chargers: Charger[], targetLat: number, targetLng: number): Charger[] {
+    return [...chargers].sort((a, b) => {
       const distA = this.calculateHaversineDistance(targetLat, targetLng, Number(a.lat), Number(a.lng));
       const distB = this.calculateHaversineDistance(targetLat, targetLng, Number(b.lat), Number(b.lng));
       
@@ -516,22 +980,63 @@ export class SmartTripPlannerService {
 
       const reliabilityA = Number(a.reliabilityScore) || 0.85;
       const reliabilityB = Number(b.reliabilityScore) || 0.85;
+      const availabilityA = this.getAvailabilityQuality(a);
+      const availabilityB = this.getAvailabilityQuality(b);
 
       // Normalized score (lower = better)
       const maxDist = Math.max(distA, distB, 1);
       const maxPower = Math.max(powerA, powerB, 1);
 
       const scoreA = 
-        (distA / maxDist) * 0.35 + 
-        (1 - powerA / maxPower) * 0.30 + 
-        (1 - reliabilityA) * 0.25;
+        (distA / maxDist) * 0.30 + 
+        (1 - powerA / maxPower) * 0.25 + 
+        (1 - reliabilityA) * 0.20 +
+        (1 - availabilityA) * 0.25;
       const scoreB = 
-        (distB / maxDist) * 0.35 + 
-        (1 - powerB / maxPower) * 0.30 + 
-        (1 - reliabilityB) * 0.25;
+        (distB / maxDist) * 0.30 + 
+        (1 - powerB / maxPower) * 0.25 + 
+        (1 - reliabilityB) * 0.20 +
+        (1 - availabilityB) * 0.25;
 
       return scoreA - scoreB;
-    })[0];
+    });
+  }
+
+  private isHighAvailabilityCharger(charger: Charger): boolean {
+    return this.getAvailabilityQuality(charger) >= 0.65;
+  }
+
+  private getAvailabilityQuality(charger: Charger): number {
+    const status = (charger.status || '').toLowerCase();
+    const currentStatus = (charger.currentStatus || '').toLowerCase();
+
+    const statusScore =
+      status === 'available' ? 1.0 :
+      status === 'in-use' ? 0.6 :
+      status === 'offline' ? 0.1 : 0.75;
+
+    const currentStatusScore =
+      currentStatus === 'available' ? 1.0 :
+      currentStatus === 'occupied' ? 0.6 :
+      currentStatus === 'reserved' ? 0.55 :
+      currentStatus === 'maintenance' ? 0.1 :
+      currentStatus === 'offline' ? 0.1 : 0.75;
+
+    const onlineScore = charger.isOnline ? 1.0 : 0.65;
+
+    const heartbeatScore = (() => {
+      if (!charger.lastHeartbeat) return 0.75;
+      const ageMs = Date.now() - new Date(charger.lastHeartbeat).getTime();
+      return ageMs <= 15 * 60 * 1000 ? 1.0 : 0.75;
+    })();
+
+    const baseScore =
+      statusScore * 0.40 +
+      currentStatusScore * 0.30 +
+      onlineScore * 0.20 +
+      heartbeatScore * 0.10;
+
+    return charger.manualOverride ? baseScore * 0.9 : baseScore;
   }
 
   /**

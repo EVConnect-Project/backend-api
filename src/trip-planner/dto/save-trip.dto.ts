@@ -54,6 +54,17 @@ class ChargingStopDto {
   @IsOptional()
   @IsString()
   chargerType?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  backupChargerNames?: string[];
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  availabilityConfidencePercent?: number;
 }
 
 class SafetyWarningDto {

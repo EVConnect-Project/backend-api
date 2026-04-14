@@ -88,6 +88,21 @@ export class TripPlanEntity {
   @Column({ type: 'int', default: 0 })
   arrivalBatteryPercent: number;
 
+  @Column({ type: 'decimal', precision: 10, scale: 7, nullable: true })
+  currentLat?: number;
+
+  @Column({ type: 'decimal', precision: 10, scale: 7, nullable: true })
+  currentLng?: number;
+
+  @Column({ type: 'decimal', precision: 6, scale: 2, nullable: true })
+  currentHeading?: number;
+
+  @Column({ type: 'decimal', precision: 7, scale: 2, nullable: true })
+  currentSpeedKph?: number;
+
+  @Column({ type: 'timestamp', nullable: true })
+  lastLocationAt?: Date;
+
   // Charging stops (JSON array for simplicity)
   @Column({ type: 'jsonb', default: '[]' })
   chargingStops: {

@@ -1,4 +1,14 @@
 import { IsString, IsArray, IsNumber, IsOptional, IsBoolean, Min, Max } from 'class-validator';
+import { Transform } from 'class-transformer';
+
+// Transform function to parse flexible price formats (100000, 100,000, 100,000.50, etc)
+const parsePriceFormat = (value: any): number => {
+  if (value === null || value === undefined || value === '') return 0;
+  // Convert to string and remove commas, spaces, and other non-numeric characters (except decimal point)
+  const cleaned = value.toString().trim().replace(/[^0-9.]/g, '');
+  const parsed = parseFloat(cleaned);
+  return isNaN(parsed) ? 0 : parsed;
+};
 
 export class CreateMechanicDto {
   @IsString()
@@ -41,5 +51,6 @@ export class CreateMechanicDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Transform(({ value }) => parsePriceFormat(value))
   pricePerHour?: number;
 }

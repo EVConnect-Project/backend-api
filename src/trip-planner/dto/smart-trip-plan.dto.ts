@@ -7,6 +7,12 @@ export enum DrivingMode {
   SPORT = 'sport',
 }
 
+export enum RouteObjective {
+  FASTEST = 'fastest',
+  BALANCED = 'balanced',
+  CHEAPEST = 'cheapest',
+}
+
 export class WaypointDto {
   @IsNumber()
   @Min(-90)
@@ -72,13 +78,51 @@ export class SmartTripPlanDto {
   @IsOptional()
   waypoints?: WaypointDto[];
 
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  preferredNetworks?: string[];
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  excludedNetworks?: string[];
+
+  @IsNumber()
+  @IsOptional()
+  ambientTemperatureC?: number;
+
+  @IsNumber()
+  @IsOptional()
+  windSpeedKph?: number;
+
+  @IsNumber()
+  @IsOptional()
+  elevationDeltaM?: number;
+
+  @IsNumber()
+  @IsOptional()
+  @Min(0)
+  @Max(5)
+  hvacLoadKw?: number;
+
   @IsEnum(DrivingMode)
   @IsOptional()
   drivingMode?: DrivingMode = DrivingMode.NORMAL;
 
+  @IsEnum(RouteObjective)
+  @IsOptional()
+  routeObjective?: RouteObjective = RouteObjective.BALANCED;
+
   @IsNumber()
   @IsOptional()
-  @Min(50)
+  @Min(0)
+  @Max(100)
+  minChargeAtChargingStationPercent?: number = 15;
+
+  @IsNumber()
+  @IsOptional()
+  @Min(0)
   @Max(100)
   targetBatteryPercent?: number = 80;
 }

@@ -152,15 +152,16 @@ export class MarketplaceService {
       throw new ForbiddenException('You can only update your own listings');
     }
 
-    // Cannot update approved or sold listings
-    if (['approved', 'sold'].includes(listing.status)) {
-      throw new BadRequestException('Cannot update approved or sold listings');
+    // Cannot update sold listings, but can update all others including approved
+    if (listing.status === 'sold') {
+      throw new BadRequestException('Cannot update sold listings');
     }
 
     // Update fields if provided
     if (dto.title !== undefined) listing.title = dto.title;
     if (dto.description !== undefined) listing.description = dto.description;
     if (dto.price !== undefined) listing.price = dto.price;
+    if (dto.category !== undefined) listing.category = dto.category;
     if (dto.condition !== undefined) listing.condition = dto.condition;
     if (dto.city !== undefined) listing.city = dto.city;
     if (dto.lat !== undefined) listing.lat = dto.lat;
@@ -172,7 +173,29 @@ export class MarketplaceService {
       listing.adminNotes = null;
     }
 
-    return this.listingRepository.save(listing);
+    // Save the listing first
+    const savedListing = await this.listingRepository.save(listing);
+
+    // Handle images update - replace existing images with new list
+    if (dto.images !== undefined && Array.isArray(dto.images)) {
+      // Remove old images from database
+      if (savedListing.images && savedListing.images.length > 0) {
+        await this.imageRepository.remove(savedListing.images);
+      }
+
+      // Create and save new images
+      if (dto.images.length > 0) {
+        const newImages = dto.images.map(imageUrl => {
+          return this.imageRepository.create({
+            imageUrl,
+            listing: { id: savedListing.id } as any,
+          });
+        });
+        await this.imageRepository.save(newImages);
+      }
+    }
+
+    return this.getListingById(savedListing.id, userId);
   }
 
   async deleteListing(id: string, userId: string): Promise<{ message: string }> {

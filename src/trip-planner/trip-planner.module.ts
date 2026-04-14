@@ -7,14 +7,17 @@ import { SmartTripPlannerService } from './services/smart-trip-planner.service';
 import { Charger } from '../charger/entities/charger.entity';
 import { VehicleProfile } from '../auth/entities/vehicle-profile.entity';
 import { TripPlanEntity } from './entities/trip-plan.entity';
+import { TripGateway } from './trip.gateway';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Charger, VehicleProfile, TripPlanEntity]),
     HttpModule,
+    AuthModule,
   ],
   controllers: [TripPlannerController],
-  providers: [TripPlannerService, SmartTripPlannerService],
+  providers: [TripPlannerService, SmartTripPlannerService, TripGateway],
   exports: [TripPlannerService, SmartTripPlannerService],
 })
 export class TripPlannerModule {}
