@@ -52,6 +52,7 @@ export class SmartTripPlannerService {
   private readonly CHARGER_SEARCH_RADIUS = 10; // km
   private readonly ROUTE_SEGMENT_LENGTH = 25; // km
   private readonly MIN_BATTERY_THRESHOLD = 15; // % minimum before charging
+  private readonly CHARGER_SOURCE = 'system_chargers';
 
   constructor(
     @InjectRepository(Charger)
@@ -61,11 +62,32 @@ export class SmartTripPlannerService {
     private readonly httpService: HttpService,
   ) {}
 
+  async resolveVehicleIdForUser(userId: string, preferredVehicleId?: string): Promise<string> {
+    if (preferredVehicleId) {
+      const requestedVehicle = await this.vehicleRepository.findOne({
+        where: { id: preferredVehicleId, userId },
+      });
+      if (requestedVehicle) return requestedVehicle.id;
+    }
+
+    const fallbackVehicle = await this.vehicleRepository.findOne({
+      where: { userId },
+      order: { createdAt: 'ASC' },
+    });
+
+    if (!fallbackVehicle) {
+      throw new BadRequestException('No vehicle found for this user. Add a vehicle profile first.');
+    }
+
+    return fallbackVehicle.id;
+  }
+
   /**
    * Main entry point: Generate 2-3 smart route alternatives
    */
   async generateSmartRoutes(dto: SmartTripPlanDto, userId: string): Promise<RouteAlternativeDto[]> {
     this.logger.log(`Generating smart routes for user ${userId}`);
+    this.logger.log(`Charging source: ${this.CHARGER_SOURCE}`);
 
     // 1. Get vehicle details
     const vehicle = await this.vehicleRepository.findOne({
@@ -187,7 +209,13 @@ export class SmartTripPlannerService {
       );
 
       if (response.data.status === 'OK') {
-        return response.data.routes;
+        const routes = (response.data.routes || []).filter(
+          (route: any) => (route?.overview_polyline?.points || '').length > 0,
+        );
+
+        if (routes.length > 0) {
+          return routes;
+        }
       }
 
       this.logger.warn(`Google Directions API returned: ${response.data.status}`);
@@ -224,21 +252,10 @@ export class SmartTripPlannerService {
       this.logger.warn(`OSRM fallback failed: ${error.message}`);
     }
 
-    // Last-resort fallback if both Google and OSRM fail.
-    const distance = this.calculateHaversineDistance(startLat, startLng, destLat, destLng);
-    const avgSpeedKmh = 60;
-    const durationSeconds = (distance / avgSpeedKmh) * 3600;
-
-    return [{
-      legs: [{
-        distance: { value: distance * 1000, text: `${distance.toFixed(1)} km` },
-        duration: { value: durationSeconds, text: `${Math.round(durationSeconds / 60)} mins` },
-        duration_in_traffic: { value: durationSeconds * 1.15, text: `${Math.round(durationSeconds * 1.15 / 60)} mins` },
-        steps: [],
-      }],
-      overview_polyline: { points: '' },
-      summary: 'Direct route (estimated)',
-    }];
+    // Hard-stop fallback: do NOT return direct-line geometry.
+    throw new BadRequestException(
+      'Unable to generate road-based route geometry at the moment. Please retry shortly.',
+    );
   }
 
   private async getOsrmDirections(
@@ -685,7 +702,12 @@ export class SmartTripPlannerService {
         }
 
         // Select best charger and keep ranked backups for resiliency.
-        const rankedChargers = this.rankChargersForStop(usableChargers, segment.endLat, segment.endLng);
+        const rankedChargers = this.rankChargersForStop(
+          usableChargers,
+          segment.endLat,
+          segment.endLng,
+          pathPoints,
+        );
         const bestCharger = rankedChargers[0];
         const backupChargerNames = rankedChargers
           .slice(1)
@@ -812,11 +834,11 @@ export class SmartTripPlannerService {
         })
         .getMany();
 
-      this.logger.log(`Loaded ${chargers.length} chargers within route bounding box`);
+      this.logger.log(`Loaded ${chargers.length} ${this.CHARGER_SOURCE} within route bounding box`);
       return chargers;
     } catch (error) {
       this.logger.error(`Error loading chargers: ${error.message}`);
-      // Fallback to loading all verified chargers
+      // Fallback to loading all verified chargers from system store.
       return this.chargerRepository.find({ where: { verified: true } });
     }
   }
@@ -970,10 +992,18 @@ export class SmartTripPlannerService {
    * Select best charger from candidates
    * Weighted blend of distance, power, reliability, and live availability quality.
    */
-  private rankChargersForStop(chargers: Charger[], targetLat: number, targetLng: number): Charger[] {
+  private rankChargersForStop(
+    chargers: Charger[],
+    targetLat: number,
+    targetLng: number,
+    routePoints: Array<{ lat: number; lng: number }>,
+  ): Charger[] {
     return [...chargers].sort((a, b) => {
       const distA = this.calculateHaversineDistance(targetLat, targetLng, Number(a.lat), Number(a.lng));
       const distB = this.calculateHaversineDistance(targetLat, targetLng, Number(b.lat), Number(b.lng));
+
+      const corridorDistA = this.distanceToRouteKm(Number(a.lat), Number(a.lng), routePoints);
+      const corridorDistB = this.distanceToRouteKm(Number(b.lat), Number(b.lng), routePoints);
       
       const powerA = Number(a.maxPowerKw) || 0;
       const powerB = Number(b.maxPowerKw) || 0;
@@ -985,21 +1015,40 @@ export class SmartTripPlannerService {
 
       // Normalized score (lower = better)
       const maxDist = Math.max(distA, distB, 1);
+      const maxCorridorDist = Math.max(corridorDistA, corridorDistB, 1);
       const maxPower = Math.max(powerA, powerB, 1);
 
       const scoreA = 
-        (distA / maxDist) * 0.30 + 
-        (1 - powerA / maxPower) * 0.25 + 
-        (1 - reliabilityA) * 0.20 +
-        (1 - availabilityA) * 0.25;
+        (distA / maxDist) * 0.20 +
+        (corridorDistA / maxCorridorDist) * 0.20 +
+        (1 - powerA / maxPower) * 0.25 +
+        (1 - reliabilityA) * 0.15 +
+        (1 - availabilityA) * 0.20;
       const scoreB = 
-        (distB / maxDist) * 0.30 + 
-        (1 - powerB / maxPower) * 0.25 + 
-        (1 - reliabilityB) * 0.20 +
-        (1 - availabilityB) * 0.25;
+        (distB / maxDist) * 0.20 +
+        (corridorDistB / maxCorridorDist) * 0.20 +
+        (1 - powerB / maxPower) * 0.25 +
+        (1 - reliabilityB) * 0.15 +
+        (1 - availabilityB) * 0.20;
 
       return scoreA - scoreB;
     });
+  }
+
+  private distanceToRouteKm(
+    lat: number,
+    lng: number,
+    routePoints: Array<{ lat: number; lng: number }>,
+  ): number {
+    if (!routePoints.length) return 999;
+
+    let minDist = Number.POSITIVE_INFINITY;
+    for (const point of routePoints) {
+      const dist = this.calculateHaversineDistance(lat, lng, point.lat, point.lng);
+      if (dist < minDist) minDist = dist;
+    }
+
+    return Number.isFinite(minDist) ? minDist : 999;
   }
 
   private isHighAvailabilityCharger(charger: Charger): boolean {

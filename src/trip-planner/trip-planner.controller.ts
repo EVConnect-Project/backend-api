@@ -1,10 +1,11 @@
-import { Controller, Post, Get, Patch, Body, Param, Query, UseGuards, ValidationPipe, Request, NotFoundException } from '@nestjs/common';
+import { Controller, Post, Get, Patch, Body, Param, Query, UseGuards, ValidationPipe, Request, NotFoundException, BadRequestException } from '@nestjs/common';
 import { TripPlannerService } from './trip-planner.service';
 import { SmartTripPlannerService } from './services/smart-trip-planner.service';
 import { PlanRouteDto } from './dto/plan-route.dto';
 import { RouteResponseDto } from './dto/route-response.dto';
-import { SmartTripPlanDto } from './dto/smart-trip-plan.dto';
+import { SmartTripPlanDto, DrivingMode, RouteObjective } from './dto/smart-trip-plan.dto';
 import { RouteAlternativeDto } from './dto/route-alternative.dto';
+import { RoutesResponseDto } from './dto/routes-response.dto';
 import { SaveTripDto } from './dto/save-trip.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -38,6 +39,153 @@ export class TripPlannerController {
       smartTripPlanDto,
       req.user.userId,
     );
+  }
+
+  @Get('routes')
+  async getRoutes(
+    @Query('origin') origin: string,
+    @Query('destination') destination: string,
+    @Query('vehicleId') vehicleId: string | undefined,
+    @Query('currentBatteryPercent') currentBatteryPercent: string | undefined,
+    @Query('waypoints') waypoints: string | undefined,
+    @Query('preferredNetworks') preferredNetworks: string | undefined,
+    @Query('excludedNetworks') excludedNetworks: string | undefined,
+    @Query('ambientTemperatureC') ambientTemperatureC: string | undefined,
+    @Query('windSpeedKph') windSpeedKph: string | undefined,
+    @Query('elevationDeltaM') elevationDeltaM: string | undefined,
+    @Query('hvacLoadKw') hvacLoadKw: string | undefined,
+    @Query('drivingMode') drivingMode: string | undefined,
+    @Query('routeObjective') routeObjective: string | undefined,
+    @Query('minChargeAtChargingStationPercent') minChargeAtChargingStationPercent: string | undefined,
+    @Query('targetBatteryPercent') targetBatteryPercent: string | undefined,
+    @Query('startAddress') startAddress: string | undefined,
+    @Query('destAddress') destAddress: string | undefined,
+    @Request() req,
+  ): Promise<RoutesResponseDto> {
+    const parseLatLng = (value: string, field: string): { lat: number; lng: number } => {
+      const [latRaw, lngRaw] = (value || '').split(',');
+      const lat = Number(latRaw);
+      const lng = Number(lngRaw);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        throw new BadRequestException(`Invalid ${field}. Expected format: lat,lng`);
+      }
+      return { lat, lng };
+    };
+
+    const originPoint = parseLatLng(origin, 'origin');
+    const destinationPoint = parseLatLng(destination, 'destination');
+    const parseOptionalNumber = (value?: string): number | undefined => {
+      if (value == null || value.trim().length === 0) return undefined;
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : undefined;
+    };
+    const parseCsv = (value?: string): string[] | undefined => {
+      if (!value || value.trim().length === 0) return undefined;
+      const items = value
+        .split(',')
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0);
+      return items.length > 0 ? items : undefined;
+    };
+    const parseWaypoints = (value?: string): Array<{ lat: number; lng: number; address?: string }> | undefined => {
+      if (!value || value.trim().length === 0) return undefined;
+
+      const parsed = value
+        .split('|')
+        .map((token) => token.trim())
+        .filter((token) => token.length > 0)
+        .map((token) => {
+          const [latRaw, lngRaw] = token.split(',');
+          const lat = Number(latRaw);
+          const lng = Number(lngRaw);
+          if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+          return { lat, lng };
+        })
+        .filter((point): point is { lat: number; lng: number } => point != null);
+
+      return parsed.length > 0 ? parsed : undefined;
+    };
+    const parseDrivingMode = (value?: string): DrivingMode => {
+      if (!value) return DrivingMode.NORMAL;
+      const normalized = value.toLowerCase();
+      if (normalized === DrivingMode.ECO) return DrivingMode.ECO;
+      if (normalized === DrivingMode.SPORT) return DrivingMode.SPORT;
+      return DrivingMode.NORMAL;
+    };
+    const parseRouteObjective = (value?: string): RouteObjective => {
+      if (!value) return RouteObjective.BALANCED;
+      const normalized = value.toLowerCase();
+      if (normalized === RouteObjective.FASTEST) return RouteObjective.FASTEST;
+      if (normalized === RouteObjective.CHEAPEST) return RouteObjective.CHEAPEST;
+      return RouteObjective.BALANCED;
+    };
+
+    const resolvedVehicleId = await this.smartTripPlannerService.resolveVehicleIdForUser(
+      req.user.userId,
+      vehicleId,
+    );
+
+    const battery = parseOptionalNumber(currentBatteryPercent);
+    const smartTripRequest: SmartTripPlanDto = {
+      startLat: originPoint.lat,
+      startLng: originPoint.lng,
+      destLat: destinationPoint.lat,
+      destLng: destinationPoint.lng,
+      vehicleId: resolvedVehicleId,
+      currentBatteryPercent: battery ?? 80,
+      startAddress,
+      destAddress,
+      waypoints: parseWaypoints(waypoints),
+      preferredNetworks: parseCsv(preferredNetworks),
+      excludedNetworks: parseCsv(excludedNetworks),
+      ambientTemperatureC: parseOptionalNumber(ambientTemperatureC),
+      windSpeedKph: parseOptionalNumber(windSpeedKph),
+      elevationDeltaM: parseOptionalNumber(elevationDeltaM),
+      hvacLoadKw: parseOptionalNumber(hvacLoadKw),
+      drivingMode: parseDrivingMode(drivingMode),
+      routeObjective: parseRouteObjective(routeObjective),
+      minChargeAtChargingStationPercent: parseOptionalNumber(minChargeAtChargingStationPercent) ?? 15,
+      targetBatteryPercent: parseOptionalNumber(targetBatteryPercent) ?? 70,
+    };
+
+    const alternatives = await this.smartTripPlannerService.generateSmartRoutes(
+      smartTripRequest,
+      req.user.userId,
+    );
+
+    const best = alternatives.find((route) => route.isRecommended) ?? alternatives[0];
+    const bestRouteId = best ? String(best.routeNumber) : null;
+
+    return {
+      routes: alternatives.map((route) => ({
+        id: String(route.routeNumber),
+        routeNumber: route.routeNumber,
+        distance: `${route.totalDistanceKm.toFixed(1)} km`,
+        duration: `${route.totalDurationMinutes} min`,
+        polyline: route.routePolyline,
+        chargingStops: route.chargingStops,
+        totalDistanceKm: route.totalDistanceKm,
+        totalDurationMinutes: route.totalDurationMinutes,
+        drivingDurationMinutes: route.drivingDurationMinutes,
+        totalChargingTimeMinutes: route.totalChargingTimeMinutes,
+        totalChargingCostLkr: route.totalChargingCostLkr,
+        estimatedArrivalTime: route.estimatedArrivalTime,
+        routeScore: route.routeScore,
+        routePolyline: route.routePolyline,
+        routeSummary: route.routeSummary,
+        isRecommended: route.isRecommended,
+        safetyWarnings: route.safetyWarnings,
+        drivingMode: route.drivingMode,
+        arrivalBatteryPercent: route.arrivalBatteryPercent,
+        etaConfidencePercent: route.etaConfidencePercent,
+        socConfidencePercent: route.socConfidencePercent,
+        energyAdjustmentPercent: route.energyAdjustmentPercent,
+        weatherPenaltyPercent: route.weatherPenaltyPercent,
+        elevationPenaltyPercent: route.elevationPenaltyPercent,
+        hvacPenaltyPercent: route.hvacPenaltyPercent,
+      })),
+      bestRouteId,
+    };
   }
 
   /**

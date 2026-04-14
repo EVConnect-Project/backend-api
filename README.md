@@ -57,6 +57,65 @@ $ npm run test:e2e
 $ npm run test:cov
 ```
 
+## Trip Planner Routes API
+
+### Endpoint
+
+`GET /trip-planner/routes`
+
+### Required Query Params
+
+- `origin`: `lat,lng`
+- `destination`: `lat,lng`
+
+### Optional Query Params
+
+- `vehicleId`
+- `currentBatteryPercent`
+- `waypoints`: `lat,lng|lat,lng|...`
+- `startAddress`
+- `destAddress`
+- `preferredNetworks`: comma-separated keywords
+- `excludedNetworks`: comma-separated keywords
+- `ambientTemperatureC`
+- `windSpeedKph`
+- `elevationDeltaM`
+- `hvacLoadKw`
+- `drivingMode`: `eco|normal|sport`
+- `routeObjective`: `fastest|balanced|cheapest`
+- `minChargeAtChargingStationPercent`
+- `targetBatteryPercent`
+
+### Example
+
+```bash
+curl --request GET \
+  'http://localhost:3000/trip-planner/routes?origin=6.9271,79.8612&destination=7.2906,80.6337&currentBatteryPercent=78&drivingMode=normal&routeObjective=balanced&preferredNetworks=chargefast,evpoint&waypoints=6.98,79.9|7.1,80.2' \
+  --header 'Authorization: Bearer <JWT>'
+```
+
+### Response Shape
+
+```json
+{
+  "routes": [
+    {
+      "id": "1",
+      "distance": "48.9 km",
+      "duration": "92 min",
+      "polyline": "<encoded_polyline>",
+      "chargingStops": []
+    }
+  ],
+  "bestRouteId": "1"
+}
+```
+
+### Notes
+
+- Charging stops are sourced from system chargers (`chargers` table), not external Open Charge Map lookups.
+- Route geometry must be road-based (Google/OSRM polyline); direct straight-line fallback is disabled.
+
 ## Deployment
 
 When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
