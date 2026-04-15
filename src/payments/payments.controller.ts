@@ -22,6 +22,7 @@ import { CreatePaymentDto } from './dto/create-payment.dto';
 import { CreatePaymentMethodDto } from './dto/create-payment-method.dto';
 import { UpdatePaymentMethodDto } from './dto/update-payment-method.dto';
 import { UpdatePaymentSettingsDto } from './dto/update-payment-settings.dto';
+import { ConfirmCardSetupDto } from './dto/confirm-card-setup.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('payments')
@@ -69,6 +70,21 @@ export class PaymentsController {
   @UseGuards(JwtAuthGuard)
   findDefaultPaymentMethod(@Request() req) {
     return this.paymentMethodsService.findDefault(req.user.userId);
+  }
+
+  @Post('methods/setup-intent')
+  @UseGuards(JwtAuthGuard)
+  createCardSetupIntent(@Request() req) {
+    return this.paymentsService.createCardSetupIntent(req.user.userId);
+  }
+
+  @Post('methods/confirm')
+  @UseGuards(JwtAuthGuard)
+  confirmCardSetup(
+    @Body(ValidationPipe) dto: ConfirmCardSetupDto,
+    @Request() req,
+  ) {
+    return this.paymentsService.confirmCardSetup(req.user.userId, dto);
   }
 
   @Get('methods/:id')

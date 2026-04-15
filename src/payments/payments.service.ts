@@ -2,11 +2,14 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
-import { createHash } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { PaymentEntity } from './entities/payment.entity';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { BookingEntity } from '../bookings/entities/booking.entity';
 import { NotificationsService } from '../notifications/notifications.service';
+import { PaymentMethodsService } from './payment-methods.service';
+import { ConfirmCardSetupDto } from './dto/confirm-card-setup.dto';
+import { PaymentMethodType } from './entities/payment-method.entity';
 
 @Injectable()
 export class PaymentsService {
@@ -24,6 +27,7 @@ export class PaymentsService {
     private bookingRepository: Repository<BookingEntity>,
     private configService: ConfigService,
     private notificationsService: NotificationsService,
+    private paymentMethodsService: PaymentMethodsService,
   ) {
     this.payhereBaseUrl = this.configService.get<string>('PAYHERE_BASE_URL') || 'https://sandbox.payhere.lk';
     this.payhereMerchantId = this.configService.get<string>('PAYHERE_MERCHANT_ID') || 'MERCHANT_ID';
@@ -31,6 +35,81 @@ export class PaymentsService {
     this.payhereNotifyUrl = this.configService.get<string>('PAYHERE_NOTIFY_URL') || 'http://localhost:4000/api/payments/webhook';
     this.payhereReturnUrl = this.configService.get<string>('PAYHERE_RETURN_URL') || 'http://localhost:3000/payment/success';
     this.payhereCancelUrl = this.configService.get<string>('PAYHERE_CANCEL_URL') || 'http://localhost:3000/payment/cancel';
+  }
+
+  private generateCardSetupSignature(
+    setupId: string,
+    userId: string,
+    expiresAt: number,
+  ): string {
+    const payload = `${setupId}:${userId}:${expiresAt}:${this.payhereMerchantSecret}`;
+    return createHash('md5').update(payload).digest('hex').toUpperCase();
+  }
+
+  async createCardSetupIntent(userId: string): Promise<{
+    setupId: string;
+    expiresAt: number;
+    signature: string;
+    provider: 'payhere';
+    hostedUrl: string | null;
+    callbackUrl: string;
+  }> {
+    const setupId = randomUUID();
+    const expiresAt = Date.now() + 15 * 60 * 1000;
+    const signature = this.generateCardSetupSignature(setupId, userId, expiresAt);
+    const callbackUrl =
+      this.configService.get<string>('MOBILE_CARD_SETUP_CALLBACK_URL') ||
+      'evconnect://wallet/card-setup';
+
+    const hostedSetupBaseUrl = this.configService.get<string>('PAYHERE_CARD_SETUP_URL');
+    let hostedUrl: string | null = null;
+    if (hostedSetupBaseUrl) {
+      const params = new URLSearchParams({
+        setupId,
+        expiresAt: String(expiresAt),
+        signature,
+        callbackUrl,
+      });
+      hostedUrl = `${hostedSetupBaseUrl}?${params.toString()}`;
+    }
+
+    return {
+      setupId,
+      expiresAt,
+      signature,
+      provider: 'payhere',
+      hostedUrl,
+      callbackUrl,
+    };
+  }
+
+  async confirmCardSetup(
+    userId: string,
+    dto: ConfirmCardSetupDto,
+  ) {
+    const now = Date.now();
+    if (dto.expiresAt <= now) {
+      throw new BadRequestException('Card setup session expired');
+    }
+
+    const expected = this.generateCardSetupSignature(dto.setupId, userId, dto.expiresAt);
+    if (expected !== dto.signature) {
+      throw new BadRequestException('Invalid card setup signature');
+    }
+
+    return this.paymentMethodsService.create(
+      {
+        type: PaymentMethodType.CARD,
+        cardBrand: dto.cardBrand,
+        lastFour: dto.lastFour,
+        expiryMonth: dto.expiryMonth,
+        expiryYear: dto.expiryYear,
+        cardholderName: dto.cardholderName,
+        token: dto.token,
+        isDefault: dto.isDefault,
+      },
+      userId,
+    );
   }
 
   private generatePayHereHash(

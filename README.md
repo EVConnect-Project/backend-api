@@ -57,6 +57,27 @@ $ npm run test:e2e
 $ npm run test:cov
 ```
 
+## Wallet Card Setup Configuration
+
+To enable hosted card tokenization (wallet-only add card flow), configure these environment variables:
+
+- `PAYHERE_CARD_SETUP_URL`: Hosted card setup page URL provided by your payment gateway/tokenization service.
+- `MOBILE_CARD_SETUP_CALLBACK_URL`: Callback URL used by the mobile app to capture tokenized card details. Default: `evconnect://wallet/card-setup`.
+
+The hosted setup page should redirect to the callback URL with query parameters:
+
+- `token`
+- `lastFour`
+- `expiryMonth`
+- `expiryYear`
+- `cardBrand` (optional)
+
+Example callback:
+
+`evconnect://wallet/card-setup?token=tok_xxx&lastFour=4242&expiryMonth=12&expiryYear=29&cardBrand=Visa`
+
+If `PAYHERE_CARD_SETUP_URL` is not configured, the app falls back to the local manual entry flow.
+
 ## Trip Planner Routes API
 
 ### Endpoint
