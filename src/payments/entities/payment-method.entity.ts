@@ -54,6 +54,16 @@ export class PaymentMethodEntity {
   isDefault: boolean;
 
   @Column({ type: 'jsonb', nullable: true })
+  billingAddress: {
+    line1?: string;
+    line2?: string;
+    city?: string;
+    state?: string;
+    postalCode?: string;
+    country?: string;
+  };
+
+  @Column({ type: 'jsonb', nullable: true })
   metadata: any; // Additional details as JSON (can store billing address here)
 
   @CreateDateColumn()

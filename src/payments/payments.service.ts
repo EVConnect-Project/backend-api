@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
-import { createHash, randomUUID } from 'crypto';
+import { createHash, randomUUID, timingSafeEqual } from 'crypto';
 import { PaymentEntity } from './entities/payment.entity';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { BookingEntity } from '../bookings/entities/booking.entity';
@@ -29,12 +29,18 @@ export class PaymentsService {
     private notificationsService: NotificationsService,
     private paymentMethodsService: PaymentMethodsService,
   ) {
-    this.payhereBaseUrl = this.configService.get<string>('PAYHERE_BASE_URL') || 'https://sandbox.payhere.lk';
-    this.payhereMerchantId = this.configService.get<string>('PAYHERE_MERCHANT_ID') || 'MERCHANT_ID';
-    this.payhereMerchantSecret = this.configService.get<string>('PAYHERE_MERCHANT_SECRET') || 'MERCHANT_SECRET';
-    this.payhereNotifyUrl = this.configService.get<string>('PAYHERE_NOTIFY_URL') || 'http://localhost:4000/api/payments/webhook';
-    this.payhereReturnUrl = this.configService.get<string>('PAYHERE_RETURN_URL') || 'http://localhost:3000/payment/success';
-    this.payhereCancelUrl = this.configService.get<string>('PAYHERE_CANCEL_URL') || 'http://localhost:3000/payment/cancel';
+    this.payhereBaseUrl =
+      (this.configService.get<string>('PAYHERE_BASE_URL') || 'https://sandbox.payhere.lk').trim();
+    this.payhereMerchantId =
+      (this.configService.get<string>('PAYHERE_MERCHANT_ID') || 'MERCHANT_ID').trim();
+    this.payhereMerchantSecret =
+      (this.configService.get<string>('PAYHERE_MERCHANT_SECRET') || 'MERCHANT_SECRET').trim();
+    this.payhereNotifyUrl =
+      (this.configService.get<string>('PAYHERE_NOTIFY_URL') || 'http://localhost:4000/api/payments/webhook').trim();
+    this.payhereReturnUrl =
+      (this.configService.get<string>('PAYHERE_RETURN_URL') || 'http://localhost:3000/payment/success').trim();
+    this.payhereCancelUrl =
+      (this.configService.get<string>('PAYHERE_CANCEL_URL') || 'http://localhost:3000/payment/cancel').trim();
   }
 
   private generateCardSetupSignature(
@@ -118,10 +124,15 @@ export class PaymentsService {
     amount: string,
     currency: string,
   ): string {
-    const amountFormatted = parseFloat(amount).toFixed(2);
-    const hashString = `${merchantId}${orderId}${amountFormatted}${currency}`;
+    const amountFormatted = Number(amount).toFixed(2);
+    const currencyCode = currency.toUpperCase();
+    const merchantSecretHash = createHash('md5')
+      .update(this.payhereMerchantSecret)
+      .digest('hex')
+      .toUpperCase();
+
     const hash = createHash('md5')
-      .update(hashString + this.payhereMerchantSecret)
+      .update(`${merchantId}${orderId}${amountFormatted}${currencyCode}${merchantSecretHash}`)
       .digest('hex')
       .toUpperCase();
     return hash;
@@ -161,7 +172,7 @@ export class PaymentsService {
     try {
       const orderId = savedPayment.id;
       const currency = 'LKR';
-      const amountStr = amount.toString();
+      const amountStr = Number(amount).toFixed(2);
 
       const hash = this.generatePayHereHash(
         this.payhereMerchantId,
@@ -216,13 +227,22 @@ export class PaymentsService {
         payment_id,
       } = payload;
 
-      const merchantSecret = this.payhereMerchantSecret;
-      const localHash = createHash('md5')
-        .update(merchant_id + order_id + payhere_amount + payhere_currency + status_code + merchantSecret)
+      const merchantSecretHash = createHash('md5')
+        .update(this.payhereMerchantSecret)
         .digest('hex')
         .toUpperCase();
 
-      if (localHash !== md5sig) {
+      const localHash = createHash('md5')
+        .update(
+          `${merchant_id}${order_id}${payhere_amount}${String(payhere_currency).toUpperCase()}${status_code}${merchantSecretHash}`,
+        )
+        .digest('hex')
+        .toUpperCase();
+
+      const incoming = Buffer.from(String(md5sig).toUpperCase());
+      const expected = Buffer.from(localHash);
+
+      if (incoming.length !== expected.length || !timingSafeEqual(incoming, expected)) {
         console.error('PayHere hash verification failed');
         throw new BadRequestException('Invalid webhook signature');
       }

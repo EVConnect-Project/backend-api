@@ -69,22 +69,22 @@ export class WalletService {
     );
 
     this.payhereBaseUrl =
-      this.configService.get<string>('PAYHERE_BASE_URL') ||
-      'https://sandbox.payhere.lk';
+      (this.configService.get<string>('PAYHERE_BASE_URL') ||
+        'https://sandbox.payhere.lk').trim();
     this.payhereMerchantId =
-      this.configService.get<string>('PAYHERE_MERCHANT_ID') || 'MERCHANT_ID';
+      (this.configService.get<string>('PAYHERE_MERCHANT_ID') || 'MERCHANT_ID').trim();
     this.payhereMerchantSecret =
-      this.configService.get<string>('PAYHERE_MERCHANT_SECRET') ||
-      'MERCHANT_SECRET';
+      (this.configService.get<string>('PAYHERE_MERCHANT_SECRET') ||
+        'MERCHANT_SECRET').trim();
     this.payhereNotifyUrl =
-      this.configService.get<string>('PAYHERE_NOTIFY_URL') ||
-      'http://localhost:3001/api/payment/webhook';
+      (this.configService.get<string>('PAYHERE_NOTIFY_URL') ||
+        'http://localhost:4000/api/payment/webhook').trim();
     this.payhereReturnUrl =
-      this.configService.get<string>('PAYHERE_RETURN_URL') ||
-      'http://localhost:3000/payment/success';
+      (this.configService.get<string>('PAYHERE_RETURN_URL') ||
+        'http://localhost:3000/payment/success').trim();
     this.payhereCancelUrl =
-      this.configService.get<string>('PAYHERE_CANCEL_URL') ||
-      'http://localhost:3000/payment/cancel';
+      (this.configService.get<string>('PAYHERE_CANCEL_URL') ||
+        'http://localhost:3000/payment/cancel').trim();
   }
 
   async getWallet(userId: string) {
@@ -160,7 +160,10 @@ export class WalletService {
     const lastName = restNames.join(' ');
     const rawPhone = String(user.phoneNumber || '').trim();
     const sanitizedPhone = rawPhone.replace(/\D/g, '');
-    const userEmail = `user-${user.id}@evrs.local`;
+    const rawEmail =
+      typeof (user as any).email === 'string' ? String((user as any).email).trim() : '';
+    const hasUsableEmail = rawEmail.includes('@') && rawEmail.includes('.');
+    const userEmail = hasUsableEmail ? rawEmail : 'no-reply@evconnect.lk';
 
     const transaction = await this.walletTransactionRepository.save(
       this.walletTransactionRepository.create({
@@ -186,7 +189,7 @@ export class WalletService {
       currency: wallet.currency,
       amount: amount.toFixed(2),
       first_name: firstName || 'EVRS',
-      last_name: lastName,
+      last_name: lastName || 'Customer',
       email: userEmail,
       phone: sanitizedPhone || '0770000000',
       address: 'Sri Lanka',
