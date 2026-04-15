@@ -34,6 +34,7 @@ import { StationModule } from './station/station.module';
 import { DirectionsModule } from './directions/directions.module';
 import { LeadsModule } from './leads/leads.module';
 import { ServiceProvidersModule } from './service-providers/service-providers.module';
+import { WalletModule } from './wallet/wallet.module';
 
 @Module({
   imports: [
@@ -87,6 +88,7 @@ import { ServiceProvidersModule } from './service-providers/service-providers.mo
     DirectionsModule,
     LeadsModule,
     ServiceProvidersModule,
+    WalletModule,
   ],
   controllers: [AppController],
   providers: [AppService],
