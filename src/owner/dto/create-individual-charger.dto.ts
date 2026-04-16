@@ -56,4 +56,9 @@ export class CreateIndividualChargerDto {
   @IsArray()
   @IsOptional()
   images?: string[];
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  amenities?: string[];
 }

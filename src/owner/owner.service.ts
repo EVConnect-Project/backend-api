@@ -454,6 +454,19 @@ export class OwnerService {
     return nowMinutes >= open || nowMinutes <= close;
   }
 
+  private mapAmenitiesToFlags(amenities?: string[]): Record<string, boolean> | null {
+    if (!amenities || amenities.length === 0) return null;
+
+    const flags: Record<string, boolean> = {};
+    for (const amenity of amenities) {
+      const key = amenity?.trim();
+      if (!key) continue;
+      flags[key] = true;
+    }
+
+    return Object.keys(flags).length > 0 ? flags : null;
+  }
+
   /**
    * Get specific charger details (ownership verification)
    */
@@ -969,6 +982,7 @@ export class OwnerService {
         bookingMode: (dto.bookingMode as BookingMode) || BookingMode.HYBRID,
         openingHours: dto.openingHours || { is24Hours: true, schedule: {} },
         images: dto.images || [],
+        amenities: this.mapAmenitiesToFlags(dto.amenities),
         verified: false,
         status: 'offline',
       });        console.log('Saving charger to database...');
@@ -1221,7 +1235,9 @@ export class OwnerService {
         }
       }
       
-      const extractCoordinates = (input: string): { lat: number; lng: number } | null => {
+      const extractCoordinates = (
+        input: string,
+      ): { lat: number; lng: number; source: string } | null => {
         const parsePair = (latRaw: string, lngRaw: string): { lat: number; lng: number } | null => {
           const lat = parseFloat(latRaw);
           const lng = parseFloat(lngRaw);
@@ -1244,43 +1260,54 @@ export class OwnerService {
         const plain = input.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
         if (plain) {
           const parsed = parsePair(plain[1], plain[2]);
-          if (parsed) return parsed;
+          if (parsed) return { ...parsed, source: 'plain_coordinates' };
         }
 
-        // 2) /@lat,lng pattern
-        const atMatch = input.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
-        if (atMatch) {
-          const parsed = parsePair(atMatch[1], atMatch[2]);
-          if (parsed) return parsed;
-        }
-
-        // 3) Google Maps !3dLAT!4dLNG pattern
-        const bangMatch = input.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/);
-        if (bangMatch) {
-          const parsed = parsePair(bangMatch[1], bangMatch[2]);
-          if (parsed) return parsed;
-        }
-
-        // 4) Query params that can contain coordinates.
+        // 2) Query params usually represent explicit destination/search coordinates.
         try {
           const uri = new URL(input);
-          const candidateKeys = ['q', 'll', 'query', 'destination', 'daddr'];
+          const candidateKeys = ['destination', 'daddr', 'q', 'll', 'query'];
           for (const key of candidateKeys) {
             const value = uri.searchParams.get(key);
             if (!value) continue;
             const parsed = parseFromText(value);
-            if (parsed) return parsed;
+            if (parsed) return { ...parsed, source: `query_param:${key}` };
           }
         } catch {
           // Not a full URL; ignore and continue with explicit patterns only.
         }
 
-        // 5) Encoded query fragments in raw text.
-        const queryLike = input.match(/[?&](?:q|ll|query|destination|daddr)=([^&]+)/i);
+        // 3) Google Maps !3dLAT!4dLNG pattern (usually place pin location).
+        const bangMatch = input.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/);
+        if (bangMatch) {
+          const parsed = parsePair(bangMatch[1], bangMatch[2]);
+          if (parsed) return { ...parsed, source: 'bang_3d_4d' };
+        }
+
+        // 4) Encoded query fragments in raw text.
+        const queryLike = input.match(
+          /[?&](?:destination|daddr|q|ll|query)=([^&]+)/i,
+        );
         if (queryLike?.[1]) {
           const decoded = decodeURIComponent(queryLike[1]);
           const parsed = parseFromText(decoded);
-          if (parsed) return parsed;
+          if (parsed) return { ...parsed, source: 'raw_query_fragment' };
+        }
+
+        // 5) /@lat,lng pattern is usually viewport center and may be less accurate.
+        const atMatch = input.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
+        if (atMatch) {
+          const parsed = parsePair(atMatch[1], atMatch[2]);
+          if (parsed) return { ...parsed, source: 'viewport_at' };
+        }
+
+        // 6) Path coordinates such as /place/6.9271,79.8612 or /search/6.9271,79.8612
+        const pathMatch = input.match(
+          /\/(?:place|search)\/(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/,
+        );
+        if (pathMatch) {
+          const parsed = parsePair(pathMatch[1], pathMatch[2]);
+          if (parsed) return { ...parsed, source: 'path_place_search' };
         }
 
         return null;
@@ -1289,7 +1316,11 @@ export class OwnerService {
       const coordinates = extractCoordinates(urlToCheck);
 
       if (coordinates) {
-        console.log('✅ Extracted coordinates:', coordinates);
+        console.log('✅ Extracted coordinates:', {
+          lat: coordinates.lat,
+          lng: coordinates.lng,
+          source: coordinates.source,
+        });
         return {
           lat: coordinates.lat,
           lng: coordinates.lng,

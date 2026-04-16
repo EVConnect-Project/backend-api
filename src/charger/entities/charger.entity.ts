@@ -209,14 +209,7 @@ export class Charger {
     nullable: true,
     default: null,
   })
-  amenities: {
-    coffee?: boolean;
-    restaurant?: boolean;
-    parking?: boolean;
-    restroom?: boolean;
-    wifi?: boolean;
-    service?: boolean;
-  } | null;
+  amenities: Record<string, boolean> | null;
 
   // Trip Planning Fields
   @Column({ type: "text", nullable: true, name: "google_map_url" })

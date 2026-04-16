@@ -1,7 +1,7 @@
 import { IsNotEmpty, IsInt, Min, Max, IsString, IsOptional, IsArray } from 'class-validator';
 
 export class CreateReviewDto {
-  @IsNotEmpty()
+  @IsOptional()
   @IsString()
   chargerId: string;
 
