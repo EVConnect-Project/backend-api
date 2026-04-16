@@ -10,13 +10,16 @@ import { BookingEntity } from '../bookings/entities/booking.entity';
 import { MechanicApplication, ApplicationStatus } from '../mechanic/entities/mechanic-application.entity';
 import { MechanicEntity } from '../mechanics/entities/mechanic.entity';
 import { MarketplaceListing } from '../marketplace/entities/marketplace-listing.entity';
-import { OwnerPaymentAccount } from '../owner/entities/owner-payment-account.entity';
+import { OwnerPaymentAccount, VerificationStatus } from '../owner/entities/owner-payment-account.entity';
 import { VehicleProfile } from '../auth/entities/vehicle-profile.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/types/notification-types';
 import { NotificationLogEntity } from '../notifications/entities/notification-log.entity';
 import { ServiceStationApplicationEntity } from '../service-stations/entities/service-station-application.entity';
 import { ServiceStationEntity } from '../service-stations/entities/service-station.entity';
+import { PaymentEntity } from '../payments/entities/payment.entity';
+import { OwnerPayout, OwnerPayoutStatus } from './entities/owner-payout.entity';
+import { OwnerPayoutItem } from './entities/owner-payout-item.entity';
 
 @Injectable()
 export class AdminService {
@@ -47,6 +50,12 @@ export class AdminService {
     private serviceStationApplicationRepository: Repository<ServiceStationApplicationEntity>,
     @InjectRepository(ServiceStationEntity)
     private serviceStationRepository: Repository<ServiceStationEntity>,
+    @InjectRepository(PaymentEntity)
+    private paymentRepository: Repository<PaymentEntity>,
+    @InjectRepository(OwnerPayout)
+    private ownerPayoutRepository: Repository<OwnerPayout>,
+    @InjectRepository(OwnerPayoutItem)
+    private ownerPayoutItemRepository: Repository<OwnerPayoutItem>,
     private notificationsService: NotificationsService,
     private chargingService: ChargingService,
   ) {}
@@ -1370,6 +1379,7 @@ export class AdminService {
               id: b.charger.id,
               name: b.charger.name,
               address: b.charger.address,
+              city: b.charger.city || b.charger.address?.split(',').pop()?.trim(),
             }
           : null,
         createdAt: b.createdAt,
@@ -1407,6 +1417,7 @@ export class AdminService {
             id: booking.charger.id,
             name: booking.charger.name,
             address: booking.charger.address,
+            city: booking.charger.city || booking.charger.address?.split(',').pop()?.trim(),
           }
         : null,
       createdAt: booking.createdAt,
@@ -1577,6 +1588,560 @@ export class AdminService {
     await this.bookingRepository.save(booking);
     
     return this.getBookingById(id);
+  }
+
+  // Payout Management
+  async getPayoutSummary() {
+    const unsettled = await this.paymentRepository
+      .createQueryBuilder('payment')
+      .innerJoin(BookingEntity, 'booking', 'booking.id = payment.bookingId')
+      .innerJoin(Charger, 'charger', 'charger.id = booking.chargerId')
+      .select('COALESCE(SUM(COALESCE(payment.ownerRevenue, payment.amount * 0.94)), 0)', 'amount')
+      .addSelect('COUNT(payment.id)', 'count')
+      .addSelect('COUNT(DISTINCT charger.ownerId)', 'owners')
+      .where("payment.status = 'succeeded'")
+      .andWhere("(payment.payoutStatus IS NULL OR payment.payoutStatus = 'unsettled')")
+      .getRawOne();
+
+    const inProgress = await this.ownerPayoutRepository
+      .createQueryBuilder('payout')
+      .select('COALESCE(SUM(payout.netPayoutAmount), 0)', 'amount')
+      .addSelect('COUNT(payout.id)', 'count')
+      .where('payout.status IN (:...statuses)', {
+        statuses: [OwnerPayoutStatus.APPROVED, OwnerPayoutStatus.PROCESSING],
+      })
+      .getRawOne();
+
+    const paidThisMonth = await this.ownerPayoutRepository
+      .createQueryBuilder('payout')
+      .select('COALESCE(SUM(payout.netPayoutAmount), 0)', 'amount')
+      .addSelect('COUNT(payout.id)', 'count')
+      .where('payout.status = :status', { status: OwnerPayoutStatus.PAID })
+      .andWhere("DATE_TRUNC('month', payout.paidAt) = DATE_TRUNC('month', NOW())")
+      .getRawOne();
+
+    return {
+      unsettled: {
+        amount: Number(unsettled?.amount || 0),
+        paymentCount: Number(unsettled?.count || 0),
+        ownerCount: Number(unsettled?.owners || 0),
+      },
+      inProgress: {
+        amount: Number(inProgress?.amount || 0),
+        payoutCount: Number(inProgress?.count || 0),
+      },
+      paidThisMonth: {
+        amount: Number(paidThisMonth?.amount || 0),
+        payoutCount: Number(paidThisMonth?.count || 0),
+      },
+    };
+  }
+
+  async getOwnerPayouts(params: {
+    page: number;
+    limit: number;
+    status?: string;
+    ownerId?: string;
+    search?: string;
+    startDate?: string;
+    endDate?: string;
+    minAmount?: number;
+    maxAmount?: number;
+  }) {
+    const { page, limit, status, ownerId, search, startDate, endDate, minAmount, maxAmount } = params;
+    const skip = (page - 1) * limit;
+
+    const qb = this.ownerPayoutRepository
+      .createQueryBuilder('payout')
+      .leftJoinAndSelect('payout.owner', 'owner')
+      .leftJoinAndSelect('payout.createdByAdmin', 'createdByAdmin')
+      .leftJoinAndSelect('payout.approvedByAdmin', 'approvedByAdmin')
+      .loadRelationCountAndMap('payout.itemCount', 'payout.items')
+      .orderBy('payout.createdAt', 'DESC')
+      .skip(skip)
+      .take(limit);
+
+    if (status) {
+      const statuses = status.split(',').map((s) => s.trim()).filter(Boolean);
+      if (statuses.length > 0) {
+        qb.andWhere('payout.status IN (:...statuses)', { statuses });
+      }
+    }
+
+    if (ownerId) {
+      qb.andWhere('payout.ownerId = :ownerId', { ownerId });
+    }
+
+    if (search && search.trim()) {
+      qb.andWhere(
+        '(owner.name ILIKE :search OR owner.phoneNumber ILIKE :search OR payout.id::text ILIKE :search OR payout.ownerId::text ILIKE :search)',
+        { search: `%${search.trim()}%` },
+      );
+    }
+
+    if (startDate) {
+      qb.andWhere('payout.periodStart >= :startDate', { startDate: new Date(startDate) });
+    }
+
+    if (endDate) {
+      qb.andWhere('payout.periodEnd <= :endDate', { endDate: new Date(endDate) });
+    }
+
+    if (typeof minAmount === 'number' && !Number.isNaN(minAmount)) {
+      qb.andWhere('payout.netPayoutAmount >= :minAmount', { minAmount });
+    }
+
+    if (typeof maxAmount === 'number' && !Number.isNaN(maxAmount)) {
+      qb.andWhere('payout.netPayoutAmount <= :maxAmount', { maxAmount });
+    }
+
+    const [payouts, total] = await qb.getManyAndCount();
+
+    return {
+      payouts: payouts.map((p) => ({
+        id: p.id,
+        ownerId: p.ownerId,
+        owner: p.owner
+          ? {
+              id: p.owner.id,
+              name: p.owner.name,
+              phone: p.owner.phoneNumber,
+            }
+          : null,
+        periodStart: p.periodStart,
+        periodEnd: p.periodEnd,
+        grossOwnerRevenue: Number(p.grossOwnerRevenue || 0),
+        adjustments: Number(p.adjustments || 0),
+        netPayoutAmount: Number(p.netPayoutAmount || 0),
+        status: p.status,
+        transferReference: p.transferReference,
+        createdByAdminId: p.createdByAdminId,
+        approvedByAdminId: p.approvedByAdminId,
+        approvedAt: p.approvedAt,
+        paidAt: p.paidAt,
+        notes: p.notes,
+        itemCount: (p as any).itemCount || 0,
+        createdAt: p.createdAt,
+        updatedAt: p.updatedAt,
+      })),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async getOwnerPayoutById(id: string) {
+    const payout = await this.ownerPayoutRepository.findOne({
+      where: { id },
+      relations: [
+        'owner',
+        'createdByAdmin',
+        'approvedByAdmin',
+        'items',
+        'items.payment',
+        'items.booking',
+      ],
+    });
+
+    if (!payout) {
+      throw new NotFoundException('Payout not found');
+    }
+
+    return {
+      id: payout.id,
+      ownerId: payout.ownerId,
+      owner: payout.owner
+        ? {
+            id: payout.owner.id,
+            name: payout.owner.name,
+            phone: payout.owner.phoneNumber,
+          }
+        : null,
+      periodStart: payout.periodStart,
+      periodEnd: payout.periodEnd,
+      grossOwnerRevenue: Number(payout.grossOwnerRevenue || 0),
+      adjustments: Number(payout.adjustments || 0),
+      netPayoutAmount: Number(payout.netPayoutAmount || 0),
+      status: payout.status,
+      transferReference: payout.transferReference,
+      createdByAdminId: payout.createdByAdminId,
+      approvedByAdminId: payout.approvedByAdminId,
+      approvedAt: payout.approvedAt,
+      paidAt: payout.paidAt,
+      notes: payout.notes,
+      items: (payout.items || []).map((item) => ({
+        id: item.id,
+        paymentId: item.paymentId,
+        bookingId: item.bookingId,
+        ownerRevenueAtPaymentTime: Number(item.ownerRevenueAtPaymentTime || 0),
+        includeAmount: Number(item.includeAmount || 0),
+        payment: item.payment
+          ? {
+              id: item.payment.id,
+              amount: Number(item.payment.amount || 0),
+              status: item.payment.status,
+              createdAt: item.payment.createdAt,
+            }
+          : null,
+        booking: item.booking
+          ? {
+              id: item.booking.id,
+              userId: item.booking.userId,
+              chargerId: item.booking.chargerId,
+              startTime: item.booking.startTime,
+              endTime: item.booking.endTime,
+              status: item.booking.status,
+            }
+          : null,
+      })),
+      createdAt: payout.createdAt,
+      updatedAt: payout.updatedAt,
+    };
+  }
+
+  async prepareOwnerPayouts(
+    adminId: string,
+    dto: {
+      startDate?: string;
+      endDate?: string;
+      ownerId?: string;
+      dryRun?: boolean;
+      notes?: string;
+    },
+  ) {
+    const { startDate, endDate, ownerId, dryRun, notes } = dto;
+
+    const eligibleOwnerRows = await this.paymentAccountRepository
+      .createQueryBuilder('account')
+      .select('DISTINCT account.userId', 'ownerId')
+      .where('account.isActive = true')
+      .andWhere('account.isPrimary = true')
+      .andWhere('account.verificationStatus = :verificationStatus', {
+        verificationStatus: VerificationStatus.VERIFIED,
+      })
+      .getRawMany();
+
+    const eligibleOwnerIds = eligibleOwnerRows.map((r) => r.ownerId as string).filter(Boolean);
+    const eligibleOwnerSet = new Set(eligibleOwnerIds);
+
+    if (ownerId && !eligibleOwnerSet.has(ownerId)) {
+      return {
+        dryRun: !!dryRun,
+        owners: [],
+        totalOwners: 0,
+        totalPayments: 0,
+        totalAmount: 0,
+        skippedOwners: [
+          {
+            ownerId,
+            reason: 'Owner must have an active verified primary payout account',
+          },
+        ],
+      };
+    }
+
+    if (eligibleOwnerIds.length === 0) {
+      return {
+        dryRun: !!dryRun,
+        owners: [],
+        totalOwners: 0,
+        totalPayments: 0,
+        totalAmount: 0,
+        skippedOwners: [],
+      };
+    }
+
+    const qb = this.paymentRepository
+      .createQueryBuilder('payment')
+      .innerJoin(BookingEntity, 'booking', 'booking.id = payment.bookingId')
+      .innerJoin(Charger, 'charger', 'charger.id = booking.chargerId')
+      .where("payment.status = 'succeeded'")
+      .andWhere("(payment.payoutStatus IS NULL OR payment.payoutStatus = 'unsettled')")
+      .select('payment.id', 'paymentId')
+      .addSelect('payment.bookingId', 'bookingId')
+      .addSelect('payment.createdAt', 'paymentCreatedAt')
+      .addSelect('payment.ownerRevenue', 'ownerRevenue')
+      .addSelect('payment.amount', 'amount')
+      .addSelect('charger.ownerId', 'ownerId')
+      .andWhere('charger.ownerId IN (:...eligibleOwnerIds)', { eligibleOwnerIds });
+
+    if (ownerId) {
+      qb.andWhere('charger.ownerId = :ownerId', { ownerId });
+    }
+
+    if (startDate) {
+      qb.andWhere('payment.createdAt >= :startDate', { startDate: new Date(startDate) });
+    }
+    if (endDate) {
+      qb.andWhere('payment.createdAt <= :endDate', { endDate: new Date(endDate) });
+    }
+
+    qb.orderBy('payment.createdAt', 'ASC');
+    const rows = await qb.getRawMany();
+
+    const skippedOwnersMap = new Map<string, string>();
+
+    const grouped = new Map<
+      string,
+      {
+        ownerId: string;
+        paymentIds: string[];
+        itemRows: Array<{ paymentId: string; bookingId: string; ownerAmount: number }>;
+        grossAmount: number;
+        periodStart: Date | null;
+        periodEnd: Date | null;
+      }
+    >();
+
+    for (const row of rows) {
+      const currentOwnerId = row.ownerId as string;
+      if (!currentOwnerId) {
+        continue;
+      }
+
+      if (!eligibleOwnerSet.has(currentOwnerId)) {
+        skippedOwnersMap.set(
+          currentOwnerId,
+          'Owner must have an active verified primary payout account',
+        );
+        continue;
+      }
+
+      const existing = grouped.get(currentOwnerId) || {
+        ownerId: currentOwnerId,
+        paymentIds: [],
+        itemRows: [],
+        grossAmount: 0,
+        periodStart: null,
+        periodEnd: null,
+      };
+
+      const ownerAmount = Number(row.ownerRevenue ?? Number(row.amount || 0) * 0.94);
+      existing.paymentIds.push(row.paymentId);
+      existing.itemRows.push({
+        paymentId: row.paymentId,
+        bookingId: row.bookingId,
+        ownerAmount,
+      });
+      existing.grossAmount += ownerAmount;
+
+      const createdAt = new Date(row.paymentCreatedAt);
+      if (!existing.periodStart || createdAt < existing.periodStart) {
+        existing.periodStart = createdAt;
+      }
+      if (!existing.periodEnd || createdAt > existing.periodEnd) {
+        existing.periodEnd = createdAt;
+      }
+
+      grouped.set(currentOwnerId, existing);
+    }
+
+    const preview = Array.from(grouped.values()).map((g) => ({
+      ownerId: g.ownerId,
+      paymentCount: g.paymentIds.length,
+      grossOwnerRevenue: Number(g.grossAmount.toFixed(2)),
+      periodStart: g.periodStart,
+      periodEnd: g.periodEnd,
+    }));
+
+    const skippedOwners = Array.from(skippedOwnersMap.entries()).map(([ownerIdValue, reason]) => ({
+      ownerId: ownerIdValue,
+      reason,
+    }));
+
+    if (dryRun) {
+      return {
+        dryRun: true,
+        owners: preview,
+        totalOwners: preview.length,
+        totalPayments: preview.reduce((sum, p) => sum + p.paymentCount, 0),
+        totalAmount: preview.reduce((sum, p) => sum + p.grossOwnerRevenue, 0),
+        skippedOwners,
+      };
+    }
+
+    const createdPayoutIds = await this.paymentRepository.manager.transaction(async (manager) => {
+      const payoutRepo = manager.getRepository(OwnerPayout);
+      const payoutItemRepo = manager.getRepository(OwnerPayoutItem);
+      const paymentRepo = manager.getRepository(PaymentEntity);
+
+      const resultIds: string[] = [];
+
+      for (const group of grouped.values()) {
+        if (!group.periodStart || !group.periodEnd || group.paymentIds.length === 0) {
+          continue;
+        }
+
+        const payout = payoutRepo.create({
+          ownerId: group.ownerId,
+          periodStart: group.periodStart,
+          periodEnd: group.periodEnd,
+          grossOwnerRevenue: Number(group.grossAmount.toFixed(2)),
+          adjustments: 0,
+          netPayoutAmount: Number(group.grossAmount.toFixed(2)),
+          status: OwnerPayoutStatus.DRAFT,
+          createdByAdminId: adminId,
+          notes: notes || null,
+        });
+        const savedPayout = await payoutRepo.save(payout);
+
+        const items = group.itemRows.map((r) =>
+          payoutItemRepo.create({
+            payoutId: savedPayout.id,
+            paymentId: r.paymentId,
+            bookingId: r.bookingId,
+            ownerRevenueAtPaymentTime: Number(r.ownerAmount.toFixed(2)),
+            includeAmount: Number(r.ownerAmount.toFixed(2)),
+          }),
+        );
+        await payoutItemRepo.save(items);
+
+        await paymentRepo
+          .createQueryBuilder()
+          .update(PaymentEntity)
+          .set({ payoutStatus: 'queued', payoutId: savedPayout.id })
+          .where('id IN (:...ids)', { ids: group.paymentIds })
+          .andWhere("(payoutStatus IS NULL OR payoutStatus = 'unsettled')")
+          .execute();
+
+        resultIds.push(savedPayout.id);
+      }
+
+      return resultIds;
+    });
+
+    return {
+      createdPayoutCount: createdPayoutIds.length,
+      payoutIds: createdPayoutIds,
+      owners: preview,
+      skippedOwners,
+    };
+  }
+
+  async approveOwnerPayout(id: string, adminId: string) {
+    const payout = await this.ownerPayoutRepository.findOne({ where: { id } });
+    if (!payout) {
+      throw new NotFoundException('Payout not found');
+    }
+    if (payout.status !== OwnerPayoutStatus.DRAFT) {
+      throw new BadRequestException('Only draft payouts can be approved');
+    }
+
+    payout.status = OwnerPayoutStatus.APPROVED;
+    payout.approvedByAdminId = adminId;
+    payout.approvedAt = new Date();
+    await this.ownerPayoutRepository.save(payout);
+
+    return { message: 'Payout approved', payoutId: payout.id };
+  }
+
+  async markOwnerPayoutProcessing(id: string) {
+    const payout = await this.ownerPayoutRepository.findOne({ where: { id } });
+    if (!payout) {
+      throw new NotFoundException('Payout not found');
+    }
+    if (payout.status !== OwnerPayoutStatus.APPROVED) {
+      throw new BadRequestException('Only approved payouts can be moved to processing');
+    }
+
+    payout.status = OwnerPayoutStatus.PROCESSING;
+    await this.ownerPayoutRepository.save(payout);
+    return { message: 'Payout moved to processing', payoutId: payout.id };
+  }
+
+  async markOwnerPayoutPaid(
+    id: string,
+    adminId: string,
+    dto: { transferReference?: string; notes?: string },
+  ) {
+    const payout = await this.ownerPayoutRepository.findOne({ where: { id } });
+    if (!payout) {
+      throw new NotFoundException('Payout not found');
+    }
+    if (![OwnerPayoutStatus.APPROVED, OwnerPayoutStatus.PROCESSING].includes(payout.status)) {
+      throw new BadRequestException('Only approved or processing payouts can be marked paid');
+    }
+
+    await this.ownerPayoutRepository.manager.transaction(async (manager) => {
+      const payoutRepo = manager.getRepository(OwnerPayout);
+      const paymentRepo = manager.getRepository(PaymentEntity);
+
+      payout.status = OwnerPayoutStatus.PAID;
+      payout.paidAt = new Date();
+      payout.approvedByAdminId = payout.approvedByAdminId || adminId;
+      payout.transferReference = dto.transferReference || payout.transferReference;
+      payout.notes = dto.notes || payout.notes;
+      await payoutRepo.save(payout);
+
+      await paymentRepo
+        .createQueryBuilder()
+        .update(PaymentEntity)
+        .set({ payoutStatus: 'settled' })
+        .where('payoutId = :payoutId', { payoutId: id })
+        .execute();
+    });
+
+    return { message: 'Payout marked as paid', payoutId: payout.id };
+  }
+
+  async markOwnerPayoutFailed(id: string, dto: { notes?: string }) {
+    const payout = await this.ownerPayoutRepository.findOne({ where: { id } });
+    if (!payout) {
+      throw new NotFoundException('Payout not found');
+    }
+    if (![OwnerPayoutStatus.APPROVED, OwnerPayoutStatus.PROCESSING].includes(payout.status)) {
+      throw new BadRequestException('Only approved or processing payouts can be marked failed');
+    }
+
+    await this.ownerPayoutRepository.manager.transaction(async (manager) => {
+      const payoutRepo = manager.getRepository(OwnerPayout);
+      const paymentRepo = manager.getRepository(PaymentEntity);
+
+      payout.status = OwnerPayoutStatus.FAILED;
+      payout.notes = dto.notes || payout.notes;
+      await payoutRepo.save(payout);
+
+      await paymentRepo
+        .createQueryBuilder()
+        .update(PaymentEntity)
+        .set({ payoutStatus: 'unsettled', payoutId: null })
+        .where('payoutId = :payoutId', { payoutId: id })
+        .andWhere("payoutStatus = 'queued'")
+        .execute();
+    });
+
+    return { message: 'Payout marked as failed', payoutId: payout.id };
+  }
+
+  async cancelOwnerPayout(id: string, dto: { notes?: string }) {
+    const payout = await this.ownerPayoutRepository.findOne({ where: { id } });
+    if (!payout) {
+      throw new NotFoundException('Payout not found');
+    }
+
+    if (![OwnerPayoutStatus.DRAFT, OwnerPayoutStatus.APPROVED].includes(payout.status)) {
+      throw new BadRequestException('Only draft or approved payouts can be cancelled');
+    }
+
+    await this.ownerPayoutRepository.manager.transaction(async (manager) => {
+      const payoutRepo = manager.getRepository(OwnerPayout);
+      const paymentRepo = manager.getRepository(PaymentEntity);
+
+      payout.status = OwnerPayoutStatus.CANCELLED;
+      payout.notes = dto.notes || payout.notes;
+      await payoutRepo.save(payout);
+
+      await paymentRepo
+        .createQueryBuilder()
+        .update(PaymentEntity)
+        .set({ payoutStatus: 'unsettled', payoutId: null })
+        .where('payoutId = :payoutId', { payoutId: id })
+        .andWhere("payoutStatus = 'queued'")
+        .execute();
+    });
+
+    return { message: 'Payout cancelled', payoutId: payout.id };
   }
 
   // Mechanic Application Management

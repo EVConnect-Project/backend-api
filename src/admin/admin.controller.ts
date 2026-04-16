@@ -392,6 +392,102 @@ export class AdminController {
     return booking;
   }
 
+      // Payout Management
+      @Get('payouts/summary')
+      async getPayoutSummary() {
+        return this.adminService.getPayoutSummary();
+      }
+
+      @Get('payouts')
+      async getPayouts(
+        @Query('page') page: string,
+        @Query('limit') limit: string,
+        @Query('status') status: string,
+        @Query('ownerId') ownerId: string,
+        @Query('search') search: string,
+        @Query('startDate') startDate?: string,
+        @Query('endDate') endDate?: string,
+        @Query('minAmount') minAmount?: string,
+        @Query('maxAmount') maxAmount?: string,
+      ) {
+        const parsedMinAmount = minAmount !== undefined ? parseFloat(minAmount) : undefined;
+        const parsedMaxAmount = maxAmount !== undefined ? parseFloat(maxAmount) : undefined;
+
+        return this.adminService.getOwnerPayouts({
+          page: page ? parseInt(page) : 1,
+          limit: limit ? parseInt(limit) : 10,
+          status,
+          ownerId,
+          search,
+          startDate,
+          endDate,
+          minAmount: Number.isNaN(parsedMinAmount) ? undefined : parsedMinAmount,
+          maxAmount: Number.isNaN(parsedMaxAmount) ? undefined : parsedMaxAmount,
+        });
+      }
+
+      @Get('payouts/:id')
+      async getPayoutById(@Param('id') id: string) {
+        return this.adminService.getOwnerPayoutById(id);
+      }
+
+      @Post('payouts/prepare')
+      async preparePayouts(
+        @Request() req,
+        @Body('startDate') startDate?: string,
+        @Body('endDate') endDate?: string,
+        @Body('ownerId') ownerId?: string,
+        @Body('dryRun') dryRun?: boolean,
+        @Body('notes') notes?: string,
+      ) {
+        return this.adminService.prepareOwnerPayouts(req.user.userId, {
+          startDate,
+          endDate,
+          ownerId,
+          dryRun,
+          notes,
+        });
+      }
+
+      @Post('payouts/:id/approve')
+      async approvePayout(@Request() req, @Param('id') id: string) {
+        return this.adminService.approveOwnerPayout(id, req.user.userId);
+      }
+
+      @Post('payouts/:id/processing')
+      async markPayoutProcessing(@Param('id') id: string) {
+        return this.adminService.markOwnerPayoutProcessing(id);
+      }
+
+      @Post('payouts/:id/paid')
+      async markPayoutPaid(
+        @Request() req,
+        @Param('id') id: string,
+        @Body('transferReference') transferReference?: string,
+        @Body('notes') notes?: string,
+      ) {
+        return this.adminService.markOwnerPayoutPaid(id, req.user.userId, {
+          transferReference,
+          notes,
+        });
+      }
+
+      @Post('payouts/:id/failed')
+      async markPayoutFailed(
+        @Param('id') id: string,
+        @Body('notes') notes?: string,
+      ) {
+        return this.adminService.markOwnerPayoutFailed(id, { notes });
+      }
+
+      @Post('payouts/:id/cancel')
+      async cancelPayout(
+        @Param('id') id: string,
+        @Body('notes') notes?: string,
+      ) {
+        return this.adminService.cancelOwnerPayout(id, { notes });
+      }
+
   // Mechanic Application Management
   @Get('mechanic-applications')
   async getMechanicApplications(

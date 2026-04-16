@@ -24,6 +24,9 @@ import { ServiceStationApplicationEntity } from '../service-stations/entities/se
 import { ServiceStationEntity } from '../service-stations/entities/service-station.entity';
 import { SupportReport } from '../support/entities/support-report.entity';
 import { SupportModule } from '../support/support.module';
+import { PaymentEntity } from '../payments/entities/payment.entity';
+import { OwnerPayout } from './entities/owner-payout.entity';
+import { OwnerPayoutItem } from './entities/owner-payout-item.entity';
 
 @Module({
   imports: [
@@ -45,6 +48,9 @@ import { SupportModule } from '../support/support.module';
       ServiceStationApplicationEntity,
       ServiceStationEntity,
       SupportReport,
+      PaymentEntity,
+      OwnerPayout,
+      OwnerPayoutItem,
     ]),
     NotificationsModule,
     ChargingModule,

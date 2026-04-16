@@ -38,6 +38,12 @@ export class PaymentEntity {
   @Column({ type: 'text', nullable: true })
   metadata: string; // JSON string for additional payment details
 
+  @Column({ type: 'varchar', length: 20, default: 'unsettled' })
+  payoutStatus: string; // unsettled | queued | settled
+
+  @Column({ type: 'uuid', nullable: true })
+  payoutId: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 
