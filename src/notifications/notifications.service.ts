@@ -539,11 +539,12 @@ export class NotificationsService implements OnModuleInit {
   /**
    * Mark notification as read
    */
-  async markAsRead(notificationId: string): Promise<void> {
-    await this.notificationLogRepository.update(
-      { id: notificationId },
+  async markAsRead(userId: string, notificationId: string): Promise<boolean> {
+    const result = await this.notificationLogRepository.update(
+      { id: notificationId, userId },
       { status: 'read', readAt: new Date() },
     );
+    return (result.affected || 0) > 0;
   }
 
   /**

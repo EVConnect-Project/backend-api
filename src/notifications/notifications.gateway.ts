@@ -6,6 +6,7 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { Logger } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 
 @WebSocketGateway({
   cors: {
@@ -20,8 +21,34 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
   private readonly logger = new Logger(NotificationsGateway.name);
   private connectedUsers: Map<string, Set<string>> = new Map(); // userId -> Set<socketId>
 
+  constructor(private readonly jwtService: JwtService) {}
+
   async handleConnection(client: Socket) {
-    const userId = client.handshake.query.userId as string;
+    const token = this.extractToken(client);
+    if (!token) {
+      this.logger.warn(`Client connected without token: ${client.id}`);
+      client.disconnect(true);
+      return;
+    }
+
+    let userId: string | undefined;
+    try {
+      const payload = this.jwtService.verify(token) as any;
+      userId = (payload?.userId || payload?.sub) as string | undefined;
+    } catch {
+      this.logger.warn(`Client connected with invalid token: ${client.id}`);
+      client.disconnect(true);
+      return;
+    }
+
+    const requestedUserId = client.handshake.query.userId as string | undefined;
+    if (requestedUserId && userId && requestedUserId !== userId) {
+      this.logger.warn(
+        `Client ${client.id} attempted notifications connection for mismatched userId`,
+      );
+      client.disconnect(true);
+      return;
+    }
 
     if (userId) {
       if (!this.connectedUsers.has(userId)) {
@@ -34,7 +61,18 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
       );
     } else {
       this.logger.warn(`Client connected without userId: ${client.id}`);
+      client.disconnect(true);
     }
+  }
+
+  private extractToken(client: Socket): string | null {
+    const authToken = client.handshake.auth?.token as string | undefined;
+    const authHeader = client.handshake.headers?.authorization as string | undefined;
+    const raw = authToken || authHeader;
+
+    if (!raw) return null;
+    if (raw.startsWith('Bearer ')) return raw.substring(7);
+    return raw;
   }
 
   handleDisconnect(client: Socket) {

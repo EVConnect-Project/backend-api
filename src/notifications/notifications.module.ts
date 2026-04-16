@@ -8,6 +8,7 @@ import { NotificationsGateway } from './notifications.gateway';
 import { FcmTokenEntity } from './entities/fcm-token.entity';
 import { NotificationLogEntity } from './entities/notification-log.entity';
 import { NotificationPreferenceEntity } from './entities/notification-preference.entity';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { NotificationPreferenceEntity } from './entities/notification-preference
       NotificationPreferenceEntity,
     ]),
     ConfigModule,
+    AuthModule,
   ],
   controllers: [NotificationsController],
   providers: [NotificationsService, FirebaseNotificationService, NotificationsGateway],

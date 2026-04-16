@@ -15,6 +15,7 @@ import {
 import { AdminService } from './admin.service';
 import { AdminChatService } from './admin-chat.service';
 import { AdminAuditService } from './admin-audit.service';
+import { SupportService } from '../support/support.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -27,6 +28,7 @@ export class AdminController {
     private readonly adminService: AdminService,
     private readonly adminChatService: AdminChatService,
     private readonly adminAuditService: AdminAuditService,
+    private readonly supportService: SupportService,
   ) {}
 
   // Dashboard Stats
@@ -1265,5 +1267,45 @@ export class AdminController {
       page ? parseInt(page) : 1,
       limit ? parseInt(limit) : 50,
     );
+  }
+
+  // Support Reports Management
+  @Get('support/reports')
+  async getSupportReports(
+    @Query('page') page: string,
+    @Query('limit') limit: string,
+    @Query('status') status: string,
+    @Query('category') category: string,
+  ) {
+    const reports = await this.supportService.findAll();
+    return {
+      data: reports,
+      total: reports.length,
+    };
+  }
+
+  @Get('support/reports/statistics')
+  async getSupportStatistics() {
+    return this.supportService.getStatistics();
+  }
+
+  @Get('support/reports/:id')
+  async getSupportReportById(@Param('id') id: string) {
+    return this.supportService.findOne(id);
+  }
+
+  @Patch('support/reports/:id')
+  async updateSupportReport(
+    @Param('id') id: string,
+    @Body() updateReportDto: any,
+    @Request() req,
+  ) {
+    return this.supportService.update(id, updateReportDto, req.user.userId);
+  }
+
+  @Delete('support/reports/:id')
+  async deleteSupportReport(@Param('id') id: string) {
+    await this.supportService.delete(id);
+    return { message: 'Support report deleted successfully' };
   }
 }

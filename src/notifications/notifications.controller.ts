@@ -111,11 +111,12 @@ export class NotificationsController {
   }
 
   @Patch(':id/read')
-  async markAsRead(@Param('id') id: string) {
-    await this.notificationsService.markAsRead(id);
+  async markAsRead(@Param('id') id: string, @Request() req) {
+    const userId = req.user.userId;
+    const marked = await this.notificationsService.markAsRead(userId, id);
     return {
-      success: true,
-      message: 'Notification marked as read',
+      success: marked,
+      message: marked ? 'Notification marked as read' : 'Notification not found',
     };
   }
 

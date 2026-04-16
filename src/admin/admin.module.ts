@@ -22,6 +22,8 @@ import { NotificationLogEntity } from '../notifications/entities/notification-lo
 import { ChargingModule } from '../charging/charging.module';
 import { ServiceStationApplicationEntity } from '../service-stations/entities/service-station-application.entity';
 import { ServiceStationEntity } from '../service-stations/entities/service-station.entity';
+import { SupportReport } from '../support/entities/support-report.entity';
+import { SupportModule } from '../support/support.module';
 
 @Module({
   imports: [
@@ -42,9 +44,11 @@ import { ServiceStationEntity } from '../service-stations/entities/service-stati
       NotificationLogEntity,
       ServiceStationApplicationEntity,
       ServiceStationEntity,
+      SupportReport,
     ]),
     NotificationsModule,
     ChargingModule,
+    SupportModule,
   ],
   controllers: [AdminController],
   providers: [AdminService, AdminChatService, AdminAuditService],
