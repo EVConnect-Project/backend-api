@@ -10,6 +10,8 @@ import { PaymentMethodEntity } from './entities/payment-method.entity';
 import { UserPaymentSettingsEntity } from './entities/user-payment-settings.entity';
 import { BookingEntity } from '../bookings/entities/booking.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { WalletEntity } from '../wallet/entities/wallet.entity';
+import { WalletTransactionEntity } from '../wallet/entities/wallet-transaction.entity';
 
 @Module({
   imports: [
@@ -18,6 +20,8 @@ import { NotificationsModule } from '../notifications/notifications.module';
       PaymentMethodEntity,
       UserPaymentSettingsEntity,
       BookingEntity,
+      WalletEntity,
+      WalletTransactionEntity,
     ]),
     ConfigModule,
     NotificationsModule,

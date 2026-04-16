@@ -22,6 +22,7 @@ import { ChargingStation } from './entities/charging-station.entity';
 import { ServiceStationApplicationEntity } from '../service-stations/entities/service-station-application.entity';
 import { ServiceStationEntity } from '../service-stations/entities/service-station.entity';
 import { BookingMode } from '../charger/enums/booking-mode.enum';
+import { ChargerStatus } from '../charger/enums/charger-status.enum';
 import { Station } from '../station/entities/station.entity';
 import { ChargersGateway } from '../charger/chargers.gateway';
 
@@ -719,6 +720,90 @@ export class OwnerService {
     await this.bookingRepository.remove(booking);
 
     return { message: 'Booking deleted successfully' };
+  }
+
+  /**
+   * Update a pending booking request status (owner approval flow)
+   */
+  async updateBookingStatusForOwner(
+    id: string,
+    status: 'confirmed' | 'cancelled',
+    ownerId: string,
+  ) {
+    const booking = await this.bookingRepository.findOne({
+      where: { id },
+      relations: ['charger'],
+    });
+
+    if (!booking) {
+      throw new NotFoundException('Booking not found');
+    }
+
+    if (booking.charger.ownerId !== ownerId) {
+      throw new ForbiddenException('You can only manage bookings for your own chargers');
+    }
+
+    if (booking.status !== 'pending') {
+      throw new BadRequestException(
+        `Only pending bookings can be updated. Current status: ${booking.status}`,
+      );
+    }
+
+    booking.status = status;
+    if (status === 'cancelled') {
+      booking.cancelledAt = new Date();
+    }
+    const updated = await this.bookingRepository.save(booking);
+
+    if (status === 'confirmed') {
+      const charger = booking.charger;
+      charger.currentStatus = ChargerStatus.RESERVED;
+      charger.lastStatusUpdate = new Date();
+      await this.chargerRepository.save(charger);
+
+      if (booking.socketId) {
+        const socket = await this.socketRepository.findOne({
+          where: { id: booking.socketId, chargerId: booking.chargerId },
+        });
+        if (socket) {
+          socket.status = 'reserved';
+          await this.socketRepository.save(socket);
+        }
+      }
+    } else if (status === 'cancelled') {
+      const hasReservedOrActive = await this.bookingRepository
+        .createQueryBuilder('b')
+        .where('b.chargerId = :chargerId', { chargerId: booking.chargerId })
+        .andWhere('b.id != :bookingId', { bookingId: booking.id })
+        .andWhere('b.status IN (:...statuses)', { statuses: ['confirmed', 'active'] })
+        .getCount();
+
+      if (hasReservedOrActive === 0) {
+        const charger = booking.charger;
+        charger.currentStatus = ChargerStatus.AVAILABLE;
+        charger.lastStatusUpdate = new Date();
+        await this.chargerRepository.save(charger);
+      }
+
+      if (booking.socketId) {
+        const socket = await this.socketRepository.findOne({
+          where: { id: booking.socketId, chargerId: booking.chargerId },
+        });
+        if (socket) {
+          socket.status = 'available';
+          socket.occupiedBy = null as any;
+          await this.socketRepository.save(socket);
+        }
+      }
+    }
+
+    return {
+      booking: updated,
+      message:
+        status == 'confirmed'
+            ? 'Booking request confirmed successfully'
+            : 'Booking request declined successfully',
+    };
   }
 
   /**

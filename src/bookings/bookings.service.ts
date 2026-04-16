@@ -85,7 +85,7 @@ export class BookingsService {
       const overlappingBooking = await this.bookingRepository
         .createQueryBuilder('booking')
         .where('booking.chargerId = :chargerId', { chargerId })
-        .andWhere('booking.status NOT IN (:...statuses)', { statuses: ['cancelled', 'completed', 'no_show'] })
+        .andWhere('booking.status NOT IN (:...statuses)', { statuses: ['cancelled', 'completed'] })
         .andWhere(
           '(booking.startTime < :endTime AND booking.endTime > :effectiveStartTime)',
           { effectiveStartTime, endTime: end }
@@ -219,13 +219,68 @@ export class BookingsService {
     }
 
     booking.status = 'cancelled';
-    return this.bookingRepository.save(booking);
+    booking.cancelledAt = new Date();
+    const saved = await this.bookingRepository.save(booking);
+    await this._syncChargerAndSocketAvailability(saved);
+    return saved;
   }
 
   async updateStatus(id: string, status: string): Promise<BookingEntity> {
     const booking = await this.findOne(id);
-    booking.status = status;
-    return this.bookingRepository.save(booking);
+    const normalizedStatus = status.toLowerCase();
+    booking.status = normalizedStatus;
+
+    if (normalizedStatus === 'cancelled') {
+      booking.cancelledAt = new Date();
+    }
+
+    const saved = await this.bookingRepository.save(booking);
+    await this._syncChargerAndSocketAvailability(saved);
+    return saved;
+  }
+
+  private async _syncChargerAndSocketAvailability(booking: BookingEntity): Promise<void> {
+    if (booking.status !== 'cancelled' && booking.status !== 'completed') {
+      return;
+    }
+
+    const activeBookingCount = await this.bookingRepository
+      .createQueryBuilder('b')
+      .where('b.chargerId = :chargerId', { chargerId: booking.chargerId })
+      .andWhere('b.id != :bookingId', { bookingId: booking.id })
+      .andWhere('b.status = :status', { status: 'active' })
+      .getCount();
+
+    if (activeBookingCount == 0) {
+      const charger = await this.chargerRepository.findOne({ where: { id: booking.chargerId } });
+      if (charger && charger.currentStatus != ChargerStatus.AVAILABLE) {
+        charger.currentStatus = ChargerStatus.AVAILABLE;
+        charger.lastStatusUpdate = new Date();
+        await this.chargerRepository.save(charger);
+      }
+    }
+
+    if (booking.socketId != null) {
+      const activeSocketBookingCount = await this.bookingRepository
+        .createQueryBuilder('b')
+        .where('b.chargerId = :chargerId', { chargerId: booking.chargerId })
+        .andWhere('b.socket_id = :socketId', { socketId: booking.socketId })
+        .andWhere('b.id != :bookingId', { bookingId: booking.id })
+        .andWhere('b.status = :status', { status: 'active' })
+        .getCount();
+
+      if (activeSocketBookingCount == 0) {
+        const socket = await this.socketRepository.findOne({
+          where: { id: booking.socketId, chargerId: booking.chargerId },
+        });
+
+        if (socket && socket.status !== 'available') {
+          socket.status = 'available';
+          socket.occupiedBy = null as any;
+          await this.socketRepository.save(socket);
+        }
+      }
+    }
   }
 
   /**
@@ -300,7 +355,8 @@ export class BookingsService {
 
       if (now >= autoCancelThreshold) {
         // Auto-cancel the booking
-        booking.status = 'no_show';
+        booking.status = 'cancelled';
+        booking.noShow = true;
         await this.bookingRepository.save(booking);
         cancelledCount++;
 
@@ -421,7 +477,7 @@ export class BookingsService {
         const hasOverlap = await this.bookingRepository
           .createQueryBuilder('booking')
           .where('booking.chargerId = :chargerId', { chargerId: charger.id })
-          .andWhere('booking.status NOT IN (:...statuses)', { statuses: ['cancelled', 'completed', 'no_show'] })
+          .andWhere('booking.status NOT IN (:...statuses)', { statuses: ['cancelled', 'completed'] })
           .andWhere('(booking.startTime < :endTime AND booking.endTime > :startTime)', { startTime, endTime })
           .getOne();
 
@@ -591,13 +647,20 @@ export class BookingsService {
 
     this.logger.log(`Walk-in booking created: ${savedBooking.id} for charger ${dto.chargerId}`);
 
-    // Send notification
-    await this.notificationsService.sendBookingConfirmed(
-      userId,
-      savedBooking.id,
-      charger.name || 'charging station',
-      now,
-    );
+    // Send notification without blocking booking creation flow.
+    this.notificationsService
+      .sendBookingConfirmed(
+        userId,
+        savedBooking.id,
+        charger.name || 'charging station',
+        now,
+      )
+      .catch((error) => {
+        this.logger.error(
+          `Failed to send walk-in booking notification for booking ${savedBooking.id}`,
+          error,
+        );
+      });
 
     return {
       booking: savedBooking,
@@ -696,7 +759,7 @@ export class BookingsService {
     const overlapQuery = this.bookingRepository
       .createQueryBuilder('booking')
       .where('booking.chargerId = :chargerId', { chargerId: dto.chargerId })
-      .andWhere('booking.status NOT IN (:...statuses)', { statuses: ['cancelled', 'completed', 'no_show'] })
+      .andWhere('booking.status NOT IN (:...statuses)', { statuses: ['cancelled', 'completed'] })
       .andWhere('booking.startTime < :endTime', { endTime })
       .andWhere('booking.endTime > :startTime', { startTime });
 
@@ -730,33 +793,30 @@ export class BookingsService {
       startTime,
       endTime,
       price,
-      status: 'confirmed',
+      // Owner must accept this request before payment/check-in can continue.
+      status: 'pending',
       bookingType: BookingType.PRE_BOOKING,
       gracePeriodExpiresAt,
     });
 
     const savedBooking = await this.bookingRepository.save(booking);
 
-    // Update charger status to reserved
-    charger.currentStatus = ChargerStatus.RESERVED;
-    charger.lastStatusUpdate = now;
-    await this.chargerRepository.save(charger);
-
-    // Update socket status if applicable
-    if (socket) {
-      socket.status = 'reserved';
-      await this.socketRepository.save(socket);
-    }
-
     this.logger.log(`Pre-booking created: ${savedBooking.id} for charger ${dto.chargerId}`);
 
-    // Send notification
-    await this.notificationsService.sendBookingConfirmed(
-      userId,
-      savedBooking.id,
-      charger.name || 'charging station',
-      startTime,
-    );
+    // Send notification without breaking booking creation on notification errors.
+    this.notificationsService
+      .sendBookingConfirmed(
+        userId,
+        savedBooking.id,
+        charger.name || 'charging station',
+        startTime,
+      )
+      .catch((error) => {
+        this.logger.error(
+          `Failed to send pre-booking notification for booking ${savedBooking.id}`,
+          error,
+        );
+      });
 
     const warnings: BookingWarning[] = [{
       type: 'requires_verification',
@@ -809,7 +869,7 @@ export class BookingsService {
 
     // Check if within grace period
     if (booking.gracePeriodExpiresAt && now > booking.gracePeriodExpiresAt) {
-      booking.status = 'no_show';
+      booking.status = 'cancelled';
       booking.noShow = true;
       await this.bookingRepository.save(booking);
 
@@ -858,7 +918,7 @@ export class BookingsService {
     }
 
     booking.noShow = true;
-    booking.status = 'no_show';
+    booking.status = 'cancelled';
     await this.bookingRepository.save(booking);
 
     // Release charger

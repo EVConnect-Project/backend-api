@@ -261,6 +261,23 @@ export class OwnerController {
   }
 
   /**
+   * Approve or decline a pending booking request for an owned charger
+   */
+  @Patch('bookings/:id/status')
+  @UseGuards(IsChargerOwnerGuard)
+  async updateBookingStatus(
+    @Param('id') id: string,
+    @Body('status') status: 'confirmed' | 'cancelled',
+    @Request() req,
+  ) {
+    return this.ownerService.updateBookingStatusForOwner(
+      id,
+      status,
+      req.user.userId,
+    );
+  }
+
+  /**
    * Get booking statistics for owned chargers
    */
   @Get('stats/bookings')

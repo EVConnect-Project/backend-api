@@ -10,6 +10,12 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { PaymentMethodsService } from './payment-methods.service';
 import { ConfirmCardSetupDto } from './dto/confirm-card-setup.dto';
 import { PaymentMethodType } from './entities/payment-method.entity';
+import { WalletEntity } from '../wallet/entities/wallet.entity';
+import {
+  WalletTransactionEntity,
+  WalletTransactionStatus,
+  WalletTransactionType,
+} from '../wallet/entities/wallet-transaction.entity';
 
 @Injectable()
 export class PaymentsService {
@@ -25,6 +31,10 @@ export class PaymentsService {
     private paymentRepository: Repository<PaymentEntity>,
     @InjectRepository(BookingEntity)
     private bookingRepository: Repository<BookingEntity>,
+    @InjectRepository(WalletEntity)
+    private walletRepository: Repository<WalletEntity>,
+    @InjectRepository(WalletTransactionEntity)
+    private walletTransactionRepository: Repository<WalletTransactionEntity>,
     private configService: ConfigService,
     private notificationsService: NotificationsService,
     private paymentMethodsService: PaymentMethodsService,
@@ -41,6 +51,14 @@ export class PaymentsService {
       (this.configService.get<string>('PAYHERE_RETURN_URL') || 'http://localhost:3000/payment/success').trim();
     this.payhereCancelUrl =
       (this.configService.get<string>('PAYHERE_CANCEL_URL') || 'http://localhost:3000/payment/cancel').trim();
+  }
+
+  private toMoney(value: number | string): number {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) {
+      return 0;
+    }
+    return Number(parsed.toFixed(2));
   }
 
   private generateCardSetupSignature(
@@ -140,6 +158,7 @@ export class PaymentsService {
 
   async createPaymentIntent(createPaymentDto: CreatePaymentDto, userId: string): Promise<any> {
     const { bookingId, amount, paymentMethod } = createPaymentDto;
+    const normalizedMethod = (paymentMethod || 'payhere').toLowerCase();
 
     if (amount <= 0) {
       throw new BadRequestException('Payment amount must be greater than 0');
@@ -154,6 +173,14 @@ export class PaymentsService {
       throw new NotFoundException('Booking not found');
     }
 
+    if (booking.userId !== userId) {
+      throw new BadRequestException('Cannot create payment for another user booking');
+    }
+
+    if ((booking.paymentStatus || '').toLowerCase() === 'success') {
+      throw new BadRequestException('Booking payment is already completed');
+    }
+
     // Calculate commission: 6% system fee, 94% owner revenue
     const systemCommission = Number((amount * 0.06).toFixed(2));
     const ownerRevenue = Number((amount * 0.94).toFixed(2));
@@ -164,10 +191,82 @@ export class PaymentsService {
       systemCommission,
       ownerRevenue,
       status: 'pending',
-      paymentMethod: paymentMethod || 'payhere',
+      paymentMethod: normalizedMethod,
     });
 
     const savedPayment = await this.paymentRepository.save(payment);
+
+    if (normalizedMethod == 'wallet') {
+      const walletResult = await this.paymentRepository.manager.transaction(async (manager) => {
+        const walletRepo = manager.getRepository(WalletEntity);
+        const walletTransactionRepo = manager.getRepository(WalletTransactionEntity);
+        const paymentRepo = manager.getRepository(PaymentEntity);
+        const bookingRepo = manager.getRepository(BookingEntity);
+
+        const wallet = await walletRepo.findOne({ where: { userId } });
+        if (!wallet) {
+          throw new BadRequestException('Wallet not found. Please top up your wallet first.');
+        }
+
+        const balance = this.toMoney(wallet.balance);
+        const held = this.toMoney(wallet.heldBalance || 0);
+        const available = this.toMoney(balance - held);
+        const payAmount = this.toMoney(amount);
+
+        if (available < payAmount) {
+          throw new BadRequestException(
+            `Insufficient wallet balance. Available: LKR ${available.toFixed(2)}`,
+          );
+        }
+
+        wallet.balance = this.toMoney(balance - payAmount);
+        await walletRepo.save(wallet);
+
+        const walletTx = walletTransactionRepo.create({
+          userId,
+          type: WalletTransactionType.PAYMENT,
+          amount: payAmount,
+          status: WalletTransactionStatus.SUCCESS,
+          referenceId: savedPayment.id,
+          metadata: {
+            bookingId,
+            source: 'booking_wallet_payment',
+          },
+        });
+
+        const savedWalletTx = await walletTransactionRepo.save(walletTx);
+
+        await paymentRepo.update(savedPayment.id, {
+          status: 'succeeded',
+          txnId: savedWalletTx.transactionId,
+        });
+
+        await bookingRepo.update(bookingId, {
+          status: booking.status === 'pending' ? 'confirmed' : booking.status,
+          paymentStatus: 'success',
+        });
+
+        return {
+          transactionId: savedWalletTx.transactionId,
+          availableBalance: this.toMoney(wallet.balance - (wallet.heldBalance || 0)),
+          currency: wallet.currency || 'LKR',
+        };
+      });
+
+      await this.notificationsService.sendPaymentSuccess(userId, amount, savedPayment.id);
+
+      return {
+        id: savedPayment.id,
+        status: 'succeeded',
+        amount: savedPayment.amount,
+        paymentMethod: 'wallet',
+        transactionId: walletResult.transactionId,
+        wallet: {
+          availableBalance: walletResult.availableBalance,
+          currency: walletResult.currency,
+        },
+      };
+    }
 
     try {
       const orderId = savedPayment.id;
