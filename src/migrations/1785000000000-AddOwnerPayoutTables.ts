@@ -1,7 +1,7 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class AddOwnerPayoutTables1785000000000 implements MigrationInterface {
-  name = 'AddOwnerPayoutTables1785000000000';
+  name = "AddOwnerPayoutTables1785000000000";
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
@@ -45,8 +45,12 @@ export class AddOwnerPayoutTables1785000000000 implements MigrationInterface {
       )
     `);
 
-    await queryRunner.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS "payoutStatus" VARCHAR(20) NOT NULL DEFAULT 'unsettled'`);
-    await queryRunner.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS "payoutId" UUID`);
+    await queryRunner.query(
+      `ALTER TABLE payments ADD COLUMN IF NOT EXISTS "payoutStatus" VARCHAR(20) NOT NULL DEFAULT 'unsettled'`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE payments ADD COLUMN IF NOT EXISTS "payoutId" UUID`,
+    );
 
     await queryRunner.query(`
       DO $$
@@ -76,26 +80,50 @@ export class AddOwnerPayoutTables1785000000000 implements MigrationInterface {
       END $$;
     `);
 
-    await queryRunner.query(`CREATE INDEX IF NOT EXISTS idx_owner_payouts_owner_id ON owner_payouts("ownerId")`);
-    await queryRunner.query(`CREATE INDEX IF NOT EXISTS idx_owner_payouts_status ON owner_payouts(status)`);
-    await queryRunner.query(`CREATE INDEX IF NOT EXISTS idx_owner_payout_items_payout_id ON owner_payout_items("payoutId")`);
-    await queryRunner.query(`CREATE INDEX IF NOT EXISTS idx_owner_payout_items_payment_id ON owner_payout_items("paymentId")`);
-    await queryRunner.query(`CREATE INDEX IF NOT EXISTS idx_payments_payout_status ON payments("payoutStatus")`);
-    await queryRunner.query(`CREATE INDEX IF NOT EXISTS idx_payments_payout_id ON payments("payoutId")`);
+    await queryRunner.query(
+      `CREATE INDEX IF NOT EXISTS idx_owner_payouts_owner_id ON owner_payouts("ownerId")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX IF NOT EXISTS idx_owner_payouts_status ON owner_payouts(status)`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX IF NOT EXISTS idx_owner_payout_items_payout_id ON owner_payout_items("payoutId")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX IF NOT EXISTS idx_owner_payout_items_payment_id ON owner_payout_items("paymentId")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX IF NOT EXISTS idx_payments_payout_status ON payments("payoutStatus")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX IF NOT EXISTS idx_payments_payout_id ON payments("payoutId")`,
+    );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`DROP INDEX IF EXISTS idx_payments_payout_id`);
     await queryRunner.query(`DROP INDEX IF EXISTS idx_payments_payout_status`);
-    await queryRunner.query(`DROP INDEX IF EXISTS idx_owner_payout_items_payment_id`);
-    await queryRunner.query(`DROP INDEX IF EXISTS idx_owner_payout_items_payout_id`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS idx_owner_payout_items_payment_id`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS idx_owner_payout_items_payout_id`,
+    );
     await queryRunner.query(`DROP INDEX IF EXISTS idx_owner_payouts_status`);
     await queryRunner.query(`DROP INDEX IF EXISTS idx_owner_payouts_owner_id`);
 
-    await queryRunner.query(`ALTER TABLE payments DROP CONSTRAINT IF EXISTS chk_payments_payout_status`);
-    await queryRunner.query(`ALTER TABLE payments DROP CONSTRAINT IF EXISTS fk_payments_payout`);
-    await queryRunner.query(`ALTER TABLE payments DROP COLUMN IF EXISTS "payoutId"`);
-    await queryRunner.query(`ALTER TABLE payments DROP COLUMN IF EXISTS "payoutStatus"`);
+    await queryRunner.query(
+      `ALTER TABLE payments DROP CONSTRAINT IF EXISTS chk_payments_payout_status`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE payments DROP CONSTRAINT IF EXISTS fk_payments_payout`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE payments DROP COLUMN IF EXISTS "payoutId"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE payments DROP COLUMN IF EXISTS "payoutStatus"`,
+    );
 
     await queryRunner.query(`DROP TABLE IF EXISTS owner_payout_items`);
     await queryRunner.query(`DROP TABLE IF EXISTS owner_payouts`);

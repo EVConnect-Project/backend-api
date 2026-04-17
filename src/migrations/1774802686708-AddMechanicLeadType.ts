@@ -1,7 +1,7 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class AddMechanicLeadType1774802686708 implements MigrationInterface {
-  name = 'AddMechanicLeadType1774802686708';
+  name = "AddMechanicLeadType1774802686708";
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`

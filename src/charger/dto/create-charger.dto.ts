@@ -1,12 +1,26 @@
-import { IsNotEmpty, IsNumber, IsOptional, IsString, Min, Max, IsUUID, ValidateIf, IsEnum, IsArray } from 'class-validator';
-import { Transform } from 'class-transformer';
-import { BookingMode } from '../enums/booking-mode.enum';
+import {
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Min,
+  Max,
+  IsUUID,
+  ValidateIf,
+  IsEnum,
+  IsArray,
+} from "class-validator";
+import { Transform } from "class-transformer";
+import { BookingMode } from "../enums/booking-mode.enum";
 
 // Transform function to parse flexible price formats (100000, 100,000, 100,000.50, etc)
 const parsePriceFormat = (value: any): number => {
-  if (value === null || value === undefined || value === '') return 0;
+  if (value === null || value === undefined || value === "") return 0;
   // Convert to string and remove commas, spaces, and other non-numeric characters (except decimal point)
-  const cleaned = value.toString().trim().replace(/[^0-9.]/g, '');
+  const cleaned = value
+    .toString()
+    .trim()
+    .replace(/[^0-9.]/g, "");
   const parsed = parseFloat(cleaned);
   return isNaN(parsed) ? 0 : parsed;
 };
@@ -53,15 +67,21 @@ export class CreateChargerDto {
 
   @IsString()
   @IsOptional()
-  chargerType?: 'ac' | 'dc';
+  chargerType?: "ac" | "dc";
 
   @IsString()
   @IsOptional()
-  speedType?: 'ac_slow' | 'ac_fast' | 'dc_fast' | 'dc_rapid' | 'ultra_rapid' | 'tesla_supercharger';
+  speedType?:
+    | "ac_slow"
+    | "ac_fast"
+    | "dc_fast"
+    | "dc_rapid"
+    | "ultra_rapid"
+    | "tesla_supercharger";
 
   @IsString()
   @IsOptional()
-  connectorType?: 'type2' | 'type1_j1772' | 'ccs2' | 'chademo' | 'tesla_nacs';
+  connectorType?: "type2" | "type1_j1772" | "ccs2" | "chademo" | "tesla_nacs";
 
   @IsNumber()
   @IsOptional()
@@ -81,9 +101,9 @@ export class CreateChargerDto {
   @IsOptional()
   bookingMode?: BookingMode;
 
-  @ValidateIf(o => o.bookingMode === BookingMode.PRE_BOOKING)
+  @ValidateIf((o) => o.bookingMode === BookingMode.PRE_BOOKING)
   @IsUUID()
-  @IsNotEmpty({ message: 'Payment account is required for pre-booking mode' })
+  @IsNotEmpty({ message: "Payment account is required for pre-booking mode" })
   paymentAccountId?: string;
 
   @IsString()

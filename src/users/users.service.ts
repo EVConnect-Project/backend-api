@@ -1,9 +1,13 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { UserEntity } from './entities/user.entity';
-import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { UserEntity } from "./entities/user.entity";
+import { CreateUserDto } from "./dto/create-user.dto";
+import { UpdateUserDto } from "./dto/update-user.dto";
 
 @Injectable()
 export class UsersService {
@@ -20,7 +24,7 @@ export class UsersService {
       });
 
       if (existingUser) {
-        throw new ConflictException('Phone number already exists');
+        throw new ConflictException("Phone number already exists");
       }
     }
 
@@ -34,7 +38,7 @@ export class UsersService {
 
   async findOne(id: string): Promise<UserEntity> {
     const user = await this.userRepository.findOne({ where: { id } });
-    
+
     if (!user) {
       throw new NotFoundException(`User with ID ${id} not found`);
     }
@@ -52,7 +56,7 @@ export class UsersService {
       });
 
       if (existingUser) {
-        throw new ConflictException('Phone number already exists');
+        throw new ConflictException("Phone number already exists");
       }
     }
 

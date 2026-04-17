@@ -5,8 +5,8 @@ import {
   IsOptional,
   IsNumber,
   IsUUID,
-} from 'class-validator';
-import { MessageType } from '../entities/message.entity';
+} from "class-validator";
+import { MessageType } from "../entities/message.entity";
 
 export class SendMessageDto {
   @IsUUID()

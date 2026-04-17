@@ -1,6 +1,22 @@
-import { IsString, IsEnum, IsOptional, IsArray, IsDateString, IsInt, IsNumber, Min, Max } from 'class-validator';
-import { PromotionType, PromotionStatus, AdPlacement, AdFormat, BillingModel } from '../entities/promotion.entity';
-import { AbTestStatus } from '../entities/ab-test.entity';
+import {
+  IsString,
+  IsEnum,
+  IsOptional,
+  IsArray,
+  IsDateString,
+  IsInt,
+  IsNumber,
+  Min,
+  Max,
+} from "class-validator";
+import {
+  PromotionType,
+  PromotionStatus,
+  AdPlacement,
+  AdFormat,
+  BillingModel,
+} from "../entities/promotion.entity";
+import { AbTestStatus } from "../entities/ab-test.entity";
 
 export class CreatePromotionDto {
   @IsString()
@@ -321,8 +337,8 @@ export class UpdatePromotionDto {
 }
 
 export class TrackPromotionDto {
-  @IsEnum(['impression', 'click', 'conversion', 'dismiss'])
-  eventType: 'impression' | 'click' | 'conversion' | 'dismiss';
+  @IsEnum(["impression", "click", "conversion", "dismiss"])
+  eventType: "impression" | "click" | "conversion" | "dismiss";
 
   @IsString()
   @IsOptional()

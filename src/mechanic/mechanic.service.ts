@@ -4,17 +4,17 @@ import {
   BadRequestException,
   ForbiddenException,
   InternalServerErrorException,
-} from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
 import {
   MechanicApplication,
   ApplicationStatus,
-} from './entities/mechanic-application.entity';
-import { UserEntity } from '../users/entities/user.entity';
-import { MechanicEntity } from '../mechanics/entities/mechanic.entity';
-import { CreateMechanicApplicationDto } from './dto/create-mechanic-application.dto';
-import { ReviewApplicationDto } from './dto/review-application.dto';
+} from "./entities/mechanic-application.entity";
+import { UserEntity } from "../users/entities/user.entity";
+import { MechanicEntity } from "../mechanics/entities/mechanic.entity";
+import { CreateMechanicApplicationDto } from "./dto/create-mechanic-application.dto";
+import { ReviewApplicationDto } from "./dto/review-application.dto";
 
 @Injectable()
 export class MechanicService {
@@ -35,8 +35,8 @@ export class MechanicService {
     userId: string,
   ) {
     try {
-      console.log('🔧 MechanicService.applyAsMechanic called with:', { 
-        userId, 
+      console.log("🔧 MechanicService.applyAsMechanic called with:", {
+        userId,
         createDto,
       });
 
@@ -48,7 +48,7 @@ export class MechanicService {
       if (existingApplication) {
         if (existingApplication.status === ApplicationStatus.PENDING) {
           throw new BadRequestException(
-            'You already have a pending application',
+            "You already have a pending application",
           );
         }
         if (existingApplication.status === ApplicationStatus.APPROVED) {
@@ -56,39 +56,42 @@ export class MechanicService {
           const mechanicProfile = await this.mechanicRepository.findOne({
             where: { userId },
           });
-          
+
           if (mechanicProfile) {
             // They have an approved application AND active profile
             throw new BadRequestException(
-              'You are already approved as a mechanic. Use the mechanic dashboard to manage your profile.',
+              "You are already approved as a mechanic. Use the mechanic dashboard to manage your profile.",
             );
           }
-          
+
           // They have approved application but NO profile (resigned previously)
           // Allow them to reapply by deleting old application and creating new one
-          console.log('🔄 User resigned previously - allowing reapplication:', userId);
+          console.log(
+            "🔄 User resigned previously - allowing reapplication:",
+            userId,
+          );
           await this.applicationRepository.remove(existingApplication);
         }
       }
 
-      console.log('✅ Creating new application for user:', userId);
+      console.log("✅ Creating new application for user:", userId);
       const application = this.applicationRepository.create({
         ...createDto,
         userId,
         status: ApplicationStatus.PENDING,
       });
 
-      console.log('💾 Saving application:', application);
+      console.log("💾 Saving application:", application);
       const saved = await this.applicationRepository.save(application);
-      console.log('✅ Application saved successfully:', saved.id);
+      console.log("✅ Application saved successfully:", saved.id);
 
       return {
         ...saved,
         message:
-          'Application submitted successfully. You will be notified once reviewed.',
+          "Application submitted successfully. You will be notified once reviewed.",
       };
     } catch (error) {
-      console.error('❌ Error in applyAsMechanic (ORM path):', error);
+      console.error("❌ Error in applyAsMechanic (ORM path):", error);
 
       if (error instanceof BadRequestException) {
         throw error; // Re-throw BadRequestException
@@ -102,13 +105,15 @@ export class MechanicService {
           throw fallbackError;
         }
 
-        console.error('❌ Error in applyAsMechanic fallback:', {
+        console.error("❌ Error in applyAsMechanic fallback:", {
           message: fallbackError?.message,
           stack: fallbackError?.stack,
           name: fallbackError?.name,
         });
 
-        throw new InternalServerErrorException('Failed to submit mechanic application');
+        throw new InternalServerErrorException(
+          "Failed to submit mechanic application",
+        );
       }
     }
   }
@@ -122,9 +127,13 @@ export class MechanicService {
         `SELECT column_name FROM information_schema.columns WHERE table_name = 'mechanic_applications'`,
       );
 
-    const columnNames = new Set(columnsResult.map((column) => column.column_name));
+    const columnNames = new Set(
+      columnsResult.map((column) => column.column_name),
+    );
     if (columnNames.size === 0) {
-      throw new InternalServerErrorException('mechanic_applications schema not found');
+      throw new InternalServerErrorException(
+        "mechanic_applications schema not found",
+      );
     }
 
     const toIdentifier = (column: string) =>
@@ -135,29 +144,32 @@ export class MechanicService {
       return found ? toIdentifier(found) : null;
     };
 
-    const userIdCol = pick(['user_id', 'userId']);
+    const userIdCol = pick(["user_id", "userId"]);
     if (!userIdCol) {
-      throw new InternalServerErrorException('No user id column in mechanic_applications');
+      throw new InternalServerErrorException(
+        "No user id column in mechanic_applications",
+      );
     }
 
-    const statusCol = pick(['status']) || 'status';
-    const createdAtCol = pick(['created_at', 'createdAt']) || 'id';
+    const statusCol = pick(["status"]) || "status";
+    const createdAtCol = pick(["created_at", "createdAt"]) || "id";
 
-    const existingRows: Array<{ id: string; status: string }> = await this.applicationRepository.query(
-      `
+    const existingRows: Array<{ id: string; status: string }> =
+      await this.applicationRepository.query(
+        `
         SELECT id, ${statusCol}::text AS status
         FROM mechanic_applications
         WHERE ${userIdCol} = $1
         ORDER BY ${createdAtCol} DESC
         LIMIT 1
       `,
-      [userId],
-    );
+        [userId],
+      );
 
     const existing = existingRows[0];
     if (existing) {
       if (existing.status === ApplicationStatus.PENDING) {
-        throw new BadRequestException('You already have a pending application');
+        throw new BadRequestException("You already have a pending application");
       }
 
       if (existing.status === ApplicationStatus.APPROVED) {
@@ -167,7 +179,7 @@ export class MechanicService {
 
         if (mechanicProfile) {
           throw new BadRequestException(
-            'You are already approved as a mechanic. Use the mechanic dashboard to manage your profile.',
+            "You are already approved as a mechanic. Use the mechanic dashboard to manage your profile.",
           );
         }
 
@@ -179,18 +191,22 @@ export class MechanicService {
       }
     }
 
-    const nameCol = pick(['name', 'full_name', 'fullName']);
-    const phoneCol = pick(['phone', 'phone_number', 'phoneNumber']);
-    const emailCol = pick(['email']);
-    const addressCol = pick(['address', 'service_area', 'serviceArea']);
-    const latCol = pick(['lat', 'service_lat', 'serviceLat']);
-    const lngCol = pick(['lng', 'service_lng', 'serviceLng']);
-    const servicesCol = pick(['services', 'skills']);
-    const yearsCol = pick(['years_of_experience', 'yearsOfExperience']);
-    const certCol = pick(['certifications']);
-    const descriptionCol = pick(['description', 'additional_info', 'additionalInfo']);
-    const priceCol = pick(['price_per_hour', 'pricePerHour']);
-    const licenseCol = pick(['license_number', 'licenseNumber']);
+    const nameCol = pick(["name", "full_name", "fullName"]);
+    const phoneCol = pick(["phone", "phone_number", "phoneNumber"]);
+    const emailCol = pick(["email"]);
+    const addressCol = pick(["address", "service_area", "serviceArea"]);
+    const latCol = pick(["lat", "service_lat", "serviceLat"]);
+    const lngCol = pick(["lng", "service_lng", "serviceLng"]);
+    const servicesCol = pick(["services", "skills"]);
+    const yearsCol = pick(["years_of_experience", "yearsOfExperience"]);
+    const certCol = pick(["certifications"]);
+    const descriptionCol = pick([
+      "description",
+      "additional_info",
+      "additionalInfo",
+    ]);
+    const priceCol = pick(["price_per_hour", "pricePerHour"]);
+    const licenseCol = pick(["license_number", "licenseNumber"]);
 
     const insertColumns: string[] = [userIdCol, statusCol];
     const insertValues: string[] = [];
@@ -230,10 +246,11 @@ export class MechanicService {
     if (servicesCol) {
       insertColumns.push(servicesCol);
       // Some deployments use text[] (services), older ones use text (skills).
-      const rawServicesColumn = servicesCol.replaceAll('"', '');
-      const serviceValue = rawServicesColumn === 'services'
-        ? createDto.services
-        : createDto.services.join(', ');
+      const rawServicesColumn = servicesCol.replaceAll('"', "");
+      const serviceValue =
+        rawServicesColumn === "services"
+          ? createDto.services
+          : createDto.services.join(", ");
       insertValues.push(pushParam(serviceValue));
     }
     if (yearsCol) {
@@ -259,8 +276,8 @@ export class MechanicService {
 
     const rows = await this.applicationRepository.query(
       `
-        INSERT INTO mechanic_applications (${insertColumns.join(', ')})
-        VALUES (${insertValues.join(', ')})
+        INSERT INTO mechanic_applications (${insertColumns.join(", ")})
+        VALUES (${insertValues.join(", ")})
         RETURNING id
       `,
       params,
@@ -271,7 +288,7 @@ export class MechanicService {
       userId,
       status: ApplicationStatus.PENDING,
       message:
-        'Application submitted successfully. You will be notified once reviewed.',
+        "Application submitted successfully. You will be notified once reviewed.",
     };
   }
 
@@ -285,7 +302,7 @@ export class MechanicService {
       });
 
       if (!application) {
-        throw new NotFoundException('No application found');
+        throw new NotFoundException("No application found");
       }
 
       return application;
@@ -294,14 +311,17 @@ export class MechanicService {
         throw error;
       }
 
-      console.error('❌ getMyApplication ORM query failed, trying schema-safe fallback:', {
-        userId,
-        message: error?.message,
-      });
+      console.error(
+        "❌ getMyApplication ORM query failed, trying schema-safe fallback:",
+        {
+          userId,
+          message: error?.message,
+        },
+      );
 
       const fallbackApplication = await this.getMyApplicationFallback(userId);
       if (!fallbackApplication) {
-        throw new NotFoundException('No application found');
+        throw new NotFoundException("No application found");
       }
 
       return fallbackApplication;
@@ -318,50 +338,54 @@ export class MechanicService {
         `SELECT column_name FROM information_schema.columns WHERE table_name = 'mechanic_applications'`,
       );
 
-    const columnNames = new Set(columnsResult.map((column) => column.column_name));
+    const columnNames = new Set(
+      columnsResult.map((column) => column.column_name),
+    );
 
-    const userIdColumn = columnNames.has('userId')
+    const userIdColumn = columnNames.has("userId")
       ? '"userId"'
-      : columnNames.has('user_id')
-        ? 'user_id'
+      : columnNames.has("user_id")
+        ? "user_id"
         : null;
 
     if (!userIdColumn) {
-      console.error('❌ getMyApplicationFallback: user id column not found in mechanic_applications');
+      console.error(
+        "❌ getMyApplicationFallback: user id column not found in mechanic_applications",
+      );
       return null;
     }
 
-    const reviewNotesColumn = columnNames.has('review_notes')
-      ? 'review_notes'
-      : columnNames.has('reviewNotes')
+    const reviewNotesColumn = columnNames.has("review_notes")
+      ? "review_notes"
+      : columnNames.has("reviewNotes")
         ? '"reviewNotes"'
-        : 'NULL';
+        : "NULL";
 
-    const reviewedByColumn = columnNames.has('reviewed_by')
-      ? 'reviewed_by'
-      : columnNames.has('reviewedBy')
+    const reviewedByColumn = columnNames.has("reviewed_by")
+      ? "reviewed_by"
+      : columnNames.has("reviewedBy")
         ? '"reviewedBy"'
-        : 'NULL';
+        : "NULL";
 
-    const reviewedAtColumn = columnNames.has('reviewedAt')
+    const reviewedAtColumn = columnNames.has("reviewedAt")
       ? '"reviewedAt"'
-      : columnNames.has('reviewed_at')
-        ? 'reviewed_at'
-        : 'NULL';
+      : columnNames.has("reviewed_at")
+        ? "reviewed_at"
+        : "NULL";
 
-    const createdAtColumn = columnNames.has('created_at')
-      ? 'created_at'
-      : columnNames.has('createdAt')
+    const createdAtColumn = columnNames.has("created_at")
+      ? "created_at"
+      : columnNames.has("createdAt")
         ? '"createdAt"'
-        : 'NULL';
+        : "NULL";
 
-    const updatedAtColumn = columnNames.has('updated_at')
-      ? 'updated_at'
-      : columnNames.has('updatedAt')
+    const updatedAtColumn = columnNames.has("updated_at")
+      ? "updated_at"
+      : columnNames.has("updatedAt")
         ? '"updatedAt"'
-        : 'NULL';
+        : "NULL";
 
-    const orderByColumn = createdAtColumn == 'NULL' ? 'id' : createdAtColumn;
+    const orderByColumn = createdAtColumn == "NULL" ? "id" : createdAtColumn;
 
     const rows = await this.applicationRepository.query(
       `
@@ -390,15 +414,15 @@ export class MechanicService {
    */
   async getAllApplications(status?: ApplicationStatus) {
     const where: any = {};
-    
+
     if (status) {
       where.status = status;
     }
 
     const applications = await this.applicationRepository.find({
       where,
-      relations: ['user'],
-      order: { createdAt: 'DESC' },
+      relations: ["user"],
+      order: { createdAt: "DESC" },
     });
 
     return applications;
@@ -410,11 +434,11 @@ export class MechanicService {
   async getApplicationById(id: string) {
     const application = await this.applicationRepository.findOne({
       where: { id },
-      relations: ['user'],
+      relations: ["user"],
     });
 
     if (!application) {
-      throw new NotFoundException('Application not found');
+      throw new NotFoundException("Application not found");
     }
 
     return application;
@@ -430,15 +454,15 @@ export class MechanicService {
   ) {
     const application = await this.applicationRepository.findOne({
       where: { id },
-      relations: ['user'],
+      relations: ["user"],
     });
 
     if (!application) {
-      throw new NotFoundException('Application not found');
+      throw new NotFoundException("Application not found");
     }
 
     if (application.status !== ApplicationStatus.PENDING) {
-      throw new BadRequestException('Application has already been reviewed');
+      throw new BadRequestException("Application has already been reviewed");
     }
 
     application.status = reviewDto.status;
@@ -456,7 +480,7 @@ export class MechanicService {
 
       if (user) {
         // Update user role to mechanic
-        user.role = 'mechanic';
+        user.role = "mechanic";
         await this.userRepository.save(user);
 
         // Check if mechanic profile already exists
@@ -469,7 +493,7 @@ export class MechanicService {
           const mechanic = this.mechanicRepository.create({
             userId: application.userId,
             name: application.name,
-            specialization: application.services.join(', '),
+            specialization: application.services.join(", "),
             yearsOfExperience: application.yearsOfExperience,
             rating: 0,
             completedJobs: 0,
@@ -499,8 +523,8 @@ export class MechanicService {
    */
   async getAllMechanics() {
     const mechanics = await this.userRepository.find({
-      where: { role: 'mechanic' },
-      select: ['id', 'name', 'phoneNumber', 'role', 'createdAt'],
+      where: { role: "mechanic" },
+      select: ["id", "name", "phoneNumber", "role", "createdAt"],
     });
 
     return mechanics;

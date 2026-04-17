@@ -1,6 +1,14 @@
-import { Type } from 'class-transformer';
-import { IsNotEmpty, IsString, IsOptional, IsNumber, IsArray, ValidateNested, Min } from 'class-validator';
-import { SocketDto } from './socket.dto';
+import { Type } from "class-transformer";
+import {
+  IsNotEmpty,
+  IsString,
+  IsOptional,
+  IsNumber,
+  IsArray,
+  ValidateNested,
+  Min,
+} from "class-validator";
+import { SocketDto } from "./socket.dto";
 
 export class ChargerConfigDto {
   @IsString()
@@ -13,7 +21,7 @@ export class ChargerConfigDto {
 
   @IsString()
   @IsNotEmpty()
-  chargerType: 'ac' | 'dc';
+  chargerType: "ac" | "dc";
 
   @IsNumber()
   @IsNotEmpty()
@@ -27,5 +35,5 @@ export class ChargerConfigDto {
 
   @IsString()
   @IsOptional()
-  bookingMode?: 'pre_booking' | 'walk_in' | 'hybrid';
+  bookingMode?: "pre_booking" | "walk_in" | "hybrid";
 }

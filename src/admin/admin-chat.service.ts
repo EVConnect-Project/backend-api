@@ -1,9 +1,12 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
-import { Conversation, ConversationType } from '../chat/entities/conversation.entity';
-import { Message, MessageType } from '../chat/entities/message.entity';
-import { UserEntity } from '../users/entities/user.entity';
+import { Injectable, NotFoundException } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository, In } from "typeorm";
+import {
+  Conversation,
+  ConversationType,
+} from "../chat/entities/conversation.entity";
+import { Message, MessageType } from "../chat/entities/message.entity";
+import { UserEntity } from "../users/entities/user.entity";
 
 @Injectable()
 export class AdminChatService {
@@ -27,10 +30,18 @@ export class AdminChatService {
     // Check if conversation already exists
     let conversation = await this.conversationRepo.findOne({
       where: [
-        { userId: adminId, participantId: targetUserId, type: ConversationType.DIRECT },
-        { userId: targetUserId, participantId: adminId, type: ConversationType.DIRECT },
+        {
+          userId: adminId,
+          participantId: targetUserId,
+          type: ConversationType.DIRECT,
+        },
+        {
+          userId: targetUserId,
+          participantId: adminId,
+          type: ConversationType.DIRECT,
+        },
       ],
-      relations: ['user', 'participant'],
+      relations: ["user", "participant"],
     });
 
     if (!conversation) {
@@ -44,7 +55,11 @@ export class AdminChatService {
 
     let message: Message | undefined;
     if (initialMessage) {
-      message = await this.sendAdminMessage(conversation.id, adminId, initialMessage);
+      message = await this.sendAdminMessage(
+        conversation.id,
+        adminId,
+        initialMessage,
+      );
     }
 
     return { conversation, message };
@@ -58,7 +73,7 @@ export class AdminChatService {
     adminId: string,
     content: string,
     type: MessageType = MessageType.TEXT,
-    priority: 'normal' | 'high' | 'urgent' = 'normal',
+    priority: "normal" | "high" | "urgent" = "normal",
   ): Promise<Message> {
     const message = this.messageRepo.create({
       conversationId,
@@ -81,13 +96,13 @@ export class AdminChatService {
     limit: number = 20,
   ) {
     const [conversations, total] = await this.conversationRepo
-      .createQueryBuilder('conversation')
-      .leftJoinAndSelect('conversation.user', 'user')
-      .leftJoinAndSelect('conversation.participant', 'participant')
-      .leftJoinAndSelect('conversation.lastMessage', 'lastMessage')
-      .where('conversation.userId = :adminId', { adminId })
-      .orWhere('conversation.participantId = :adminId', { adminId })
-      .orderBy('conversation.updatedAt', 'DESC')
+      .createQueryBuilder("conversation")
+      .leftJoinAndSelect("conversation.user", "user")
+      .leftJoinAndSelect("conversation.participant", "participant")
+      .leftJoinAndSelect("conversation.lastMessage", "lastMessage")
+      .where("conversation.userId = :adminId", { adminId })
+      .orWhere("conversation.participantId = :adminId", { adminId })
+      .orderBy("conversation.updatedAt", "DESC")
       .skip((page - 1) * limit)
       .take(limit)
       .getManyAndCount();
@@ -109,10 +124,10 @@ export class AdminChatService {
     limit: number = 50,
   ) {
     const [messages, total] = await this.messageRepo
-      .createQueryBuilder('message')
-      .leftJoinAndSelect('message.sender', 'sender')
-      .where('message.conversationId = :conversationId', { conversationId })
-      .orderBy('message.createdAt', 'ASC')
+      .createQueryBuilder("message")
+      .leftJoinAndSelect("message.sender", "sender")
+      .where("message.conversationId = :conversationId", { conversationId })
+      .orderBy("message.createdAt", "ASC")
       .skip((page - 1) * limit)
       .take(limit)
       .getManyAndCount();
@@ -132,7 +147,7 @@ export class AdminChatService {
     adminId: string,
     userIds: string[],
     message: string,
-    priority: 'normal' | 'high' | 'urgent' = 'high',
+    priority: "normal" | "high" | "urgent" = "high",
   ): Promise<Message[]> {
     const sentMessages: Message[] = [];
 
@@ -154,8 +169,13 @@ export class AdminChatService {
   /**
    * Mark conversation as priority
    */
-  async setPriority(conversationId: string, priority: 'normal' | 'high' | 'urgent') {
-    const conversation = await this.conversationRepo.findOne({ where: { id: conversationId } });
+  async setPriority(
+    conversationId: string,
+    priority: "normal" | "high" | "urgent",
+  ) {
+    const conversation = await this.conversationRepo.findOne({
+      where: { id: conversationId },
+    });
     if (conversation) {
       conversation.metadata = { ...conversation.metadata, priority };
       await this.conversationRepo.save(conversation);
@@ -168,11 +188,11 @@ export class AdminChatService {
   async getUserContext(userId: string) {
     const user = await this.userRepo.findOne({
       where: { id: userId },
-      select: ['id', 'name', 'phoneNumber', 'role', 'isBanned', 'createdAt'],
+      select: ["id", "name", "phoneNumber", "role", "isBanned", "createdAt"],
     });
 
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException("User not found");
     }
 
     return user;

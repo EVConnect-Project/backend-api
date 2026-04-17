@@ -1,12 +1,12 @@
-import { Injectable, Logger, HttpException, HttpStatus } from '@nestjs/common';
-import { HttpService } from '@nestjs/axios';
-import { ConfigService } from '@nestjs/config';
-import { firstValueFrom } from 'rxjs';
-import { NotificationsService } from '../notifications/notifications.service';
+import { Injectable, Logger, HttpException, HttpStatus } from "@nestjs/common";
+import { HttpService } from "@nestjs/axios";
+import { ConfigService } from "@nestjs/config";
+import { firstValueFrom } from "rxjs";
+import { NotificationsService } from "../notifications/notifications.service";
 
 /**
  * ChargingService handles OCPP charging station operations.
- * 
+ *
  * NOTE: Charging notifications (started, 80%, completed) should be triggered
  * by OCPP webhooks from the ev-charging-service. Add webhook endpoints to
  * receive these events and call:
@@ -26,19 +26,19 @@ export class ChargingService {
     private readonly notificationsService: NotificationsService,
   ) {
     this.chargingServiceUrl = this.configService.get<string>(
-      'CHARGING_SERVICE_URL',
-      'http://localhost:4000',
+      "CHARGING_SERVICE_URL",
+      "http://localhost:4000",
     );
     this.apiKey = this.configService.get<string>(
-      'CHARGING_SERVICE_API_KEY',
-      'evconnect-backend-api-key-dev',
+      "CHARGING_SERVICE_API_KEY",
+      "evconnect-backend-api-key-dev",
     );
   }
 
   private getHeaders() {
     return {
-      'X-API-Key': this.apiKey,
-      'Content-Type': 'application/json',
+      "X-API-Key": this.apiKey,
+      "Content-Type": "application/json",
     };
   }
 
@@ -47,14 +47,14 @@ export class ChargingService {
       const response = await firstValueFrom(
         this.httpService.get(`${this.chargingServiceUrl}/chargers`, {
           headers: this.getHeaders(),
-          params: { isOnline: true, status: 'Available' },
+          params: { isOnline: true, status: "Available" },
         }),
       );
       return response.data;
     } catch (error) {
-      this.logger.error('Failed to fetch available chargers', error.message);
+      this.logger.error("Failed to fetch available chargers", error.message);
       throw new HttpException(
-        'Failed to fetch chargers',
+        "Failed to fetch chargers",
         HttpStatus.SERVICE_UNAVAILABLE,
       );
     }
@@ -69,9 +69,9 @@ export class ChargingService {
       );
       return response.data;
     } catch (error) {
-      this.logger.error('Failed to fetch connected chargers', error.message);
+      this.logger.error("Failed to fetch connected chargers", error.message);
       throw new HttpException(
-        'Failed to fetch chargers',
+        "Failed to fetch chargers",
         HttpStatus.SERVICE_UNAVAILABLE,
       );
     }
@@ -90,10 +90,7 @@ export class ChargingService {
       return response.data;
     } catch (error) {
       this.logger.error(`Failed to fetch charger ${chargerId}`, error.message);
-      throw new HttpException(
-        'Charger not found',
-        HttpStatus.NOT_FOUND,
-      );
+      throw new HttpException("Charger not found", HttpStatus.NOT_FOUND);
     }
   }
 
@@ -107,8 +104,14 @@ export class ChargingService {
       );
       return response.data;
     } catch (error) {
-      this.logger.error(`Failed to fetch charger by identity ${chargeBoxIdentity}`, error.message);
-      throw new HttpException('Charger not found or not connected', HttpStatus.NOT_FOUND);
+      this.logger.error(
+        `Failed to fetch charger by identity ${chargeBoxIdentity}`,
+        error.message,
+      );
+      throw new HttpException(
+        "Charger not found or not connected",
+        HttpStatus.NOT_FOUND,
+      );
     }
   }
 
@@ -138,12 +141,14 @@ export class ChargingService {
           { headers: this.getHeaders() },
         ),
       );
-      this.logger.log(`Session created for user ${userId} on charger ${resolvedChargerId}`);
+      this.logger.log(
+        `Session created for user ${userId} on charger ${resolvedChargerId}`,
+      );
       return response.data;
     } catch (error) {
-      this.logger.error('Failed to create session', error.message);
+      this.logger.error("Failed to create session", error.message);
       throw new HttpException(
-        error.response?.data?.error || 'Failed to create session',
+        error.response?.data?.error || "Failed to create session",
         error.response?.status || HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
@@ -163,9 +168,9 @@ export class ChargingService {
       this.logger.log(`Charging started for session ${sessionId}`);
       return response.data;
     } catch (error) {
-      this.logger.error('Failed to start charging', error.message);
+      this.logger.error("Failed to start charging", error.message);
       throw new HttpException(
-        error.response?.data?.error || 'Failed to start charging',
+        error.response?.data?.error || "Failed to start charging",
         error.response?.status || HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
@@ -185,9 +190,9 @@ export class ChargingService {
       this.logger.log(`Charging stopped for session ${sessionId}`);
       return response.data;
     } catch (error) {
-      this.logger.error('Failed to stop charging', error.message);
+      this.logger.error("Failed to stop charging", error.message);
       throw new HttpException(
-        error.response?.data?.error || 'Failed to stop charging',
+        error.response?.data?.error || "Failed to stop charging",
         error.response?.status || HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
@@ -206,14 +211,16 @@ export class ChargingService {
       return response.data;
     } catch (error) {
       this.logger.error(`Failed to fetch session ${sessionId}`, error.message);
-      throw new HttpException(
-        'Session not found',
-        HttpStatus.NOT_FOUND,
-      );
+      throw new HttpException("Session not found", HttpStatus.NOT_FOUND);
     }
   }
 
-  async getUserSessions(userId: string, status?: string, limit = 20, offset = 0) {
+  async getUserSessions(
+    userId: string,
+    status?: string,
+    limit = 20,
+    offset = 0,
+  ) {
     try {
       const params: any = { limit, offset };
       if (status) params.status = status;
@@ -229,9 +236,12 @@ export class ChargingService {
       );
       return response.data;
     } catch (error) {
-      this.logger.error(`Failed to fetch sessions for user ${userId}`, error.message);
+      this.logger.error(
+        `Failed to fetch sessions for user ${userId}`,
+        error.message,
+      );
       throw new HttpException(
-        'Failed to fetch sessions',
+        "Failed to fetch sessions",
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
@@ -249,9 +259,12 @@ export class ChargingService {
       );
       return response.data;
     } catch (error) {
-      this.logger.error(`Failed to fetch meter values for session ${sessionId}`, error.message);
+      this.logger.error(
+        `Failed to fetch meter values for session ${sessionId}`,
+        error.message,
+      );
       throw new HttpException(
-        'Failed to fetch meter values',
+        "Failed to fetch meter values",
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
@@ -268,18 +281,24 @@ export class ChargingService {
           },
         ),
       );
-      this.logger.log(`Unlock command sent to charger ${chargerId}, connector ${connectorId}`);
+      this.logger.log(
+        `Unlock command sent to charger ${chargerId}, connector ${connectorId}`,
+      );
       return response.data;
     } catch (error) {
-      this.logger.error('Failed to unlock connector', error.message);
+      this.logger.error("Failed to unlock connector", error.message);
       throw new HttpException(
-        error.response?.data?.error || 'Failed to unlock connector',
+        error.response?.data?.error || "Failed to unlock connector",
         error.response?.status || HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
 
-  async setChargingLimit(chargerId: string, connectorId: number, powerLimitW: number) {
+  async setChargingLimit(
+    chargerId: string,
+    connectorId: number,
+    powerLimitW: number,
+  ) {
     try {
       const response = await firstValueFrom(
         this.httpService.post(
@@ -290,18 +309,24 @@ export class ChargingService {
           },
         ),
       );
-      this.logger.log(`Charging limit set for charger ${chargerId}: ${powerLimitW}W`);
+      this.logger.log(
+        `Charging limit set for charger ${chargerId}: ${powerLimitW}W`,
+      );
       return response.data;
     } catch (error) {
-      this.logger.error('Failed to set charging limit', error.message);
+      this.logger.error("Failed to set charging limit", error.message);
       throw new HttpException(
-        error.response?.data?.error || 'Failed to set charging limit',
+        error.response?.data?.error || "Failed to set charging limit",
         error.response?.status || HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
 
-  async setAvailability(chargerId: string, connectorId: number, type: 'Operative' | 'Inoperative') {
+  async setAvailability(
+    chargerId: string,
+    connectorId: number,
+    type: "Operative" | "Inoperative",
+  ) {
     try {
       const response = await firstValueFrom(
         this.httpService.post(
@@ -312,18 +337,20 @@ export class ChargingService {
           },
         ),
       );
-      this.logger.log(`Availability changed for charger ${chargerId} to ${type}`);
+      this.logger.log(
+        `Availability changed for charger ${chargerId} to ${type}`,
+      );
       return response.data;
     } catch (error) {
-      this.logger.error('Failed to set availability', error.message);
+      this.logger.error("Failed to set availability", error.message);
       throw new HttpException(
-        error.response?.data?.error || 'Failed to set availability',
+        error.response?.data?.error || "Failed to set availability",
         error.response?.status || HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
 
-  async resetCharger(chargerId: string, type: 'Soft' | 'Hard' = 'Soft') {
+  async resetCharger(chargerId: string, type: "Soft" | "Hard" = "Soft") {
     try {
       const response = await firstValueFrom(
         this.httpService.post(
@@ -335,9 +362,9 @@ export class ChargingService {
       this.logger.log(`Reset (${type}) sent to charger ${chargerId}`);
       return response.data;
     } catch (error) {
-      this.logger.error('Failed to reset charger', error.message);
+      this.logger.error("Failed to reset charger", error.message);
       throw new HttpException(
-        error.response?.data?.error || 'Failed to reset charger',
+        error.response?.data?.error || "Failed to reset charger",
         error.response?.status || HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
@@ -345,18 +372,17 @@ export class ChargingService {
 
   async getAllSessions(status?: string) {
     try {
-      const params = status ? `?status=${status}` : '';
+      const params = status ? `?status=${status}` : "";
       const response = await firstValueFrom(
-        this.httpService.get(
-          `${this.chargingServiceUrl}/sessions${params}`,
-          { headers: this.getHeaders() },
-        ),
+        this.httpService.get(`${this.chargingServiceUrl}/sessions${params}`, {
+          headers: this.getHeaders(),
+        }),
       );
       return response.data;
     } catch (error) {
-      this.logger.error('Failed to get sessions', error.message);
+      this.logger.error("Failed to get sessions", error.message);
       throw new HttpException(
-        error.response?.data?.error || 'Failed to get sessions',
+        error.response?.data?.error || "Failed to get sessions",
         error.response?.status || HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
@@ -369,9 +395,12 @@ export class ChargingService {
   // OCPP Webhook Handlers
   async handleSessionStartedWebhook(payload: any) {
     try {
-      const { sessionId, userId, chargerId, chargerName, connectorId } = payload;
+      const { sessionId, userId, chargerId, chargerName, connectorId } =
+        payload;
 
-      this.logger.log(`Session started webhook: ${sessionId} for user ${userId}`);
+      this.logger.log(
+        `Session started webhook: ${sessionId} for user ${userId}`,
+      );
 
       // Send notification to user
       await this.notificationsService.sendChargingStarted(
@@ -381,18 +410,24 @@ export class ChargingService {
         connectorId || 1,
       );
 
-      return { success: true, message: 'Session started notification sent' };
+      return { success: true, message: "Session started notification sent" };
     } catch (error) {
-      this.logger.error('Failed to handle session started webhook', error.message);
+      this.logger.error(
+        "Failed to handle session started webhook",
+        error.message,
+      );
       return { success: false, error: error.message };
     }
   }
 
   async handleMeterValuesWebhook(payload: any) {
     try {
-      const { sessionId, userId, chargerName, meterValues, targetKwh } = payload;
+      const { sessionId, userId, chargerName, meterValues, targetKwh } =
+        payload;
 
-      this.logger.log(`Meter values webhook: ${sessionId}, values: ${JSON.stringify(meterValues)}`);
+      this.logger.log(
+        `Meter values webhook: ${sessionId}, values: ${JSON.stringify(meterValues)}`,
+      );
 
       // Check if charging reached 80%
       const energyDelivered = meterValues?.energyActiveImportRegister || 0;
@@ -410,18 +445,27 @@ export class ChargingService {
         this.logger.log(`80% notification sent for session ${sessionId}`);
       }
 
-      return { success: true, message: 'Meter values processed', percentage };
+      return { success: true, message: "Meter values processed", percentage };
     } catch (error) {
-      this.logger.error('Failed to handle meter values webhook', error.message);
+      this.logger.error("Failed to handle meter values webhook", error.message);
       return { success: false, error: error.message };
     }
   }
 
   async handleSessionCompletedWebhook(payload: any) {
     try {
-      const { sessionId, userId, chargerName, energyDelivered, duration, cost } = payload;
+      const {
+        sessionId,
+        userId,
+        chargerName,
+        energyDelivered,
+        duration,
+        cost,
+      } = payload;
 
-      this.logger.log(`Session completed webhook: ${sessionId} for user ${userId}`);
+      this.logger.log(
+        `Session completed webhook: ${sessionId} for user ${userId}`,
+      );
 
       // Send notification to user
       await this.notificationsService.sendChargingCompleted(
@@ -431,9 +475,12 @@ export class ChargingService {
         sessionId,
       );
 
-      return { success: true, message: 'Session completed notification sent' };
+      return { success: true, message: "Session completed notification sent" };
     } catch (error) {
-      this.logger.error('Failed to handle session completed webhook', error.message);
+      this.logger.error(
+        "Failed to handle session completed webhook",
+        error.message,
+      );
       return { success: false, error: error.message };
     }
   }

@@ -5,22 +5,22 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   Index,
-} from 'typeorm';
+} from "typeorm";
 
-@Entity('notification_preferences')
-@Index(['userId', 'notificationType'], { unique: true })
+@Entity("notification_preferences")
+@Index(["userId", "notificationType"], { unique: true })
 export class NotificationPreferenceEntity {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn("uuid")
   id: string;
 
-  @Column({ type: 'uuid' })
+  @Column({ type: "uuid" })
   @Index()
   userId: string;
 
-  @Column({ type: 'varchar', length: 50 })
+  @Column({ type: "varchar", length: 50 })
   notificationType: string;
 
-  @Column({ type: 'boolean', default: true })
+  @Column({ type: "boolean", default: true })
   enabled: boolean;
 
   @CreateDateColumn()

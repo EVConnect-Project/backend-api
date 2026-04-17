@@ -1,7 +1,7 @@
-import { BadRequestException } from '@nestjs/common';
-import { SmartTripPlannerService } from './smart-trip-planner.service';
+import { BadRequestException } from "@nestjs/common";
+import { SmartTripPlannerService } from "./smart-trip-planner.service";
 
-describe('SmartTripPlannerService', () => {
+describe("SmartTripPlannerService", () => {
   const chargerRepositoryMock = {
     find: jest.fn(),
     findOne: jest.fn(),
@@ -28,21 +28,15 @@ describe('SmartTripPlannerService', () => {
     );
   });
 
-  it('throws when road-based fallback geometry is unavailable', async () => {
-    jest.spyOn(service as any, 'getOsrmDirections').mockResolvedValue([]);
+  it("throws when road-based fallback geometry is unavailable", async () => {
+    jest.spyOn(service as any, "getOsrmDirections").mockResolvedValue([]);
 
     await expect(
-      (service as any).getFallbackRoute(
-        6.9271,
-        79.8612,
-        7.2906,
-        80.6337,
-        [],
-      ),
+      (service as any).getFallbackRoute(6.9271, 79.8612, 7.2906, 80.6337, []),
     ).rejects.toThrow(BadRequestException);
   });
 
-  it('ranks chargers by route-corridor proximity when other factors are equal', () => {
+  it("ranks chargers by route-corridor proximity when other factors are equal", () => {
     const routePoints = [
       { lat: 7.0, lng: 80.0 },
       { lat: 7.0, lng: 80.5 },
@@ -53,26 +47,26 @@ describe('SmartTripPlannerService', () => {
     const targetLng = 81.2;
 
     const nearTargetFarCorridor = {
-      id: 'charger-a',
+      id: "charger-a",
       lat: 7.3,
       lng: 81.4,
       maxPowerKw: 150,
       reliabilityScore: 0.95,
-      status: 'available',
-      currentStatus: 'available',
+      status: "available",
+      currentStatus: "available",
       isOnline: true,
       manualOverride: false,
       lastHeartbeat: new Date().toISOString(),
     };
 
     const onCorridorFartherFromTarget = {
-      id: 'charger-b',
+      id: "charger-b",
       lat: 7.0,
       lng: 81.0,
       maxPowerKw: 150,
       reliabilityScore: 0.95,
-      status: 'available',
-      currentStatus: 'available',
+      status: "available",
+      currentStatus: "available",
       isOnline: true,
       manualOverride: false,
       lastHeartbeat: new Date().toISOString(),
@@ -85,6 +79,6 @@ describe('SmartTripPlannerService', () => {
       routePoints,
     );
 
-    expect(ranked[0].id).toBe('charger-b');
+    expect(ranked[0].id).toBe("charger-b");
   });
 });

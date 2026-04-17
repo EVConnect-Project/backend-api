@@ -1,21 +1,26 @@
-import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { MechanicEntity } from './entities/mechanic.entity';
-import { MechanicExpertiseEntity } from './entities/mechanic-expertise.entity';
-import { UserEntity } from '../users/entities/user.entity';
-import { MechanicApplication } from '../mechanic/entities/mechanic-application.entity';
-import { Charger } from '../charger/entities/charger.entity';
-import { CreateMechanicDto } from './dto/create-mechanic.dto';
-import { UpdateMechanicDto } from './dto/update-mechanic.dto';
-import { EmergencyRequestDto } from './dto/emergency-request.dto';
-import { NotificationsService } from '../notifications/notifications.service';
-import { FirebaseNotificationService } from '../notifications/services/firebase-notification.service';
-import { NotificationType } from '../notifications/types/notification-types';
-import { EmergencyService } from '../emergency/emergency.service';
-import { TrafficService } from './services/traffic.service';
-import { ServiceMatcherService } from './services/service-matcher.service';
-import axios from 'axios';
+import {
+  Injectable,
+  NotFoundException,
+  Inject,
+  forwardRef,
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { MechanicEntity } from "./entities/mechanic.entity";
+import { MechanicExpertiseEntity } from "./entities/mechanic-expertise.entity";
+import { UserEntity } from "../users/entities/user.entity";
+import { MechanicApplication } from "../mechanic/entities/mechanic-application.entity";
+import { Charger } from "../charger/entities/charger.entity";
+import { CreateMechanicDto } from "./dto/create-mechanic.dto";
+import { UpdateMechanicDto } from "./dto/update-mechanic.dto";
+import { EmergencyRequestDto } from "./dto/emergency-request.dto";
+import { NotificationsService } from "../notifications/notifications.service";
+import { FirebaseNotificationService } from "../notifications/services/firebase-notification.service";
+import { NotificationType } from "../notifications/types/notification-types";
+import { EmergencyService } from "../emergency/emergency.service";
+import { TrafficService } from "./services/traffic.service";
+import { ServiceMatcherService } from "./services/service-matcher.service";
+import axios from "axios";
 
 @Injectable()
 export class MechanicsService {
@@ -38,7 +43,9 @@ export class MechanicsService {
     private serviceMatcherService: ServiceMatcherService,
   ) {}
 
-  async register(createMechanicDto: CreateMechanicDto): Promise<MechanicEntity> {
+  async register(
+    createMechanicDto: CreateMechanicDto,
+  ): Promise<MechanicEntity> {
     const mechanic = this.mechanicRepository.create(createMechanicDto);
     return this.mechanicRepository.save(mechanic);
   }
@@ -48,15 +55,18 @@ export class MechanicsService {
       // Try with both filters first
       const mechanics = await this.mechanicRepository.find({
         where: { available: true, isBanned: false },
-        order: { rating: 'DESC' },
+        order: { rating: "DESC" },
       });
       return mechanics;
     } catch (error) {
-      console.error('Error fetching mechanics with isBanned filter:', error.message);
+      console.error(
+        "Error fetching mechanics with isBanned filter:",
+        error.message,
+      );
       // Fallback: just filter by available
       return this.mechanicRepository.find({
         where: { available: true },
-        order: { rating: 'DESC' },
+        order: { rating: "DESC" },
       });
     }
   }
@@ -71,17 +81,21 @@ export class MechanicsService {
     return mechanic;
   }
 
-  async findNearby(lat: number, lng: number, radiusKm: number = 10): Promise<any[]> {
+  async findNearby(
+    lat: number,
+    lng: number,
+    radiusKm: number = 10,
+  ): Promise<any[]> {
     try {
       // Get all available, non-banned mechanics
       const allMechanics = await this.mechanicRepository.find({
         where: { available: true, isBanned: false },
-        order: { rating: 'DESC' },
+        order: { rating: "DESC" },
       });
-      
+
       // Calculate distance manually for each mechanic
       const mechanicsWithDistance = allMechanics
-        .map(mechanic => ({
+        .map((mechanic) => ({
           id: mechanic.id,
           userId: mechanic.userId,
           name: mechanic.name,
@@ -92,12 +106,21 @@ export class MechanicsService {
           phone: mechanic.phone,
           description: mechanic.description,
           available: mechanic.available,
-          pricePerHour: mechanic.pricePerHour ? parseFloat(mechanic.pricePerHour as any) : null,
-          serviceRadius: mechanic.serviceRadius ? parseFloat(mechanic.serviceRadius as any) : 5,
-          distance: this.calculateDistance(lat, lng, parseFloat(mechanic.lat as any), parseFloat(mechanic.lng as any)),
+          pricePerHour: mechanic.pricePerHour
+            ? parseFloat(mechanic.pricePerHour as any)
+            : null,
+          serviceRadius: mechanic.serviceRadius
+            ? parseFloat(mechanic.serviceRadius as any)
+            : 5,
+          distance: this.calculateDistance(
+            lat,
+            lng,
+            parseFloat(mechanic.lat as any),
+            parseFloat(mechanic.lng as any),
+          ),
         }))
         // Filter: Request must be within search radius AND within mechanic's service radius
-        .filter(m => {
+        .filter((m) => {
           const withinSearchRadius = m.distance <= radiusKm;
           const withinMechanicServiceRadius = m.distance <= m.serviceRadius;
           return withinSearchRadius && withinMechanicServiceRadius;
@@ -106,22 +129,29 @@ export class MechanicsService {
 
       return mechanicsWithDistance;
     } catch (error) {
-      console.error('Error finding nearby mechanics:', error);
-      console.error('Error details:', error.message);
+      console.error("Error finding nearby mechanics:", error);
+      console.error("Error details:", error.message);
       return [];
     }
   }
 
-  private calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  private calculateDistance(
+    lat1: number,
+    lng1: number,
+    lat2: number,
+    lng2: number,
+  ): number {
     const R = 6371; // Earth's radius in km
     const dLat = this.toRadians(lat2 - lat1);
     const dLng = this.toRadians(lng2 - lng1);
-    
-    const a = 
+
+    const a =
       Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(this.toRadians(lat1)) * Math.cos(this.toRadians(lat2)) *
-      Math.sin(dLng / 2) * Math.sin(dLng / 2);
-    
+      Math.cos(this.toRadians(lat1)) *
+        Math.cos(this.toRadians(lat2)) *
+        Math.sin(dLng / 2) *
+        Math.sin(dLng / 2);
+
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   }
@@ -132,14 +162,17 @@ export class MechanicsService {
 
   async findByService(service: string): Promise<MechanicEntity[]> {
     return this.mechanicRepository
-      .createQueryBuilder('mechanic')
-      .where(':service = ANY(mechanic.services)', { service })
-      .andWhere('mechanic.available = true')
-      .orderBy('mechanic.rating', 'DESC')
+      .createQueryBuilder("mechanic")
+      .where(":service = ANY(mechanic.services)", { service })
+      .andWhere("mechanic.available = true")
+      .orderBy("mechanic.rating", "DESC")
       .getMany();
   }
 
-  async update(id: string, updateMechanicDto: UpdateMechanicDto): Promise<MechanicEntity> {
+  async update(
+    id: string,
+    updateMechanicDto: UpdateMechanicDto,
+  ): Promise<MechanicEntity> {
     const mechanic = await this.findOne(id);
     Object.assign(mechanic, updateMechanicDto);
     return this.mechanicRepository.save(mechanic);
@@ -152,33 +185,46 @@ export class MechanicsService {
 
   async updateRating(id: string, newRating: number): Promise<MechanicEntity> {
     const mechanic = await this.findOne(id);
-    
+
     // Simple average (in production, you'd maintain a count of reviews)
-    mechanic.rating = parseFloat(((mechanic.rating + newRating) / 2).toFixed(2));
-    
+    mechanic.rating = parseFloat(
+      ((mechanic.rating + newRating) / 2).toFixed(2),
+    );
+
     return this.mechanicRepository.save(mechanic);
   }
 
-  async updateMyAvailability(userId: string, available: boolean): Promise<MechanicEntity> {
+  async updateMyAvailability(
+    userId: string,
+    available: boolean,
+  ): Promise<MechanicEntity> {
     const mechanic = await this.mechanicRepository.findOne({
       where: { userId },
     });
 
     if (!mechanic) {
-      throw new NotFoundException(`Mechanic profile not found for user ${userId}`);
+      throw new NotFoundException(
+        `Mechanic profile not found for user ${userId}`,
+      );
     }
 
     mechanic.available = available;
     return this.mechanicRepository.save(mechanic);
   }
 
-  async updateMyLocation(userId: string, lat: number, lng: number): Promise<MechanicEntity> {
+  async updateMyLocation(
+    userId: string,
+    lat: number,
+    lng: number,
+  ): Promise<MechanicEntity> {
     const mechanic = await this.mechanicRepository.findOne({
       where: { userId },
     });
 
     if (!mechanic) {
-      throw new NotFoundException(`Mechanic profile not found for user ${userId}`);
+      throw new NotFoundException(
+        `Mechanic profile not found for user ${userId}`,
+      );
     }
 
     // Keep both static and live coordinates in sync for backward compatibility
@@ -225,7 +271,9 @@ export class MechanicsService {
 
     // Check if user has any mechanic-related records
     if (!mechanic && !application) {
-      throw new NotFoundException(`No mechanic profile or application found for user ${userId}`);
+      throw new NotFoundException(
+        `No mechanic profile or application found for user ${userId}`,
+      );
     }
 
     // Remove mechanic profile if it exists
@@ -245,8 +293,8 @@ export class MechanicsService {
     }
 
     // Update user role: if they own chargers, set to 'owner', otherwise 'user'
-    if (user.role === 'mechanic') {
-      user.role = hasChargers ? 'owner' : 'user';
+    if (user.role === "mechanic") {
+      user.role = hasChargers ? "owner" : "user";
       await this.userRepository.save(user);
       console.log(`✅ User role updated to '${user.role}' for ${userId}`);
     } else {
@@ -261,40 +309,51 @@ export class MechanicsService {
   async getAIRecommendations(request: EmergencyRequestDto, userId: string) {
     const radiusKm = request.radiusKm || 10;
     const urgencyMultiplier = this.getUrgencyMultiplier(request.urgencyLevel);
-    const problemType = request.problemType || 'general';
+    const problemType = request.problemType || "general";
 
-    console.log(`🤖 AI Analysis for emergency at (${request.lat}, ${request.lng}), radius: ${radiusKm}km, problem: ${problemType}`);
+    console.log(
+      `🤖 AI Analysis for emergency at (${request.lat}, ${request.lng}), radius: ${radiusKm}km, problem: ${problemType}`,
+    );
 
     // Get all available mechanics within radius
-    const nearbyMechanics = await this.findNearby(request.lat, request.lng, radiusKm);
+    const nearbyMechanics = await this.findNearby(
+      request.lat,
+      request.lng,
+      radiusKm,
+    );
 
     if (nearbyMechanics.length === 0) {
       return {
         recommendations: [],
-        message: 'No mechanics found within the specified radius. Try increasing the search radius.',
+        message:
+          "No mechanics found within the specified radius. Try increasing the search radius.",
         searchRadius: radiusKm,
       };
     }
 
     // Fetch expertise data for all nearby mechanics for this problem type
-    const mechanicIds = nearbyMechanics.map(m => m.id);
-    const expertiseMap = await this.getExpertiseForMechanics(mechanicIds, problemType);
+    const mechanicIds = nearbyMechanics.map((m) => m.id);
+    const expertiseMap = await this.getExpertiseForMechanics(
+      mechanicIds,
+      problemType,
+    );
 
     // Prepare features for AI model with enhanced expertise data
-    const mechanicsForAI = nearbyMechanics.map(mechanic => {
+    const mechanicsForAI = nearbyMechanics.map((mechanic) => {
       const serviceMatch = this.calculateServiceMatch(mechanic, request);
       const expertise = expertiseMap.get(mechanic.id);
-      
+
       // Calculate expertise-based features
       const problemTypeExperience = expertise?.jobsCompleted ?? 0;
-      const successRate = (expertise && expertise.jobsCompleted > 0)
-        ? (expertise.jobsSuccessful / expertise.jobsCompleted) 
-        : 0.5; // Default to 50% if no history
+      const successRate =
+        expertise && expertise.jobsCompleted > 0
+          ? expertise.jobsSuccessful / expertise.jobsCompleted
+          : 0.5; // Default to 50% if no history
       const avgResolutionMinutes = expertise?.avgResolutionMinutes ?? 60; // Default 60 min
-      const satisfactionRating = expertise?.avgSatisfactionRating 
-        ? parseFloat(expertise.avgSatisfactionRating as any) 
+      const satisfactionRating = expertise?.avgSatisfactionRating
+        ? parseFloat(expertise.avgSatisfactionRating as any)
         : mechanic.rating; // Fall back to overall rating
-      
+
       return {
         distance_km: mechanic.distance,
         rating: mechanic.rating,
@@ -317,69 +376,94 @@ export class MechanicsService {
     let usingAI = false;
 
     try {
-      const aiResponse = await axios.post('http://localhost:5000/predict/mechanic-ranking', {
-        mechanics: mechanicsForAI,
-      }, {
-        timeout: 3000,
-      });
+      const aiResponse = await axios.post(
+        "http://localhost:5000/predict/mechanic-ranking",
+        {
+          mechanics: mechanicsForAI,
+        },
+        {
+          timeout: 3000,
+        },
+      );
 
       if (aiResponse.data.success) {
         aiScores = aiResponse.data.scores.map((s: any) => s.predicted_score);
         usingAI = true;
-        console.log(`✅ AI Model predictions received (${aiResponse.data.model_version})`);
+        console.log(
+          `✅ AI Model predictions received (${aiResponse.data.model_version})`,
+        );
       }
     } catch (error) {
-      console.warn(`⚠️ AI service unavailable, using fallback scoring:`, error.message);
+      console.warn(
+        `⚠️ AI service unavailable, using fallback scoring:`,
+        error.message,
+      );
       // Fallback to rule-based scoring
-      aiScores = nearbyMechanics.map((_, idx) => 
-        this.calculateFallbackScore(mechanicsForAI[idx], urgencyMultiplier)
+      aiScores = nearbyMechanics.map((_, idx) =>
+        this.calculateFallbackScore(mechanicsForAI[idx], urgencyMultiplier),
       );
     }
 
     // Get real-time traffic ETAs for top mechanics
-    const trafficETAs = await this.getTrafficETAs(request.lat, request.lng, nearbyMechanics.slice(0, 10));
+    const trafficETAs = await this.getTrafficETAs(
+      request.lat,
+      request.lng,
+      nearbyMechanics.slice(0, 10),
+    );
 
     // Combine AI scores with additional factors including traffic and expertise
     const scoredMechanics = nearbyMechanics.map((mechanic, idx) => {
       const baseScore = aiScores[idx] || 50;
       const trafficData = trafficETAs.get(mechanic.id);
       const expertise = expertiseMap.get(mechanic.id);
-      
+
       // Use traffic-aware ETA if available, otherwise estimate
-      const eta = trafficData 
-        ? trafficData.durationInTrafficMinutes 
+      const eta = trafficData
+        ? trafficData.durationInTrafficMinutes
         : this.estimateArrivalTime(mechanic.distance, urgencyMultiplier);
 
       // Adjust score based on traffic conditions
       let adjustedScore = baseScore;
       if (trafficData) {
         // Penalize mechanics stuck in heavy traffic
-        if (trafficData.trafficLevel === 'heavy') adjustedScore -= 5;
-        if (trafficData.trafficLevel === 'severe') adjustedScore -= 10;
+        if (trafficData.trafficLevel === "heavy") adjustedScore -= 5;
+        if (trafficData.trafficLevel === "severe") adjustedScore -= 10;
       }
 
       // Build expertise info for response
-      const expertiseInfo = expertise ? {
-        problemTypeJobsCompleted: expertise.jobsCompleted,
-        problemTypeSuccessRate: expertise.jobsCompleted > 0 
-          ? Math.round((expertise.jobsSuccessful / expertise.jobsCompleted) * 100) 
-          : null,
-        avgResolutionMinutes: expertise.avgResolutionMinutes,
-        problemTypeRating: expertise.avgSatisfactionRating 
-          ? parseFloat(expertise.avgSatisfactionRating as any) 
-          : null,
-        isExpert: expertise.jobsCompleted >= 10 && 
-          (expertise.jobsSuccessful / expertise.jobsCompleted) >= 0.9,
-      } : null;
+      const expertiseInfo = expertise
+        ? {
+            problemTypeJobsCompleted: expertise.jobsCompleted,
+            problemTypeSuccessRate:
+              expertise.jobsCompleted > 0
+                ? Math.round(
+                    (expertise.jobsSuccessful / expertise.jobsCompleted) * 100,
+                  )
+                : null,
+            avgResolutionMinutes: expertise.avgResolutionMinutes,
+            problemTypeRating: expertise.avgSatisfactionRating
+              ? parseFloat(expertise.avgSatisfactionRating as any)
+              : null,
+            isExpert:
+              expertise.jobsCompleted >= 10 &&
+              expertise.jobsSuccessful / expertise.jobsCompleted >= 0.9,
+          }
+        : null;
 
       return {
         ...mechanic,
         aiScore: Math.max(0, adjustedScore),
         estimatedArrivalMinutes: eta,
         recommendationTier: this.getRecommendationTier(adjustedScore),
-        matchReasons: this.getMatchReasons(mechanic, request, adjustedScore, trafficData, expertise),
+        matchReasons: this.getMatchReasons(
+          mechanic,
+          request,
+          adjustedScore,
+          trafficData,
+          expertise,
+        ),
         usingMLModel: usingAI,
-        trafficConditions: trafficData?.trafficLevel || 'unknown',
+        trafficConditions: trafficData?.trafficLevel || "unknown",
         routeSummary: trafficData?.routeSummary || null,
         problemTypeExpertise: expertiseInfo,
       };
@@ -393,34 +477,45 @@ export class MechanicsService {
       totalFound: scoredMechanics.length,
       bestMatch: scoredMechanics[0] || null,
       searchRadius: radiusKm,
-      urgencyLevel: request.urgencyLevel || 'medium',
+      urgencyLevel: request.urgencyLevel || "medium",
       aiModelUsed: usingAI,
     };
   }
 
-  private calculateServiceMatch(mechanic: any, request: EmergencyRequestDto): number {
+  private calculateServiceMatch(
+    mechanic: any,
+    request: EmergencyRequestDto,
+  ): number {
     // Use enhanced service matcher with compatibility matrix
     const score = this.serviceMatcherService.calculateServiceMatchScore(
       mechanic.services,
       request.requiredServices,
       request.problemType,
     );
-    
+
     // Return as ratio (0-1) for AI model compatibility
     return score / 100;
   }
 
   private getUrgencyNumber(urgencyLevel?: string): number {
     switch (urgencyLevel) {
-      case 'critical': return 3;
-      case 'high': return 2;
-      case 'medium': return 1;
-      case 'low': return 0;
-      default: return 1;
+      case "critical":
+        return 3;
+      case "high":
+        return 2;
+      case "medium":
+        return 1;
+      case "low":
+        return 0;
+      default:
+        return 1;
     }
   }
 
-  private calculateFallbackScore(features: any, urgencyMultiplier: number): number {
+  private calculateFallbackScore(
+    features: any,
+    urgencyMultiplier: number,
+  ): number {
     let score = 0;
 
     // Distance factor (0-25 points)
@@ -446,7 +541,7 @@ export class MechanicsService {
 
     // Urgency modifier
     if (urgencyMultiplier > 1) {
-      const urgencyBonus = (score * 0.2) * (urgencyMultiplier - 1);
+      const urgencyBonus = score * 0.2 * (urgencyMultiplier - 1);
       score += urgencyBonus;
     }
 
@@ -455,29 +550,37 @@ export class MechanicsService {
 
   private getUrgencyMultiplier(urgencyLevel?: string): number {
     switch (urgencyLevel) {
-      case 'critical': return 2.0;
-      case 'high': return 1.5;
-      case 'medium': return 1.0;
-      case 'low': return 0.8;
-      default: return 1.0;
+      case "critical":
+        return 2.0;
+      case "high":
+        return 1.5;
+      case "medium":
+        return 1.0;
+      case "low":
+        return 0.8;
+      default:
+        return 1.0;
     }
   }
 
-  private estimateArrivalTime(distanceKm: number, urgencyMultiplier: number): number {
+  private estimateArrivalTime(
+    distanceKm: number,
+    urgencyMultiplier: number,
+  ): number {
     // Assume average speed of 40 km/h in city, 60 km/h on highway
     // Add 5-10 minutes preparation time
     const baseSpeed = urgencyMultiplier > 1.2 ? 60 : 40; // Faster in emergencies
     const travelTimeMinutes = (distanceKm / baseSpeed) * 60;
     const preparationTime = urgencyMultiplier > 1.5 ? 5 : 10;
-    
+
     return Math.round(travelTimeMinutes + preparationTime);
   }
 
   private getRecommendationTier(score: number): string {
-    if (score >= 80) return 'best_match';
-    if (score >= 60) return 'recommended';
-    if (score >= 40) return 'alternative';
-    return 'available';
+    if (score >= 80) return "best_match";
+    if (score >= 60) return "recommended";
+    if (score >= 40) return "alternative";
+    return "available";
   }
 
   /**
@@ -495,9 +598,9 @@ export class MechanicsService {
 
     try {
       const expertiseRecords = await this.expertiseRepository
-        .createQueryBuilder('expertise')
-        .where('expertise.mechanicId IN (:...mechanicIds)', { mechanicIds })
-        .andWhere('expertise.problemType = :problemType', { problemType })
+        .createQueryBuilder("expertise")
+        .where("expertise.mechanicId IN (:...mechanicIds)", { mechanicIds })
+        .andWhere("expertise.problemType = :problemType", { problemType })
         .getMany();
 
       for (const record of expertiseRecords) {
@@ -546,8 +649,9 @@ export class MechanicsService {
       if (expertise.avgResolutionMinutes) {
         // Weighted average: new = (old * (n-1) + new) / n
         expertise.avgResolutionMinutes = Math.round(
-          (expertise.avgResolutionMinutes * (expertise.jobsCompleted - 1) + resolutionMinutes) / 
-          expertise.jobsCompleted
+          (expertise.avgResolutionMinutes * (expertise.jobsCompleted - 1) +
+            resolutionMinutes) /
+            expertise.jobsCompleted,
         );
       } else {
         expertise.avgResolutionMinutes = resolutionMinutes;
@@ -557,8 +661,12 @@ export class MechanicsService {
     if (satisfactionRating !== undefined) {
       if (expertise.avgSatisfactionRating) {
         expertise.avgSatisfactionRating = parseFloat(
-          ((parseFloat(expertise.avgSatisfactionRating as any) * (expertise.jobsCompleted - 1) + satisfactionRating) / 
-          expertise.jobsCompleted).toFixed(2)
+          (
+            (parseFloat(expertise.avgSatisfactionRating as any) *
+              (expertise.jobsCompleted - 1) +
+              satisfactionRating) /
+            expertise.jobsCompleted
+          ).toFixed(2),
         );
       } else {
         expertise.avgSatisfactionRating = satisfactionRating;
@@ -571,10 +679,12 @@ export class MechanicsService {
   /**
    * Get all expertise records for a mechanic
    */
-  async getMechanicExpertise(mechanicId: string): Promise<MechanicExpertiseEntity[]> {
+  async getMechanicExpertise(
+    mechanicId: string,
+  ): Promise<MechanicExpertiseEntity[]> {
     return this.expertiseRepository.find({
       where: { mechanicId },
-      order: { jobsCompleted: 'DESC' },
+      order: { jobsCompleted: "DESC" },
     });
   }
 
@@ -588,8 +698,8 @@ export class MechanicsService {
   ): Promise<Map<string, any>> {
     try {
       const mechanicsWithLocation = mechanics
-        .filter(m => m.lat && m.lng)
-        .map(m => ({ id: m.id, lat: m.lat, lng: m.lng }));
+        .filter((m) => m.lat && m.lng)
+        .map((m) => ({ id: m.id, lat: m.lat, lng: m.lng }));
 
       if (mechanicsWithLocation.length === 0) {
         return new Map();
@@ -601,15 +711,15 @@ export class MechanicsService {
         mechanicsWithLocation,
       );
     } catch (error) {
-      console.warn('Traffic ETA calculation failed:', error.message);
+      console.warn("Traffic ETA calculation failed:", error.message);
       return new Map();
     }
   }
 
   private getMatchReasons(
-    mechanic: any, 
-    request: EmergencyRequestDto, 
-    score: number, 
+    mechanic: any,
+    request: EmergencyRequestDto,
+    score: number,
     trafficData?: any,
     expertise?: MechanicExpertiseEntity | null,
   ): string[] {
@@ -617,72 +727,85 @@ export class MechanicsService {
 
     // Expertise-based reasons (prioritize these)
     if (expertise) {
-      const successRate = expertise.jobsCompleted > 0 
-        ? (expertise.jobsSuccessful / expertise.jobsCompleted) 
-        : 0;
-      
+      const successRate =
+        expertise.jobsCompleted > 0
+          ? expertise.jobsSuccessful / expertise.jobsCompleted
+          : 0;
+
       if (expertise.jobsCompleted >= 10 && successRate >= 0.9) {
-        reasons.push(`⭐ Expert in ${request.problemType?.replace('_', ' ') || 'this issue'}`);
+        reasons.push(
+          `⭐ Expert in ${request.problemType?.replace("_", " ") || "this issue"}`,
+        );
       } else if (expertise.jobsCompleted >= 5) {
-        reasons.push(`Experienced with ${request.problemType?.replace('_', ' ') || 'this issue'}`);
+        reasons.push(
+          `Experienced with ${request.problemType?.replace("_", " ") || "this issue"}`,
+        );
       }
 
       if (successRate >= 0.95 && expertise.jobsCompleted >= 5) {
         reasons.push(`${Math.round(successRate * 100)}% success rate`);
       }
 
-      if (expertise.avgResolutionMinutes && expertise.avgResolutionMinutes < 45) {
-        reasons.push('Fast problem resolver');
+      if (
+        expertise.avgResolutionMinutes &&
+        expertise.avgResolutionMinutes < 45
+      ) {
+        reasons.push("Fast problem resolver");
       }
     }
 
     if (mechanic.distance < 2) {
-      reasons.push('Very close to your location');
+      reasons.push("Very close to your location");
     } else if (mechanic.distance < 5) {
-      reasons.push('Nearby location');
+      reasons.push("Nearby location");
     }
 
     // Add traffic-aware ETA reason
     if (trafficData) {
-      if (trafficData.trafficLevel === 'low') {
-        reasons.push('Clear route - fast arrival');
-      } else if (trafficData.trafficLevel === 'moderate') {
-        reasons.push('Moderate traffic conditions');
+      if (trafficData.trafficLevel === "low") {
+        reasons.push("Clear route - fast arrival");
+      } else if (trafficData.trafficLevel === "moderate") {
+        reasons.push("Moderate traffic conditions");
       }
     }
 
     if (mechanic.rating >= 4.5) {
-      reasons.push('Highly rated');
+      reasons.push("Highly rated");
     } else if (mechanic.rating >= 4.0) {
-      reasons.push('Well rated');
+      reasons.push("Well rated");
     }
 
     if (mechanic.completedJobs >= 50) {
-      reasons.push('Experienced professional');
+      reasons.push("Experienced professional");
     }
 
     // Add response time reputation
-    if (mechanic.average_response_time_minutes && mechanic.average_response_time_minutes < 10) {
-      reasons.push('Fast response history');
+    if (
+      mechanic.average_response_time_minutes &&
+      mechanic.average_response_time_minutes < 10
+    ) {
+      reasons.push("Fast response history");
     }
 
     if (request.requiredServices && request.requiredServices.length > 0) {
-      const matches = request.requiredServices.filter(s => 
-        mechanic.services.includes(s)
+      const matches = request.requiredServices.filter((s) =>
+        mechanic.services.includes(s),
       );
       if (matches.length === request.requiredServices.length) {
-        reasons.push('Offers all required services');
+        reasons.push("Offers all required services");
       } else if (matches.length > 0) {
-        reasons.push(`Offers ${matches.length} of ${request.requiredServices.length} services`);
+        reasons.push(
+          `Offers ${matches.length} of ${request.requiredServices.length} services`,
+        );
       }
     }
 
     if (mechanic.available) {
-      reasons.push('Currently available');
+      reasons.push("Currently available");
     }
 
     if (score >= 80) {
-      reasons.push('🏆 Best overall match');
+      reasons.push("🏆 Best overall match");
     }
 
     return reasons;
@@ -697,42 +820,47 @@ export class MechanicsService {
     userLocation: { lat: number; lng: number },
     problemDescription?: string,
     vehicleDetails?: any,
-    urgencyLevel: string = 'high',
+    urgencyLevel: string = "high",
   ) {
     try {
       // Get user details
       const user = await this.userRepository.findOne({ where: { id: userId } });
       if (!user) {
-        throw new NotFoundException('User not found');
+        throw new NotFoundException("User not found");
       }
 
       // Create emergency request in database
-      const emergencyRequest = await this.emergencyService.createEmergencyRequest(
-        userId,
-        userLocation.lat,
-        userLocation.lng,
-        problemDescription || 'Emergency breakdown assistance needed',
-        vehicleDetails,
-        urgencyLevel,
-        mechanicIds,
-      );
+      const emergencyRequest =
+        await this.emergencyService.createEmergencyRequest(
+          userId,
+          userLocation.lat,
+          userLocation.lng,
+          problemDescription || "Emergency breakdown assistance needed",
+          vehicleDetails,
+          urgencyLevel,
+          mechanicIds,
+        );
 
       // Get mechanics
       const mechanics = await this.mechanicRepository.findByIds(mechanicIds);
-      
+
       // Prepare location string
       const locationText = `${userLocation.lat.toFixed(6)}, ${userLocation.lng.toFixed(6)}`;
-      
+
       // Send alerts to each mechanic
       const results = await Promise.allSettled(
         mechanics.map(async (mechanic) => {
-          const mechanicUser = await this.userRepository.findOne({ 
-            where: { id: mechanic.userId } 
+          const mechanicUser = await this.userRepository.findOne({
+            where: { id: mechanic.userId },
           });
-          
+
           if (!mechanicUser) {
             console.warn(`⚠️ User not found for mechanic ${mechanic.id}`);
-            return { mechanicId: mechanic.id, success: false, error: 'User not found' };
+            return {
+              mechanicId: mechanic.id,
+              success: false,
+              error: "User not found",
+            };
           }
 
           // Send push notification
@@ -740,10 +868,10 @@ export class MechanicsService {
             mechanicUser.id,
             NotificationType.MECHANIC_ASSIGNED,
             {
-              title: '🚨 Emergency Breakdown Request',
+              title: "🚨 Emergency Breakdown Request",
               body: `${user.name || user.phoneNumber} needs urgent assistance at ${locationText}`,
               data: {
-                type: 'emergency_request',
+                type: "emergency_request",
                 requestId: emergencyRequest.id,
                 userId,
                 userName: user.name || user.phoneNumber,
@@ -751,8 +879,10 @@ export class MechanicsService {
                 location: locationText,
                 lat: userLocation.lat.toString(),
                 lng: userLocation.lng.toString(),
-                problem: problemDescription || 'Breakdown assistance needed',
-                vehicleDetails: vehicleDetails ? JSON.stringify(vehicleDetails) : null,
+                problem: problemDescription || "Breakdown assistance needed",
+                vehicleDetails: vehicleDetails
+                  ? JSON.stringify(vehicleDetails)
+                  : null,
               },
             },
           );
@@ -762,10 +892,12 @@ export class MechanicsService {
         }),
       );
 
-      const successful = results.filter(r => r.status === 'fulfilled').length;
-      const failed = results.filter(r => r.status === 'rejected').length;
+      const successful = results.filter((r) => r.status === "fulfilled").length;
+      const failed = results.filter((r) => r.status === "rejected").length;
 
-      console.log(`🚨 Emergency alerts sent: ${successful} successful, ${failed} failed`);
+      console.log(
+        `🚨 Emergency alerts sent: ${successful} successful, ${failed} failed`,
+      );
 
       return {
         success: true,
@@ -776,7 +908,7 @@ export class MechanicsService {
         message: `Emergency alerts sent to ${successful} mechanics`,
       };
     } catch (error) {
-      console.error('❌ Error sending emergency alerts:', error);
+      console.error("❌ Error sending emergency alerts:", error);
       throw error;
     }
   }
@@ -800,10 +932,20 @@ export class MechanicsService {
       );
 
       // Calculate distance
-      const distance = this.calculateDistance(originLat, originLng, destLat, destLng);
+      const distance = this.calculateDistance(
+        originLat,
+        originLng,
+        destLat,
+        destLng,
+      );
 
       // Get route polyline (simplified - in production use Google Maps Directions API)
-      const polyline = this.generateSimplePolyline(originLat, originLng, destLat, destLng);
+      const polyline = this.generateSimplePolyline(
+        originLat,
+        originLng,
+        destLat,
+        destLng,
+      );
 
       return {
         distance,
@@ -813,7 +955,7 @@ export class MechanicsService {
         routeSummary: trafficETA.routeSummary || `${distance.toFixed(1)} km`,
       };
     } catch (error) {
-      console.error('❌ Error getting route with traffic:', error);
+      console.error("❌ Error getting route with traffic:", error);
       throw error;
     }
   }
@@ -843,4 +985,3 @@ export class MechanicsService {
     return points;
   }
 }
-

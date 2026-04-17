@@ -1,8 +1,11 @@
-import { Injectable, CanActivate, ExecutionContext } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { MechanicApplication, ApplicationStatus } from '../../mechanic/entities/mechanic-application.entity';
-import { UserEntity } from '../../users/entities/user.entity';
+import { Injectable, CanActivate, ExecutionContext } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import {
+  MechanicApplication,
+  ApplicationStatus,
+} from "../../mechanic/entities/mechanic-application.entity";
+import { UserEntity } from "../../users/entities/user.entity";
 
 /**
  * Guard that checks if user has mechanic access
@@ -28,12 +31,12 @@ export class MechanicAccessGuard implements CanActivate {
     }
 
     // Allow admin always
-    if (user.role === 'admin') {
+    if (user.role === "admin") {
       return true;
     }
 
     // Allow if already has mechanic role
-    if (user.role === 'mechanic') {
+    if (user.role === "mechanic") {
       return true;
     }
 
@@ -49,12 +52,12 @@ export class MechanicAccessGuard implements CanActivate {
       // User has approved application, update their role to mechanic
       await this.userRepository.update(
         { id: user.userId },
-        { role: 'mechanic' },
+        { role: "mechanic" },
       );
-      
+
       // Update the user object in the request for this request
-      user.role = 'mechanic';
-      
+      user.role = "mechanic";
+
       return true;
     }
 

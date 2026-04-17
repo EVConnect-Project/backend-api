@@ -1,56 +1,56 @@
-import { MigrationInterface, QueryRunner, TableColumn } from 'typeorm';
+import { MigrationInterface, QueryRunner, TableColumn } from "typeorm";
 
 export class AddBookingTypeFields1733571000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
-    const bookingsTable = await queryRunner.getTable('bookings');
+    const bookingsTable = await queryRunner.getTable("bookings");
     if (!bookingsTable) {
       return;
     }
 
     // Add bookingType column
-    if (!bookingsTable.findColumnByName('bookingType')) {
+    if (!bookingsTable.findColumnByName("bookingType")) {
       await queryRunner.addColumn(
-        'bookings',
+        "bookings",
         new TableColumn({
-          name: 'bookingType',
-          type: 'varchar',
-          length: '20',
+          name: "bookingType",
+          type: "varchar",
+          length: "20",
           default: "'PRE_BOOKING'",
         }),
       );
     }
 
     // Add checkInTime column
-    if (!bookingsTable.findColumnByName('checkInTime')) {
+    if (!bookingsTable.findColumnByName("checkInTime")) {
       await queryRunner.addColumn(
-        'bookings',
+        "bookings",
         new TableColumn({
-          name: 'checkInTime',
-          type: 'timestamp',
+          name: "checkInTime",
+          type: "timestamp",
           isNullable: true,
         }),
       );
     }
 
     // Add noShow column
-    if (!bookingsTable.findColumnByName('noShow')) {
+    if (!bookingsTable.findColumnByName("noShow")) {
       await queryRunner.addColumn(
-        'bookings',
+        "bookings",
         new TableColumn({
-          name: 'noShow',
-          type: 'boolean',
+          name: "noShow",
+          type: "boolean",
           default: false,
         }),
       );
     }
 
     // Add gracePeriodExpiresAt column
-    if (!bookingsTable.findColumnByName('gracePeriodExpiresAt')) {
+    if (!bookingsTable.findColumnByName("gracePeriodExpiresAt")) {
       await queryRunner.addColumn(
-        'bookings',
+        "bookings",
         new TableColumn({
-          name: 'gracePeriodExpiresAt',
-          type: 'timestamp',
+          name: "gracePeriodExpiresAt",
+          type: "timestamp",
           isNullable: true,
         }),
       );
@@ -58,22 +58,22 @@ export class AddBookingTypeFields1733571000000 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    const bookingsTable = await queryRunner.getTable('bookings');
+    const bookingsTable = await queryRunner.getTable("bookings");
     if (!bookingsTable) {
       return;
     }
 
-    if (bookingsTable.findColumnByName('gracePeriodExpiresAt')) {
-      await queryRunner.dropColumn('bookings', 'gracePeriodExpiresAt');
+    if (bookingsTable.findColumnByName("gracePeriodExpiresAt")) {
+      await queryRunner.dropColumn("bookings", "gracePeriodExpiresAt");
     }
-    if (bookingsTable.findColumnByName('noShow')) {
-      await queryRunner.dropColumn('bookings', 'noShow');
+    if (bookingsTable.findColumnByName("noShow")) {
+      await queryRunner.dropColumn("bookings", "noShow");
     }
-    if (bookingsTable.findColumnByName('checkInTime')) {
-      await queryRunner.dropColumn('bookings', 'checkInTime');
+    if (bookingsTable.findColumnByName("checkInTime")) {
+      await queryRunner.dropColumn("bookings", "checkInTime");
     }
-    if (bookingsTable.findColumnByName('bookingType')) {
-      await queryRunner.dropColumn('bookings', 'bookingType');
+    if (bookingsTable.findColumnByName("bookingType")) {
+      await queryRunner.dropColumn("bookings", "bookingType");
     }
   }
 }

@@ -1,5 +1,11 @@
-import { IsEnum, IsNotEmpty, IsUUID, IsDateString, IsOptional } from 'class-validator';
-import { BookingType } from '../../charger/enums/booking-type.enum';
+import {
+  IsEnum,
+  IsNotEmpty,
+  IsUUID,
+  IsDateString,
+  IsOptional,
+} from "class-validator";
+import { BookingType } from "../../charger/enums/booking-type.enum";
 
 export class CreateWalkInBookingDto {
   @IsUUID()

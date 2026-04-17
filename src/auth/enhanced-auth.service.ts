@@ -1,11 +1,16 @@
-import { Injectable, UnauthorizedException, ConflictException, BadRequestException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { JwtService } from '@nestjs/jwt';
-import * as bcrypt from 'bcryptjs';
-import { UserEntity } from '../users/entities/user.entity';
-import { VehicleProfile } from './entities/vehicle-profile.entity';
-import { EnhancedRegisterDto } from './dto/enhanced-register.dto';
+import {
+  Injectable,
+  UnauthorizedException,
+  ConflictException,
+  BadRequestException,
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { JwtService } from "@nestjs/jwt";
+import * as bcrypt from "bcryptjs";
+import { UserEntity } from "../users/entities/user.entity";
+import { VehicleProfile } from "./entities/vehicle-profile.entity";
+import { EnhancedRegisterDto } from "./dto/enhanced-register.dto";
 
 @Injectable()
 export class EnhancedAuthService {
@@ -38,7 +43,9 @@ export class EnhancedAuthService {
 
     // Validate legal requirements
     if (!acceptTerms || !acceptPrivacyPolicy) {
-      throw new BadRequestException('You must accept the terms and conditions and privacy policy');
+      throw new BadRequestException(
+        "You must accept the terms and conditions and privacy policy",
+      );
     }
 
     // For enhanced registration, use phone number from emailOrPhone
@@ -50,7 +57,7 @@ export class EnhancedAuthService {
     });
 
     if (existingUser) {
-      throw new ConflictException('Phone number already registered');
+      throw new ConflictException("Phone number already registered");
     }
 
     // Hash password
@@ -58,15 +65,18 @@ export class EnhancedAuthService {
 
     // Create user with complete EV driver profile
     // Handle both single connectorType (old) and multiple connectorTypes (new)
-    const finalConnectorTypes = connectorTypes && connectorTypes.length > 0 
-      ? connectorTypes 
-      : (connectorType ? [connectorType] : []);
+    const finalConnectorTypes =
+      connectorTypes && connectorTypes.length > 0
+        ? connectorTypes
+        : connectorType
+          ? [connectorType]
+          : [];
 
     const user = this.userRepository.create({
       name: name,
       phoneNumber: phone,
       password: hashedPassword,
-      role: 'user', // Default role
+      role: "user", // Default role
       vehicleType: vehicleType,
       vehicleBrand: vehicleBrand,
       vehicleModel: vehicleModel,
@@ -89,7 +99,8 @@ export class EnhancedAuthService {
           model: vehicleModel,
           year: new Date().getFullYear(), // Default to current year
           batteryCapacity: Number(batteryCapacity),
-          connectorType: finalConnectorTypes.length > 0 ? finalConnectorTypes[0] : 'Type2',
+          connectorType:
+            finalConnectorTypes.length > 0 ? finalConnectorTypes[0] : "Type2",
           rangeKm: 300, // Default value (reasonable estimate), user can update later
           isPrimary: true, // First vehicle is primary
         });
@@ -97,16 +108,16 @@ export class EnhancedAuthService {
         await this.vehicleProfileRepository.save(vehicleProfile);
         console.log(`✅ Created vehicle profile for user ${user.phoneNumber}`);
       } catch (error) {
-        console.error('❌ Error creating vehicle profile:', error);
+        console.error("❌ Error creating vehicle profile:", error);
         // Don't fail registration if vehicle profile creation fails
       }
     }
 
     // Generate JWT token
-    const payload = { 
-      sub: user.id, 
+    const payload = {
+      sub: user.id,
       phoneNumber: user.phoneNumber,
-      role: user.role 
+      role: user.role,
     };
     const access_token = this.jwtService.sign(payload);
 
@@ -142,9 +153,9 @@ export class EnhancedAuthService {
    */
   async getUserProfile(userId: string) {
     const user = await this.userRepository.findOne({ where: { id: userId } });
-    
+
     if (!user) {
-      throw new UnauthorizedException('User not found');
+      throw new UnauthorizedException("User not found");
     }
 
     return {
@@ -167,19 +178,23 @@ export class EnhancedAuthService {
   /**
    * Update vehicle profile
    */
-  async updateVehicleProfile(userId: string, vehicleData: Partial<EnhancedRegisterDto>) {
+  async updateVehicleProfile(
+    userId: string,
+    vehicleData: Partial<EnhancedRegisterDto>,
+  ) {
     const user = await this.userRepository.findOne({ where: { id: userId } });
-    
+
     if (!user) {
-      throw new UnauthorizedException('User not found');
+      throw new UnauthorizedException("User not found");
     }
 
     // Update only vehicle-related fields
     if (vehicleData.vehicleType) user.vehicleType = vehicleData.vehicleType;
     if (vehicleData.vehicleBrand) user.vehicleBrand = vehicleData.vehicleBrand;
     if (vehicleData.vehicleModel) user.vehicleModel = vehicleData.vehicleModel;
-    if (vehicleData.batteryCapacity) user.batteryCapacity = vehicleData.batteryCapacity;
-    
+    if (vehicleData.batteryCapacity)
+      user.batteryCapacity = vehicleData.batteryCapacity;
+
     // Handle both single connectorType and array connectorTypes
     if (vehicleData.connectorTypes && vehicleData.connectorTypes.length > 0) {
       user.connectorTypes = vehicleData.connectorTypes;

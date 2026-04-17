@@ -8,75 +8,75 @@ import {
   JoinColumn,
   OneToMany,
   Index,
-} from 'typeorm';
-import { UserEntity } from '../../users/entities/user.entity';
-import { OwnerPayoutItem } from './owner-payout-item.entity';
+} from "typeorm";
+import { UserEntity } from "../../users/entities/user.entity";
+import { OwnerPayoutItem } from "./owner-payout-item.entity";
 
 export enum OwnerPayoutStatus {
-  DRAFT = 'draft',
-  APPROVED = 'approved',
-  PROCESSING = 'processing',
-  PAID = 'paid',
-  FAILED = 'failed',
-  CANCELLED = 'cancelled',
+  DRAFT = "draft",
+  APPROVED = "approved",
+  PROCESSING = "processing",
+  PAID = "paid",
+  FAILED = "failed",
+  CANCELLED = "cancelled",
 }
 
-@Entity('owner_payouts')
+@Entity("owner_payouts")
 export class OwnerPayout {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn("uuid")
   id: string;
 
-  @Column({ type: 'uuid' })
-  @Index('idx_owner_payouts_owner_id')
+  @Column({ type: "uuid" })
+  @Index("idx_owner_payouts_owner_id")
   ownerId: string;
 
   @ManyToOne(() => UserEntity)
-  @JoinColumn({ name: 'ownerId' })
+  @JoinColumn({ name: "ownerId" })
   owner: UserEntity;
 
-  @Column({ type: 'timestamp' })
+  @Column({ type: "timestamp" })
   periodStart: Date;
 
-  @Column({ type: 'timestamp' })
+  @Column({ type: "timestamp" })
   periodEnd: Date;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  @Column({ type: "decimal", precision: 10, scale: 2, default: 0 })
   grossOwnerRevenue: number;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  @Column({ type: "decimal", precision: 10, scale: 2, default: 0 })
   adjustments: number;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  @Column({ type: "decimal", precision: 10, scale: 2, default: 0 })
   netPayoutAmount: number;
 
-  @Column({ type: 'varchar', length: 20, default: OwnerPayoutStatus.DRAFT })
-  @Index('idx_owner_payouts_status')
+  @Column({ type: "varchar", length: 20, default: OwnerPayoutStatus.DRAFT })
+  @Index("idx_owner_payouts_status")
   status: OwnerPayoutStatus;
 
-  @Column({ type: 'varchar', length: 255, nullable: true })
+  @Column({ type: "varchar", length: 255, nullable: true })
   transferReference: string | null;
 
-  @Column({ type: 'uuid', nullable: true })
+  @Column({ type: "uuid", nullable: true })
   createdByAdminId: string | null;
 
   @ManyToOne(() => UserEntity)
-  @JoinColumn({ name: 'createdByAdminId' })
+  @JoinColumn({ name: "createdByAdminId" })
   createdByAdmin: UserEntity | null;
 
-  @Column({ type: 'uuid', nullable: true })
+  @Column({ type: "uuid", nullable: true })
   approvedByAdminId: string | null;
 
   @ManyToOne(() => UserEntity)
-  @JoinColumn({ name: 'approvedByAdminId' })
+  @JoinColumn({ name: "approvedByAdminId" })
   approvedByAdmin: UserEntity | null;
 
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({ type: "timestamp", nullable: true })
   approvedAt: Date | null;
 
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({ type: "timestamp", nullable: true })
   paidAt: Date | null;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: "text", nullable: true })
   notes: string | null;
 
   @OneToMany(() => OwnerPayoutItem, (item) => item.payout)

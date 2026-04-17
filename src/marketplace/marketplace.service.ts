@@ -1,14 +1,25 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between, LessThanOrEqual, MoreThanOrEqual, Like } from 'typeorm';
-import { MarketplaceListing } from './entities/marketplace-listing.entity';
-import { MarketplaceImage } from './entities/marketplace-image.entity';
-import { CreateListingDto } from './dto/create-listing.dto';
-import { UpdateListingDto } from './dto/update-listing.dto';
-import { GetMarketplaceFeedDto } from './dto/get-marketplace-feed.dto';
-import { GetAdminListingsDto } from './dto/get-admin-listings.dto';
-import { NotificationService } from './notification.service';
-import { UserEntity } from '../users/entities/user.entity';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import {
+  Repository,
+  Between,
+  LessThanOrEqual,
+  MoreThanOrEqual,
+  Like,
+} from "typeorm";
+import { MarketplaceListing } from "./entities/marketplace-listing.entity";
+import { MarketplaceImage } from "./entities/marketplace-image.entity";
+import { CreateListingDto } from "./dto/create-listing.dto";
+import { UpdateListingDto } from "./dto/update-listing.dto";
+import { GetMarketplaceFeedDto } from "./dto/get-marketplace-feed.dto";
+import { GetAdminListingsDto } from "./dto/get-admin-listings.dto";
+import { NotificationService } from "./notification.service";
+import { UserEntity } from "../users/entities/user.entity";
 
 @Injectable()
 export class MarketplaceService {
@@ -22,15 +33,22 @@ export class MarketplaceService {
     private notificationService: NotificationService,
   ) {}
 
-  async createListing(dto: CreateListingDto, sellerId: string): Promise<MarketplaceListing> {
-    console.log('📝 Creating listing for seller:', sellerId);
-    
+  async createListing(
+    dto: CreateListingDto,
+    sellerId: string,
+  ): Promise<MarketplaceListing> {
+    console.log("📝 Creating listing for seller:", sellerId);
+
     // Check if seller is banned
-    const seller = await this.userRepository.findOne({ where: { id: sellerId } });
+    const seller = await this.userRepository.findOne({
+      where: { id: sellerId },
+    });
     if (seller && seller.isBanned) {
-      throw new ForbiddenException('Your account has been suspended. You cannot create new listings.');
+      throw new ForbiddenException(
+        "Your account has been suspended. You cannot create new listings.",
+      );
     }
-    
+
     const listing = this.listingRepository.create({
       title: dto.title,
       description: dto.description,
@@ -41,24 +59,24 @@ export class MarketplaceService {
       lat: dto.lat,
       long: dto.long,
       sellerId: sellerId,
-      status: 'pending',
+      status: "pending",
     });
 
     const savedListing = await this.listingRepository.save(listing);
-    console.log('✅ Listing created:', { 
-      id: savedListing.id, 
+    console.log("✅ Listing created:", {
+      id: savedListing.id,
       sellerId: savedListing.sellerId,
       status: savedListing.status,
-      title: savedListing.title 
+      title: savedListing.title,
     });
 
     // Create images if provided
     if (dto.images && dto.images.length > 0) {
-      const images = dto.images.map((imageUrl) => 
+      const images = dto.images.map((imageUrl) =>
         this.imageRepository.create({
           imageUrl,
           listing: { id: savedListing.id } as any,
-        })
+        }),
       );
       await this.imageRepository.save(images);
     }
@@ -68,24 +86,27 @@ export class MarketplaceService {
 
   async getPublicListings(): Promise<MarketplaceListing[]> {
     return this.listingRepository
-      .createQueryBuilder('listing')
-      .leftJoin('listing.seller', 'seller')
-      .addSelect(['seller.id', 'seller.name', 'seller.phoneNumber'])
-      .leftJoinAndSelect('listing.images', 'images')
-      .where('listing.status = :status', { status: 'approved' })
-      .andWhere('listing.isBanned = :isBanned', { isBanned: false })
-      .andWhere('seller.isBanned = :sellerBanned', { sellerBanned: false })
-      .orderBy('listing.createdAt', 'DESC')
+      .createQueryBuilder("listing")
+      .leftJoin("listing.seller", "seller")
+      .addSelect(["seller.id", "seller.name", "seller.phoneNumber"])
+      .leftJoinAndSelect("listing.images", "images")
+      .where("listing.status = :status", { status: "approved" })
+      .andWhere("listing.isBanned = :isBanned", { isBanned: false })
+      .andWhere("seller.isBanned = :sellerBanned", { sellerBanned: false })
+      .orderBy("listing.createdAt", "DESC")
       .getMany();
   }
 
-  async getListingById(id: string, requestingUserId?: string): Promise<MarketplaceListing> {
+  async getListingById(
+    id: string,
+    requestingUserId?: string,
+  ): Promise<MarketplaceListing> {
     const listing = await this.listingRepository
-      .createQueryBuilder('listing')
-      .leftJoin('listing.seller', 'seller')
-      .addSelect(['seller.id', 'seller.name', 'seller.phoneNumber'])
-      .leftJoinAndSelect('listing.images', 'images')
-      .where('listing.id = :id', { id })
+      .createQueryBuilder("listing")
+      .leftJoin("listing.seller", "seller")
+      .addSelect(["seller.id", "seller.name", "seller.phoneNumber"])
+      .leftJoinAndSelect("listing.images", "images")
+      .where("listing.id = :id", { id })
       .getOne();
 
     if (!listing) {
@@ -93,7 +114,7 @@ export class MarketplaceService {
     }
 
     // If listing is not approved, only seller can view it
-    if (listing.status !== 'approved') {
+    if (listing.status !== "approved") {
       if (!requestingUserId || listing.sellerId !== requestingUserId) {
         throw new NotFoundException(`Listing with ID ${id} not found`);
       }
@@ -103,32 +124,35 @@ export class MarketplaceService {
   }
 
   async getUserListings(userId: string): Promise<MarketplaceListing[]> {
-    console.log('🔍 Getting listings for userId:', userId);
-    
+    console.log("🔍 Getting listings for userId:", userId);
+
     // Use QueryBuilder with sellerId column for more reliable querying
     const listings = await this.listingRepository
-      .createQueryBuilder('listing')
-      .leftJoinAndSelect('listing.seller', 'seller')
-      .leftJoinAndSelect('listing.images', 'images')
-      .where('listing.sellerId = :userId', { userId })
-      .orderBy('listing.createdAt', 'DESC')
+      .createQueryBuilder("listing")
+      .leftJoinAndSelect("listing.seller", "seller")
+      .leftJoinAndSelect("listing.images", "images")
+      .where("listing.sellerId = :userId", { userId })
+      .orderBy("listing.createdAt", "DESC")
       .getMany();
-    
+
     console.log(`📋 Found ${listings.length} listings for user ${userId}`);
     if (listings.length > 0) {
-      const statusCounts = listings.reduce((acc, l) => {
-        acc[l.status] = (acc[l.status] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>);
-      console.log('   Status breakdown:', statusCounts);
-      console.log('   First listing:', { 
-        id: listings[0].id, 
-        title: listings[0].title, 
+      const statusCounts = listings.reduce(
+        (acc, l) => {
+          acc[l.status] = (acc[l.status] || 0) + 1;
+          return acc;
+        },
+        {} as Record<string, number>,
+      );
+      console.log("   Status breakdown:", statusCounts);
+      console.log("   First listing:", {
+        id: listings[0].id,
+        title: listings[0].title,
         status: listings[0].status,
-        sellerId: listings[0].sellerId 
+        sellerId: listings[0].sellerId,
       });
     }
-    
+
     return listings;
   }
 
@@ -138,9 +162,9 @@ export class MarketplaceService {
     userId: string,
   ): Promise<MarketplaceListing> {
     const listing = await this.listingRepository
-      .createQueryBuilder('listing')
-      .leftJoinAndSelect('listing.images', 'images')
-      .where('listing.id = :id', { id })
+      .createQueryBuilder("listing")
+      .leftJoinAndSelect("listing.images", "images")
+      .where("listing.id = :id", { id })
       .getOne();
 
     if (!listing) {
@@ -149,12 +173,12 @@ export class MarketplaceService {
 
     // Only seller can update their own listing
     if (listing.sellerId !== userId) {
-      throw new ForbiddenException('You can only update your own listings');
+      throw new ForbiddenException("You can only update your own listings");
     }
 
     // Cannot update sold listings, but can update all others including approved
-    if (listing.status === 'sold') {
-      throw new BadRequestException('Cannot update sold listings');
+    if (listing.status === "sold") {
+      throw new BadRequestException("Cannot update sold listings");
     }
 
     // Update fields if provided
@@ -168,8 +192,8 @@ export class MarketplaceService {
     if (dto.long !== undefined) listing.long = dto.long;
 
     // Reset to pending if was rejected
-    if (listing.status === 'rejected') {
-      listing.status = 'pending';
+    if (listing.status === "rejected") {
+      listing.status = "pending";
       listing.adminNotes = null;
     }
 
@@ -185,7 +209,7 @@ export class MarketplaceService {
 
       // Create and save new images
       if (dto.images.length > 0) {
-        const newImages = dto.images.map(imageUrl => {
+        const newImages = dto.images.map((imageUrl) => {
           return this.imageRepository.create({
             imageUrl,
             listing: { id: savedListing.id } as any,
@@ -198,9 +222,12 @@ export class MarketplaceService {
     return this.getListingById(savedListing.id, userId);
   }
 
-  async deleteListing(id: string, userId: string): Promise<{ message: string }> {
+  async deleteListing(
+    id: string,
+    userId: string,
+  ): Promise<{ message: string }> {
     console.log(`🗑️ Delete listing request: id=${id}, userId=${userId}`);
-    
+
     const listing = await this.listingRepository.findOne({
       where: { id },
     });
@@ -210,12 +237,16 @@ export class MarketplaceService {
       throw new NotFoundException(`Listing with ID ${id} not found`);
     }
 
-    console.log(`📋 Listing found: ${listing.title}, status: ${listing.status}, sellerId: ${listing.sellerId}`);
+    console.log(
+      `📋 Listing found: ${listing.title}, status: ${listing.status}, sellerId: ${listing.sellerId}`,
+    );
 
     // Only seller can delete their own listing
     if (listing.sellerId !== userId) {
-      console.log(`❌ Permission denied: seller ${listing.sellerId} !== user ${userId}`);
-      throw new ForbiddenException('You can only delete your own listings');
+      console.log(
+        `❌ Permission denied: seller ${listing.sellerId} !== user ${userId}`,
+      );
+      throw new ForbiddenException("You can only delete your own listings");
     }
 
     console.log(`✅ Permanently deleting listing ${id} (${listing.title})...`);
@@ -223,12 +254,12 @@ export class MarketplaceService {
     // Images will be cascade deleted due to onDelete: 'CASCADE'
 
     console.log(`✅ Listing ${id} permanently deleted from database`);
-    return { message: 'Listing deleted successfully' };
+    return { message: "Listing deleted successfully" };
   }
 
   async adminDeleteListing(id: string): Promise<{ message: string }> {
     console.log(`🛡️ Admin deleting listing: ${id}`);
-    
+
     const listing = await this.listingRepository.findOne({
       where: { id },
     });
@@ -238,18 +269,23 @@ export class MarketplaceService {
       throw new NotFoundException(`Listing with ID ${id} not found`);
     }
 
-    console.log(`✅ Admin permanently deleting listing: ${listing.title} (status: ${listing.status})`);
+    console.log(
+      `✅ Admin permanently deleting listing: ${listing.title} (status: ${listing.status})`,
+    );
     await this.listingRepository.remove(listing);
     console.log(`✅ Listing ${id} permanently removed from database by admin`);
-    
-    return { message: 'Listing deleted by admin' };
+
+    return { message: "Listing deleted by admin" };
   }
 
-  async markListingAsSold(id: string, userId: string): Promise<MarketplaceListing> {
+  async markListingAsSold(
+    id: string,
+    userId: string,
+  ): Promise<MarketplaceListing> {
     const listing = await this.listingRepository
-      .createQueryBuilder('listing')
-      .leftJoinAndSelect('listing.images', 'images')
-      .where('listing.id = :id', { id })
+      .createQueryBuilder("listing")
+      .leftJoinAndSelect("listing.images", "images")
+      .where("listing.id = :id", { id })
       .getOne();
 
     if (!listing) {
@@ -257,26 +293,30 @@ export class MarketplaceService {
     }
 
     if (listing.sellerId !== userId) {
-      throw new ForbiddenException('Only the seller can mark their listing as sold');
+      throw new ForbiddenException(
+        "Only the seller can mark their listing as sold",
+      );
     }
 
-    if (listing.status !== 'approved') {
-      throw new BadRequestException('Only approved listings can be marked as sold');
+    if (listing.status !== "approved") {
+      throw new BadRequestException(
+        "Only approved listings can be marked as sold",
+      );
     }
 
-    listing.status = 'sold';
+    listing.status = "sold";
     return this.listingRepository.save(listing);
   }
 
   async adminApproveListing(id: string): Promise<MarketplaceListing> {
     console.log(`✅ Admin approving listing: ${id}`);
-    
+
     const listing = await this.listingRepository
-      .createQueryBuilder('listing')
-      .leftJoin('listing.seller', 'seller')
-      .addSelect(['seller.id', 'seller.name', 'seller.phoneNumber'])
-      .leftJoinAndSelect('listing.images', 'images')
-      .where('listing.id = :id', { id })
+      .createQueryBuilder("listing")
+      .leftJoin("listing.seller", "seller")
+      .addSelect(["seller.id", "seller.name", "seller.phoneNumber"])
+      .leftJoinAndSelect("listing.images", "images")
+      .where("listing.id = :id", { id })
       .getOne();
 
     if (!listing) {
@@ -284,27 +324,30 @@ export class MarketplaceService {
     }
 
     if (!listing.seller) {
-      throw new NotFoundException('Seller information not found');
+      throw new NotFoundException("Seller information not found");
     }
-    
+
     console.log(`📋 Current status: ${listing.status} → Changing to: approved`);
-    listing.status = 'approved';
+    listing.status = "approved";
     const savedListing = await this.listingRepository.save(listing);
     console.log(`✅ Listing ${id} saved with status: ${savedListing.status}`);
-    
+
     // Notify seller about approval
     await this.notificationService.notifyListingApproved(savedListing);
 
     return savedListing;
   }
 
-  async adminRejectListing(id: string, reason: string): Promise<MarketplaceListing> {
+  async adminRejectListing(
+    id: string,
+    reason: string,
+  ): Promise<MarketplaceListing> {
     const listing = await this.listingRepository
-      .createQueryBuilder('listing')
-      .leftJoin('listing.seller', 'seller')
-      .addSelect(['seller.id', 'seller.name', 'seller.phoneNumber'])
-      .leftJoinAndSelect('listing.images', 'images')
-      .where('listing.id = :id', { id })
+      .createQueryBuilder("listing")
+      .leftJoin("listing.seller", "seller")
+      .addSelect(["seller.id", "seller.name", "seller.phoneNumber"])
+      .leftJoinAndSelect("listing.images", "images")
+      .where("listing.id = :id", { id })
       .getOne();
 
     if (!listing) {
@@ -312,13 +355,13 @@ export class MarketplaceService {
     }
 
     if (!listing.seller) {
-      throw new NotFoundException('Seller information not found');
+      throw new NotFoundException("Seller information not found");
     }
-    
-    listing.status = 'rejected';
+
+    listing.status = "rejected";
     listing.adminNotes = reason;
     const savedListing = await this.listingRepository.save(listing);
-    
+
     // Notify seller about rejection
     await this.notificationService.notifyListingRejected(savedListing, reason);
 
@@ -338,26 +381,26 @@ export class MarketplaceService {
 
     // Build query
     const queryBuilder = this.listingRepository
-      .createQueryBuilder('listing')
-      .leftJoin('listing.seller', 'seller')
-      .addSelect(['seller.id', 'seller.name', 'seller.phoneNumber'])
-      .leftJoinAndSelect('listing.images', 'images');
+      .createQueryBuilder("listing")
+      .leftJoin("listing.seller", "seller")
+      .addSelect(["seller.id", "seller.name", "seller.phoneNumber"])
+      .leftJoinAndSelect("listing.images", "images");
 
     // Filter by status if provided (handle comma-separated statuses)
     if (dto.status) {
-      const statuses = dto.status.split(',').map(s => s.trim());
+      const statuses = dto.status.split(",").map((s) => s.trim());
       if (statuses.length > 1) {
-        queryBuilder.where('listing.status IN (:...statuses)', { statuses });
+        queryBuilder.where("listing.status IN (:...statuses)", { statuses });
       } else {
-        queryBuilder.where('listing.status = :status', { status: dto.status });
+        queryBuilder.where("listing.status = :status", { status: dto.status });
       }
     }
 
     // Search filter (title or seller name)
     if (dto.search) {
       queryBuilder.andWhere(
-        '(listing.title ILIKE :search OR seller.name ILIKE :search)',
-        { search: `%${dto.search}%` }
+        "(listing.title ILIKE :search OR seller.name ILIKE :search)",
+        { search: `%${dto.search}%` },
       );
     }
 
@@ -366,7 +409,7 @@ export class MarketplaceService {
 
     // Apply pagination and ordering
     const listings = await queryBuilder
-      .orderBy('listing.createdAt', 'DESC')
+      .orderBy("listing.createdAt", "DESC")
       .skip(skip)
       .take(limit)
       .getMany();
@@ -382,9 +425,13 @@ export class MarketplaceService {
     };
   }
 
-  async updateListingStatus(id: string, status: string, notes?: string): Promise<MarketplaceListing> {
+  async updateListingStatus(
+    id: string,
+    status: string,
+    notes?: string,
+  ): Promise<MarketplaceListing> {
     const listing = await this.getListingById(id);
-    
+
     listing.status = status;
     if (notes) {
       listing.adminNotes = notes;
@@ -402,62 +449,82 @@ export class MarketplaceService {
     totalPages: number;
   }> {
     try {
-      console.log('🛒 getMarketplaceFeed called with:', dto);
+      console.log("🛒 getMarketplaceFeed called with:", dto);
       const page = dto.page || 1;
       const limit = dto.limit || 10;
       const skip = (page - 1) * limit;
 
       // Build query
       const queryBuilder = this.listingRepository
-        .createQueryBuilder('listing')
-        .leftJoin('listing.seller', 'seller')
-        .addSelect(['seller.id', 'seller.name', 'seller.phoneNumber', 'seller.isBanned'])
-        .leftJoinAndSelect('listing.images', 'images')
-        .where('listing.status = :status', { status: 'approved' })
-        .andWhere('listing.isBanned = :isBanned', { isBanned: false })
-        .andWhere('(seller.isBanned IS NULL OR seller.isBanned = :sellerBanned)', { sellerBanned: false });
-      
-      console.log('📝 Query built successfully');
+        .createQueryBuilder("listing")
+        .leftJoin("listing.seller", "seller")
+        .addSelect([
+          "seller.id",
+          "seller.name",
+          "seller.phoneNumber",
+          "seller.isBanned",
+        ])
+        .leftJoinAndSelect("listing.images", "images")
+        .where("listing.status = :status", { status: "approved" })
+        .andWhere("listing.isBanned = :isBanned", { isBanned: false })
+        .andWhere(
+          "(seller.isBanned IS NULL OR seller.isBanned = :sellerBanned)",
+          { sellerBanned: false },
+        );
 
-    // Apply filters
-    if (dto.category) {
-      queryBuilder.andWhere('listing.category = :category', { category: dto.category });
-    }
+      console.log("📝 Query built successfully");
 
-    if (dto.city) {
-      queryBuilder.andWhere('listing.city ILIKE :city', { city: `%${dto.city}%` });
-    }
+      // Apply filters
+      if (dto.category) {
+        queryBuilder.andWhere("listing.category = :category", {
+          category: dto.category,
+        });
+      }
 
-    if (dto.condition) {
-      queryBuilder.andWhere('listing.condition = :condition', { condition: dto.condition });
-    }
+      if (dto.city) {
+        queryBuilder.andWhere("listing.city ILIKE :city", {
+          city: `%${dto.city}%`,
+        });
+      }
 
-    // Price range filter
-    if (dto.priceMin !== undefined && dto.priceMax !== undefined) {
-      queryBuilder.andWhere('listing.price BETWEEN :priceMin AND :priceMax', {
-        priceMin: dto.priceMin,
-        priceMax: dto.priceMax,
-      });
-    } else if (dto.priceMin !== undefined) {
-      queryBuilder.andWhere('listing.price >= :priceMin', { priceMin: dto.priceMin });
-    } else if (dto.priceMax !== undefined) {
-      queryBuilder.andWhere('listing.price <= :priceMax', { priceMax: dto.priceMax });
-    }
+      if (dto.condition) {
+        queryBuilder.andWhere("listing.condition = :condition", {
+          condition: dto.condition,
+        });
+      }
 
-    // Search by title
-    if (dto.search) {
-      queryBuilder.andWhere('listing.title ILIKE :search', { search: `%${dto.search}%` });
-    }
+      // Price range filter
+      if (dto.priceMin !== undefined && dto.priceMax !== undefined) {
+        queryBuilder.andWhere("listing.price BETWEEN :priceMin AND :priceMax", {
+          priceMin: dto.priceMin,
+          priceMax: dto.priceMax,
+        });
+      } else if (dto.priceMin !== undefined) {
+        queryBuilder.andWhere("listing.price >= :priceMin", {
+          priceMin: dto.priceMin,
+        });
+      } else if (dto.priceMax !== undefined) {
+        queryBuilder.andWhere("listing.price <= :priceMax", {
+          priceMax: dto.priceMax,
+        });
+      }
+
+      // Search by title
+      if (dto.search) {
+        queryBuilder.andWhere("listing.title ILIKE :search", {
+          search: `%${dto.search}%`,
+        });
+      }
 
       // Get total count
-      console.log('📊 Getting count...');
+      console.log("📊 Getting count...");
       const total = await queryBuilder.getCount();
       console.log(`📊 Total approved listings: ${total}`);
 
       // Apply pagination and ordering
-      console.log('📝 Executing query...');
+      console.log("📝 Executing query...");
       const listings = await queryBuilder
-        .orderBy('listing.createdAt', 'DESC')
+        .orderBy("listing.createdAt", "DESC")
         .skip(skip)
         .take(limit)
         .getMany();
@@ -474,7 +541,7 @@ export class MarketplaceService {
         totalPages,
       };
     } catch (error) {
-      console.error('❌ Error in getMarketplaceFeed:', error);
+      console.error("❌ Error in getMarketplaceFeed:", error);
       throw error;
     }
   }

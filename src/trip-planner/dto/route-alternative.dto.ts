@@ -17,22 +17,22 @@ export interface ChargerStopDto {
   estimatedCostLkr: number;
   connectorType: string;
   reliabilityScore: number;
-  chargerType: 'ac' | 'dc';
+  chargerType: "ac" | "dc";
   backupChargerNames?: string[];
   availabilityConfidencePercent?: number;
 }
 
 export interface SafetyWarningDto {
   type:
-    | 'low_battery'
-    | 'no_chargers'
-    | 'many_stops'
-    | 'weather'
-    | 'long_gap'
-    | 'traffic'
-    | 'charger_preference_fallback'
-    | 'charger_availability_risk';
-  severity: 'low' | 'medium' | 'high';
+    | "low_battery"
+    | "no_chargers"
+    | "many_stops"
+    | "weather"
+    | "long_gap"
+    | "traffic"
+    | "charger_preference_fallback"
+    | "charger_availability_risk";
+  severity: "low" | "medium" | "high";
   message: string;
 }
 

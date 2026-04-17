@@ -1,9 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { SupportReport, ReportStatus } from './entities/support-report.entity';
-import { CreateReportDto } from './dto/create-report.dto';
-import { UpdateReportDto } from './dto/update-report.dto';
+import { Injectable, NotFoundException } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { SupportReport, ReportStatus } from "./entities/support-report.entity";
+import { CreateReportDto } from "./dto/create-report.dto";
+import { UpdateReportDto } from "./dto/update-report.dto";
 
 @Injectable()
 export class SupportService {
@@ -16,7 +16,7 @@ export class SupportService {
     createReportDto: CreateReportDto,
     userId?: string,
   ): Promise<SupportReport> {
-    console.log('🔧 Support Service - Creating report:', {
+    console.log("🔧 Support Service - Creating report:", {
       dto: createReportDto,
       userId,
     });
@@ -30,28 +30,28 @@ export class SupportService {
         status: ReportStatus.PENDING,
       });
 
-      console.log('💾 Saving support report...');
+      console.log("💾 Saving support report...");
       const savedReport = await this.supportReportRepository.save(report);
-      console.log('✅ Support report saved:', savedReport.id);
-      
+      console.log("✅ Support report saved:", savedReport.id);
+
       return savedReport;
     } catch (error) {
-      console.error('❌ Error creating support report:', error);
+      console.error("❌ Error creating support report:", error);
       throw error;
     }
   }
 
   async findAll(): Promise<SupportReport[]> {
     return await this.supportReportRepository.find({
-      relations: ['user'],
-      order: { createdAt: 'DESC' },
+      relations: ["user"],
+      order: { createdAt: "DESC" },
     });
   }
 
   async findOne(id: string): Promise<SupportReport> {
     const report = await this.supportReportRepository.findOne({
       where: { id },
-      relations: ['user'],
+      relations: ["user"],
     });
 
     if (!report) {
@@ -64,7 +64,7 @@ export class SupportService {
   async findByUser(userId: string): Promise<SupportReport[]> {
     return await this.supportReportRepository.find({
       where: { userId },
-      order: { createdAt: 'DESC' },
+      order: { createdAt: "DESC" },
     });
   }
 

@@ -1,6 +1,15 @@
-import { Type } from 'class-transformer';
-import { IsNotEmpty, IsString, IsOptional, IsNumber, IsArray, ValidateNested, IsEnum, Min } from 'class-validator';
-import { SocketDto } from './socket.dto';
+import { Type } from "class-transformer";
+import {
+  IsNotEmpty,
+  IsString,
+  IsOptional,
+  IsNumber,
+  IsArray,
+  ValidateNested,
+  IsEnum,
+  Min,
+} from "class-validator";
+import { SocketDto } from "./socket.dto";
 
 export class CreateIndividualChargerDto {
   @IsString()
@@ -21,7 +30,7 @@ export class CreateIndividualChargerDto {
 
   @IsString()
   @IsNotEmpty()
-  chargerType: 'ac' | 'dc';
+  chargerType: "ac" | "dc";
 
   @IsNumber()
   @IsNotEmpty()
@@ -51,7 +60,7 @@ export class CreateIndividualChargerDto {
 
   @IsString()
   @IsOptional()
-  bookingMode?: 'pre_booking' | 'walk_in' | 'hybrid';
+  bookingMode?: "pre_booking" | "walk_in" | "hybrid";
 
   @IsArray()
   @IsOptional()

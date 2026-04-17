@@ -6,12 +6,12 @@ import {
   OnGatewayDisconnect,
   ConnectedSocket,
   MessageBody,
-} from '@nestjs/websockets';
-import { Server, Socket } from 'socket.io';
-import { Injectable, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { MechanicEntity } from '../entities/mechanic.entity';
+} from "@nestjs/websockets";
+import { Server, Socket } from "socket.io";
+import { Injectable, Logger } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { MechanicEntity } from "../entities/mechanic.entity";
 
 interface MechanicLocation {
   mechanicId: string;
@@ -24,18 +24,23 @@ interface MechanicLocation {
 
 @WebSocketGateway({
   cors: {
-    origin: '*', // Configure for production
+    origin: "*", // Configure for production
     credentials: true,
   },
-  namespace: '/mechanics',
+  namespace: "/mechanics",
 })
 @Injectable()
-export class MechanicAvailabilityGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class MechanicAvailabilityGateway
+  implements OnGatewayConnection, OnGatewayDisconnect
+{
   @WebSocketServer()
   server: Server;
 
   private readonly logger = new Logger(MechanicAvailabilityGateway.name);
-  private connectedMechanics = new Map<string, { socketId: string; mechanicId: string }>();
+  private connectedMechanics = new Map<
+    string,
+    { socketId: string; mechanicId: string }
+  >();
   private connectedUsers = new Map<string, string>(); // socketId -> userId
 
   constructor(
@@ -49,12 +54,14 @@ export class MechanicAvailabilityGateway implements OnGatewayConnection, OnGatew
 
   async handleDisconnect(client: Socket) {
     this.logger.log(`Client disconnected: ${client.id}`);
-    
+
     // Remove from maps and mark mechanic as unavailable in DB
     for (const [mechanicId, value] of this.connectedMechanics.entries()) {
       if (value.socketId === client.id) {
         this.connectedMechanics.delete(mechanicId);
-        this.logger.log(`Mechanic ${mechanicId} disconnected — marking unavailable`);
+        this.logger.log(
+          `Mechanic ${mechanicId} disconnected — marking unavailable`,
+        );
 
         // Mark unavailable in the database so they don't appear in public searches
         try {
@@ -65,13 +72,15 @@ export class MechanicAvailabilityGateway implements OnGatewayConnection, OnGatew
           this.logger.log(`✅ Mechanic ${mechanicId} marked unavailable in DB`);
 
           // Broadcast to subscribed users so their map updates in real time
-          const mechanic = await this.mechanicRepository.findOne({ where: { id: mechanicId } });
+          const mechanic = await this.mechanicRepository.findOne({
+            where: { id: mechanicId },
+          });
           if (mechanic?.currentLocationLat && mechanic?.currentLocationLng) {
             const room = this.getGeoRoom(
               parseFloat(mechanic.currentLocationLat.toString()),
               parseFloat(mechanic.currentLocationLng.toString()),
             );
-            this.server.to(room).emit('mechanic:availability_changed', {
+            this.server.to(room).emit("mechanic:availability_changed", {
               mechanicId,
               available: false,
               isOnJob: false,
@@ -79,13 +88,15 @@ export class MechanicAvailabilityGateway implements OnGatewayConnection, OnGatew
             });
           }
         } catch (err) {
-          this.logger.error(`Failed to mark mechanic ${mechanicId} unavailable: ${err.message}`);
+          this.logger.error(
+            `Failed to mark mechanic ${mechanicId} unavailable: ${err.message}`,
+          );
         }
 
         break;
       }
     }
-    
+
     this.connectedUsers.forEach((value, socketId) => {
       if (socketId === client.id) {
         this.connectedUsers.delete(socketId);
@@ -96,7 +107,7 @@ export class MechanicAvailabilityGateway implements OnGatewayConnection, OnGatew
   /**
    * Mechanic registers their presence
    */
-  @SubscribeMessage('mechanic:register')
+  @SubscribeMessage("mechanic:register")
   async handleMechanicRegister(
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { mechanicId: string },
@@ -112,31 +123,34 @@ export class MechanicAvailabilityGateway implements OnGatewayConnection, OnGatew
       lastOnlineAt: new Date(),
     });
 
-    client.emit('mechanic:registered', { success: true });
+    client.emit("mechanic:registered", { success: true });
   }
 
   /**
    * User subscribes to mechanic updates in their area
    */
-  @SubscribeMessage('user:subscribe_area')
+  @SubscribeMessage("user:subscribe_area")
   handleUserSubscribe(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { userId: string; lat: number; lng: number; radiusKm: number },
+    @MessageBody()
+    data: { userId: string; lat: number; lng: number; radiusKm: number },
   ) {
-    this.logger.log(`User ${data.userId} subscribed to area: ${data.lat}, ${data.lng}`);
+    this.logger.log(
+      `User ${data.userId} subscribed to area: ${data.lat}, ${data.lng}`,
+    );
     this.connectedUsers.set(client.id, data.userId);
-    
+
     // Join a room for this geographic area
     const room = this.getGeoRoom(data.lat, data.lng);
     client.join(room);
-    
-    client.emit('user:subscribed', { success: true, room });
+
+    client.emit("user:subscribed", { success: true, room });
   }
 
   /**
    * Mechanic updates their location and availability
    */
-  @SubscribeMessage('mechanic:update_location')
+  @SubscribeMessage("mechanic:update_location")
   async handleLocationUpdate(
     @ConnectedSocket() client: Socket,
     @MessageBody() data: MechanicLocation,
@@ -153,7 +167,7 @@ export class MechanicAvailabilityGateway implements OnGatewayConnection, OnGatew
 
       // Broadcast to users in the area
       const room = this.getGeoRoom(data.lat, data.lng);
-      this.server.to(room).emit('mechanic:location_update', {
+      this.server.to(room).emit("mechanic:location_update", {
         mechanicId: data.mechanicId,
         lat: data.lat,
         lng: data.lng,
@@ -162,20 +176,24 @@ export class MechanicAvailabilityGateway implements OnGatewayConnection, OnGatew
         timestamp: new Date(),
       });
 
-      client.emit('mechanic:location_updated', { success: true });
+      client.emit("mechanic:location_updated", { success: true });
     } catch (error) {
       this.logger.error(`Location update failed: ${error.message}`);
-      client.emit('mechanic:location_updated', { success: false, error: error.message });
+      client.emit("mechanic:location_updated", {
+        success: false,
+        error: error.message,
+      });
     }
   }
 
   /**
    * Mechanic updates availability status
    */
-  @SubscribeMessage('mechanic:update_availability')
+  @SubscribeMessage("mechanic:update_availability")
   async handleAvailabilityUpdate(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { mechanicId: string; available: boolean; isOnJob: boolean },
+    @MessageBody()
+    data: { mechanicId: string; available: boolean; isOnJob: boolean },
   ) {
     try {
       const mechanic = await this.mechanicRepository.findOne({
@@ -183,9 +201,9 @@ export class MechanicAvailabilityGateway implements OnGatewayConnection, OnGatew
       });
 
       if (!mechanic) {
-        client.emit('mechanic:availability_updated', { 
-          success: false, 
-          error: 'Mechanic not found' 
+        client.emit("mechanic:availability_updated", {
+          success: false,
+          error: "Mechanic not found",
         });
         return;
       }
@@ -202,8 +220,8 @@ export class MechanicAvailabilityGateway implements OnGatewayConnection, OnGatew
           parseFloat(mechanic.currentLocationLat.toString()),
           parseFloat(mechanic.currentLocationLng.toString()),
         );
-        
-        this.server.to(room).emit('mechanic:availability_changed', {
+
+        this.server.to(room).emit("mechanic:availability_changed", {
           mechanicId: data.mechanicId,
           available: data.available,
           isOnJob: data.isOnJob,
@@ -211,19 +229,24 @@ export class MechanicAvailabilityGateway implements OnGatewayConnection, OnGatew
         });
       }
 
-      client.emit('mechanic:availability_updated', { success: true });
-      
-      this.logger.log(`Mechanic ${data.mechanicId} availability updated: ${data.available}`);
+      client.emit("mechanic:availability_updated", { success: true });
+
+      this.logger.log(
+        `Mechanic ${data.mechanicId} availability updated: ${data.available}`,
+      );
     } catch (error) {
       this.logger.error(`Availability update failed: ${error.message}`);
-      client.emit('mechanic:availability_updated', { success: false, error: error.message });
+      client.emit("mechanic:availability_updated", {
+        success: false,
+        error: error.message,
+      });
     }
   }
 
   /**
    * Get nearby available mechanics
    */
-  @SubscribeMessage('user:get_nearby_mechanics')
+  @SubscribeMessage("user:get_nearby_mechanics")
   async handleGetNearbyMechanics(
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { lat: number; lng: number; radiusKm: number },
@@ -236,14 +259,14 @@ export class MechanicAvailabilityGateway implements OnGatewayConnection, OnGatew
         data.radiusKm,
       );
 
-      client.emit('user:nearby_mechanics', {
+      client.emit("user:nearby_mechanics", {
         success: true,
         mechanics,
         count: mechanics.length,
       });
     } catch (error) {
       this.logger.error(`Get nearby mechanics failed: ${error.message}`);
-      client.emit('user:nearby_mechanics', {
+      client.emit("user:nearby_mechanics", {
         success: false,
         error: error.message,
       });
@@ -255,19 +278,21 @@ export class MechanicAvailabilityGateway implements OnGatewayConnection, OnGatew
    */
   async sendEmergencyAlert(mechanicId: string, alertData: any) {
     const connection = this.connectedMechanics.get(mechanicId);
-    
+
     if (connection) {
-      this.server.to(connection.socketId).emit('emergency:alert', {
+      this.server.to(connection.socketId).emit("emergency:alert", {
         ...alertData,
-        priority: 'high',
+        priority: "high",
         timestamp: new Date(),
       });
-      
+
       this.logger.log(`Emergency alert sent to mechanic ${mechanicId}`);
       return true;
     }
-    
-    this.logger.warn(`Mechanic ${mechanicId} not connected for emergency alert`);
+
+    this.logger.warn(
+      `Mechanic ${mechanicId} not connected for emergency alert`,
+    );
     return false;
   }
 
@@ -280,7 +305,7 @@ export class MechanicAvailabilityGateway implements OnGatewayConnection, OnGatew
   ) {
     if (status.lat && status.lng) {
       const room = this.getGeoRoom(status.lat, status.lng);
-      this.server.to(room).emit('mechanic:status_changed', {
+      this.server.to(room).emit("mechanic:status_changed", {
         mechanicId,
         ...status,
         timestamp: new Date(),
@@ -307,11 +332,11 @@ export class MechanicAvailabilityGateway implements OnGatewayConnection, OnGatew
     radiusKm: number,
   ): Promise<any[]> {
     const mechanics = await this.mechanicRepository
-      .createQueryBuilder('mechanic')
-      .where('mechanic.available = :available', { available: true })
-      .andWhere('mechanic.isOnJob = :isOnJob', { isOnJob: false })
-      .andWhere('mechanic.currentLocationLat IS NOT NULL')
-      .andWhere('mechanic.currentLocationLng IS NOT NULL')
+      .createQueryBuilder("mechanic")
+      .where("mechanic.available = :available", { available: true })
+      .andWhere("mechanic.isOnJob = :isOnJob", { isOnJob: false })
+      .andWhere("mechanic.currentLocationLat IS NOT NULL")
+      .andWhere("mechanic.currentLocationLng IS NOT NULL")
       .getMany();
 
     // Filter by distance
@@ -340,16 +365,23 @@ export class MechanicAvailabilityGateway implements OnGatewayConnection, OnGatew
       .sort((a, b) => a.distance - b.distance);
   }
 
-  private calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  private calculateDistance(
+    lat1: number,
+    lng1: number,
+    lat2: number,
+    lng2: number,
+  ): number {
     const R = 6371;
     const dLat = this.toRadians(lat2 - lat1);
     const dLng = this.toRadians(lng2 - lng1);
-    
-    const a = 
+
+    const a =
       Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(this.toRadians(lat1)) * Math.cos(this.toRadians(lat2)) *
-      Math.sin(dLng / 2) * Math.sin(dLng / 2);
-    
+      Math.cos(this.toRadians(lat1)) *
+        Math.cos(this.toRadians(lat2)) *
+        Math.sin(dLng / 2) *
+        Math.sin(dLng / 2);
+
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   }

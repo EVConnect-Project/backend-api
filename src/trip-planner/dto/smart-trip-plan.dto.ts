@@ -1,16 +1,26 @@
-import { IsNotEmpty, IsNumber, IsOptional, IsString, IsArray, IsEnum, ValidateNested, Min, Max } from 'class-validator';
-import { Type } from 'class-transformer';
+import {
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsArray,
+  IsEnum,
+  ValidateNested,
+  Min,
+  Max,
+} from "class-validator";
+import { Type } from "class-transformer";
 
 export enum DrivingMode {
-  ECO = 'eco',
-  NORMAL = 'normal',
-  SPORT = 'sport',
+  ECO = "eco",
+  NORMAL = "normal",
+  SPORT = "sport",
 }
 
 export enum RouteObjective {
-  FASTEST = 'fastest',
-  BALANCED = 'balanced',
-  CHEAPEST = 'cheapest',
+  FASTEST = "fastest",
+  BALANCED = "balanced",
+  CHEAPEST = "cheapest",
 }
 
 export class WaypointDto {

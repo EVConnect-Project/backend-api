@@ -1,6 +1,14 @@
-import { Type } from 'class-transformer';
-import { IsNotEmpty, IsString, IsOptional, IsNumber, IsArray, ValidateNested, Min } from 'class-validator';
-import { ChargerConfigDto } from './charger-config.dto';
+import { Type } from "class-transformer";
+import {
+  IsNotEmpty,
+  IsString,
+  IsOptional,
+  IsNumber,
+  IsArray,
+  ValidateNested,
+  Min,
+} from "class-validator";
+import { ChargerConfigDto } from "./charger-config.dto";
 
 export class CreateStationDto {
   @IsString()

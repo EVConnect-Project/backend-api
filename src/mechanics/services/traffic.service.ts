@@ -1,11 +1,11 @@
-import { Injectable } from '@nestjs/common';
-import axios from 'axios';
+import { Injectable } from "@nestjs/common";
+import axios from "axios";
 
 export interface TrafficData {
   distanceKm: number;
   durationMinutes: number;
   durationInTrafficMinutes: number;
-  trafficLevel: 'low' | 'moderate' | 'heavy' | 'severe';
+  trafficLevel: "low" | "moderate" | "heavy" | "severe";
   estimatedArrival: Date;
   routeSummary: string;
 }
@@ -27,19 +27,39 @@ export class TrafficService {
     try {
       // Try Google Maps Directions API first (best traffic data)
       if (this.GOOGLE_MAPS_API_KEY) {
-        return await this.getGoogleMapsETA(originLat, originLng, destinationLat, destinationLng);
+        return await this.getGoogleMapsETA(
+          originLat,
+          originLng,
+          destinationLat,
+          destinationLng,
+        );
       }
 
       // Fallback to Mapbox
       if (this.MAPBOX_API_KEY) {
-        return await this.getMapboxETA(originLat, originLng, destinationLat, destinationLng);
+        return await this.getMapboxETA(
+          originLat,
+          originLng,
+          destinationLat,
+          destinationLng,
+        );
       }
 
       // Final fallback: haversine distance + estimated speed
-      return this.getFallbackETA(originLat, originLng, destinationLat, destinationLng);
+      return this.getFallbackETA(
+        originLat,
+        originLng,
+        destinationLat,
+        destinationLng,
+      );
     } catch (error) {
-      console.warn('Traffic API error, using fallback:', error.message);
-      return this.getFallbackETA(originLat, originLng, destinationLat, destinationLng);
+      console.warn("Traffic API error, using fallback:", error.message);
+      return this.getFallbackETA(
+        originLat,
+        originLng,
+        destinationLat,
+        destinationLng,
+      );
     }
   }
 
@@ -52,21 +72,21 @@ export class TrafficService {
     destinationLat: number,
     destinationLng: number,
   ): Promise<TrafficData> {
-    const url = 'https://maps.googleapis.com/maps/api/directions/json';
-    
+    const url = "https://maps.googleapis.com/maps/api/directions/json";
+
     const response = await axios.get(url, {
       params: {
         origin: `${originLat},${originLng}`,
         destination: `${destinationLat},${destinationLng}`,
-        departure_time: 'now', // Critical for traffic data
-        traffic_model: 'best_guess',
-        mode: 'driving',
+        departure_time: "now", // Critical for traffic data
+        traffic_model: "best_guess",
+        mode: "driving",
         key: this.GOOGLE_MAPS_API_KEY,
       },
       timeout: 5000,
     });
 
-    if (response.data.status !== 'OK' || !response.data.routes?.[0]) {
+    if (response.data.status !== "OK" || !response.data.routes?.[0]) {
       throw new Error(`Google Maps API error: ${response.data.status}`);
     }
 
@@ -75,19 +95,24 @@ export class TrafficService {
 
     const distanceKm = leg.distance.value / 1000;
     const durationMinutes = Math.round(leg.duration.value / 60);
-    const durationInTrafficMinutes = leg.duration_in_traffic 
+    const durationInTrafficMinutes = leg.duration_in_traffic
       ? Math.round(leg.duration_in_traffic.value / 60)
       : durationMinutes;
 
     const trafficDelay = durationInTrafficMinutes - durationMinutes;
-    const trafficLevel = this.calculateTrafficLevel(trafficDelay, durationMinutes);
+    const trafficLevel = this.calculateTrafficLevel(
+      trafficDelay,
+      durationMinutes,
+    );
 
     return {
       distanceKm,
       durationMinutes,
       durationInTrafficMinutes,
       trafficLevel,
-      estimatedArrival: new Date(Date.now() + durationInTrafficMinutes * 60 * 1000),
+      estimatedArrival: new Date(
+        Date.now() + durationInTrafficMinutes * 60 * 1000,
+      ),
       routeSummary: leg.summary || route.summary,
     };
   }
@@ -102,31 +127,34 @@ export class TrafficService {
     destinationLng: number,
   ): Promise<TrafficData> {
     const url = `https://api.mapbox.com/directions/v5/mapbox/driving-traffic/${originLng},${originLat};${destinationLng},${destinationLat}`;
-    
+
     const response = await axios.get(url, {
       params: {
         access_token: this.MAPBOX_API_KEY,
-        geometries: 'geojson',
-        overview: 'simplified',
+        geometries: "geojson",
+        overview: "simplified",
       },
       timeout: 5000,
     });
 
     if (!response.data.routes?.[0]) {
-      throw new Error('Mapbox API error: No routes found');
+      throw new Error("Mapbox API error: No routes found");
     }
 
     const route = response.data.routes[0];
     const distanceKm = route.distance / 1000;
     const durationMinutes = Math.round(route.duration / 60);
-    
+
     // Mapbox provides duration_typical for non-traffic time
-    const durationTypical = route.duration_typical 
+    const durationTypical = route.duration_typical
       ? Math.round(route.duration_typical / 60)
       : durationMinutes;
-    
+
     const trafficDelay = durationMinutes - durationTypical;
-    const trafficLevel = this.calculateTrafficLevel(trafficDelay, durationTypical);
+    const trafficLevel = this.calculateTrafficLevel(
+      trafficDelay,
+      durationTypical,
+    );
 
     return {
       distanceKm,
@@ -134,7 +162,7 @@ export class TrafficService {
       durationInTrafficMinutes: durationMinutes,
       trafficLevel,
       estimatedArrival: new Date(Date.now() + durationMinutes * 60 * 1000),
-      routeSummary: 'Via major roads',
+      routeSummary: "Via major roads",
     };
   }
 
@@ -147,13 +175,18 @@ export class TrafficService {
     destinationLat: number,
     destinationLng: number,
   ): Promise<TrafficData> {
-    const distanceKm = this.calculateDistance(originLat, originLng, destinationLat, destinationLng);
-    
+    const distanceKm = this.calculateDistance(
+      originLat,
+      originLng,
+      destinationLat,
+      destinationLng,
+    );
+
     // Estimate time: city average 30 km/h, highway 60 km/h
     // Use 40 km/h as reasonable average with traffic
     const averageSpeed = 40; // km/h
     const durationMinutes = Math.round((distanceKm / averageSpeed) * 60);
-    
+
     // Add 20% buffer for city traffic
     const durationInTrafficMinutes = Math.round(durationMinutes * 1.2);
 
@@ -161,25 +194,34 @@ export class TrafficService {
       distanceKm,
       durationMinutes,
       durationInTrafficMinutes,
-      trafficLevel: 'moderate' as const,
-      estimatedArrival: new Date(Date.now() + durationInTrafficMinutes * 60 * 1000),
-      routeSummary: 'Estimated route',
+      trafficLevel: "moderate" as const,
+      estimatedArrival: new Date(
+        Date.now() + durationInTrafficMinutes * 60 * 1000,
+      ),
+      routeSummary: "Estimated route",
     });
   }
 
   /**
    * Calculate haversine distance between two points
    */
-  private calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  private calculateDistance(
+    lat1: number,
+    lng1: number,
+    lat2: number,
+    lng2: number,
+  ): number {
     const R = 6371; // Earth's radius in km
     const dLat = this.toRadians(lat2 - lat1);
     const dLng = this.toRadians(lng2 - lng1);
-    
-    const a = 
+
+    const a =
       Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(this.toRadians(lat1)) * Math.cos(this.toRadians(lat2)) *
-      Math.sin(dLng / 2) * Math.sin(dLng / 2);
-    
+      Math.cos(this.toRadians(lat1)) *
+        Math.cos(this.toRadians(lat2)) *
+        Math.sin(dLng / 2) *
+        Math.sin(dLng / 2);
+
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   }
@@ -191,13 +233,16 @@ export class TrafficService {
   /**
    * Determine traffic level based on delay
    */
-  private calculateTrafficLevel(delayMinutes: number, normalDuration: number): TrafficData['trafficLevel'] {
+  private calculateTrafficLevel(
+    delayMinutes: number,
+    normalDuration: number,
+  ): TrafficData["trafficLevel"] {
     const delayPercent = (delayMinutes / normalDuration) * 100;
 
-    if (delayPercent < 10) return 'low';
-    if (delayPercent < 30) return 'moderate';
-    if (delayPercent < 50) return 'heavy';
-    return 'severe';
+    if (delayPercent < 10) return "low";
+    if (delayPercent < 30) return "moderate";
+    if (delayPercent < 50) return "heavy";
+    return "severe";
   }
 
   /**
@@ -220,7 +265,7 @@ export class TrafficService {
 
     const results = await Promise.all(etaPromises);
     const etaMap = new Map<string, TrafficData>();
-    
+
     results.forEach(({ id, eta }) => {
       etaMap.set(id, eta);
     });

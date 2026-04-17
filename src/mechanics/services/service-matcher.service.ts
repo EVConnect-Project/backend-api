@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable } from "@nestjs/common";
 
 /**
  * Enhanced Service Matching Algorithm
@@ -8,36 +8,53 @@ import { Injectable } from '@nestjs/common';
 export class ServiceMatcherService {
   // Service categories with priority weights
   private readonly serviceCategories = {
-    critical: ['towing', 'accident-response', 'ev-charging-issue'],
-    urgent: ['battery-jump', 'flat-tire', 'fuel-delivery', 'lockout'],
-    standard: ['oil-change', 'brake-repair', 'engine-diagnostic'],
-    specialized: ['ev-specialist', 'transmission', 'hybrid-repair'],
+    critical: ["towing", "accident-response", "ev-charging-issue"],
+    urgent: ["battery-jump", "flat-tire", "fuel-delivery", "lockout"],
+    standard: ["oil-change", "brake-repair", "engine-diagnostic"],
+    specialized: ["ev-specialist", "transmission", "hybrid-repair"],
   };
 
   // Service compatibility matrix - which services work well together
   private readonly compatibilityMatrix: Record<string, string[]> = {
-    'battery-jump': ['electrical-repair', 'alternator-replacement', 'starter-replacement'],
-    'flat-tire': ['tire-change', 'wheel-alignment', 'suspension-repair'],
-    'towing': ['accident-response', 'mechanical-breakdown', 'collision-repair'],
-    'engine-diagnostic': ['engine-repair', 'fuel-system', 'transmission'],
-    'ev-charging-issue': ['ev-specialist', 'battery-management', 'charging-port-repair'],
-    'fuel-delivery': ['fuel-system', 'tank-repair'],
-    'lockout': ['key-replacement', 'ignition-repair', 'security-system'],
-    'oil-change': ['filter-replacement', 'fluid-service', 'maintenance'],
-    'brake-repair': ['brake-pad-replacement', 'rotor-service', 'brake-fluid'],
-    'accident-response': ['towing', 'body-work', 'frame-repair', 'insurance-claims'],
+    "battery-jump": [
+      "electrical-repair",
+      "alternator-replacement",
+      "starter-replacement",
+    ],
+    "flat-tire": ["tire-change", "wheel-alignment", "suspension-repair"],
+    towing: ["accident-response", "mechanical-breakdown", "collision-repair"],
+    "engine-diagnostic": ["engine-repair", "fuel-system", "transmission"],
+    "ev-charging-issue": [
+      "ev-specialist",
+      "battery-management",
+      "charging-port-repair",
+    ],
+    "fuel-delivery": ["fuel-system", "tank-repair"],
+    lockout: ["key-replacement", "ignition-repair", "security-system"],
+    "oil-change": ["filter-replacement", "fluid-service", "maintenance"],
+    "brake-repair": ["brake-pad-replacement", "rotor-service", "brake-fluid"],
+    "accident-response": [
+      "towing",
+      "body-work",
+      "frame-repair",
+      "insurance-claims",
+    ],
   };
 
   // Problem type to required services mapping
   private readonly problemTypeServices: Record<string, string[]> = {
-    battery_dead: ['battery-jump', 'battery-replacement', 'electrical-repair'],
-    flat_tire: ['flat-tire', 'tire-change', 'tire-repair'],
-    out_of_fuel: ['fuel-delivery', 'fuel-system'],
-    engine_trouble: ['engine-diagnostic', 'engine-repair', 'towing'],
-    towing_required: ['towing', 'mechanical-breakdown'],
-    ev_charging_issue: ['ev-specialist', 'ev-charging-issue', 'battery-management'],
-    accident: ['accident-response', 'towing', 'collision-repair'],
-    general: ['general-repair', 'diagnostic', 'maintenance'],
+    battery_dead: ["battery-jump", "battery-replacement", "electrical-repair"],
+    flat_tire: ["flat-tire", "tire-change", "tire-repair"],
+    out_of_fuel: ["fuel-delivery", "fuel-system"],
+    engine_trouble: ["engine-diagnostic", "engine-repair", "towing"],
+    towing_required: ["towing", "mechanical-breakdown"],
+    ev_charging_issue: [
+      "ev-specialist",
+      "ev-charging-issue",
+      "battery-management",
+    ],
+    accident: ["accident-response", "towing", "collision-repair"],
+    general: ["general-repair", "diagnostic", "maintenance"],
   };
 
   /**
@@ -54,8 +71,9 @@ export class ServiceMatcherService {
     }
 
     // Get required services from problem type
-    const targetServices = requiredServices || this.getServicesForProblem(problemType || '');
-    
+    const targetServices =
+      requiredServices || this.getServicesForProblem(problemType || "");
+
     if (targetServices.length === 0) {
       return 50;
     }
@@ -63,10 +81,10 @@ export class ServiceMatcherService {
     let totalScore = 0;
     let maxPossibleScore = 0;
 
-    targetServices.forEach(service => {
+    targetServices.forEach((service) => {
       const category = this.getServiceCategory(service);
       const categoryWeight = this.getCategoryWeight(category);
-      
+
       maxPossibleScore += categoryWeight;
 
       // Direct match
@@ -75,8 +93,10 @@ export class ServiceMatcherService {
       } else {
         // Check for compatible services
         const compatibleServices = this.compatibilityMatrix[service] || [];
-        const hasCompatible = compatibleServices.some(cs => mechanicServices.includes(cs));
-        
+        const hasCompatible = compatibleServices.some((cs) =>
+          mechanicServices.includes(cs),
+        );
+
         if (hasCompatible) {
           // Partial credit for compatible service
           totalScore += categoryWeight * 0.5;
@@ -91,9 +111,8 @@ export class ServiceMatcherService {
     );
 
     // Calculate percentage score
-    const baseScore = maxPossibleScore > 0 
-      ? (totalScore / maxPossibleScore) * 100 
-      : 50;
+    const baseScore =
+      maxPossibleScore > 0 ? (totalScore / maxPossibleScore) * 100 : 50;
 
     return Math.min(100, baseScore + specializedBonus);
   }
@@ -113,20 +132,23 @@ export class ServiceMatcherService {
     specializedServices: string[];
     matchPercentage: number;
   } {
-    const targetServices = requiredServices || this.getServicesForProblem(problemType || '');
-    
+    const targetServices =
+      requiredServices || this.getServicesForProblem(problemType || "");
+
     const matches: string[] = [];
     const compatibleMatches: string[] = [];
     const missing: string[] = [];
     const specializedServices: string[] = [];
 
-    targetServices.forEach(service => {
+    targetServices.forEach((service) => {
       if (mechanicServices.includes(service)) {
         matches.push(service);
       } else {
         const compatibleServices = this.compatibilityMatrix[service] || [];
-        const foundCompatible = compatibleServices.find(cs => mechanicServices.includes(cs));
-        
+        const foundCompatible = compatibleServices.find((cs) =>
+          mechanicServices.includes(cs),
+        );
+
         if (foundCompatible) {
           compatibleMatches.push(foundCompatible);
         } else {
@@ -137,16 +159,23 @@ export class ServiceMatcherService {
 
     // Find specialized services
     const specialized = this.serviceCategories.specialized;
-    mechanicServices.forEach(service => {
+    mechanicServices.forEach((service) => {
       if (specialized.includes(service)) {
         specializedServices.push(service);
       }
     });
 
-    const score = this.calculateServiceMatchScore(mechanicServices, requiredServices, problemType);
-    const matchPercentage = targetServices.length > 0 
-      ? ((matches.length + compatibleMatches.length * 0.5) / targetServices.length) * 100
-      : 0;
+    const score = this.calculateServiceMatchScore(
+      mechanicServices,
+      requiredServices,
+      problemType,
+    );
+    const matchPercentage =
+      targetServices.length > 0
+        ? ((matches.length + compatibleMatches.length * 0.5) /
+            targetServices.length) *
+          100
+        : 0;
 
     return {
       score,
@@ -168,13 +197,15 @@ export class ServiceMatcherService {
   /**
    * Get service category
    */
-  private getServiceCategory(service: string): 'critical' | 'urgent' | 'standard' | 'specialized' {
+  private getServiceCategory(
+    service: string,
+  ): "critical" | "urgent" | "standard" | "specialized" {
     for (const [category, services] of Object.entries(this.serviceCategories)) {
       if (services.includes(service)) {
         return category as any;
       }
     }
-    return 'standard';
+    return "standard";
   }
 
   /**
@@ -201,8 +232,10 @@ export class ServiceMatcherService {
 
     // Bonus for having specialized skills related to the problem
     const specializedServices = this.serviceCategories.specialized;
-    const hasSpecialized = mechanicServices.some(s => specializedServices.includes(s));
-    
+    const hasSpecialized = mechanicServices.some((s) =>
+      specializedServices.includes(s),
+    );
+
     if (hasSpecialized) {
       bonus += 5; // +5% for specialized expertise
     }
@@ -210,7 +243,7 @@ export class ServiceMatcherService {
     // Bonus for offering multiple compatible services
     const compatibleCount = targetServices.reduce((count, target) => {
       const compatible = this.compatibilityMatrix[target] || [];
-      const hasAny = compatible.some(c => mechanicServices.includes(c));
+      const hasAny = compatible.some((c) => mechanicServices.includes(c));
       return count + (hasAny ? 1 : 0);
     }, 0);
 
@@ -229,17 +262,30 @@ export class ServiceMatcherService {
     requiredServices?: string[],
     problemType?: string,
   ): string[] {
-    const details = this.getServiceMatchDetails(mechanicServices, requiredServices, problemType);
+    const details = this.getServiceMatchDetails(
+      mechanicServices,
+      requiredServices,
+      problemType,
+    );
     const explanations: string[] = [];
 
-    if (details.matches.length === details.matches.length + details.compatibleMatches.length + details.missing.length) {
-      explanations.push('✅ Offers all required services');
+    if (
+      details.matches.length ===
+      details.matches.length +
+        details.compatibleMatches.length +
+        details.missing.length
+    ) {
+      explanations.push("✅ Offers all required services");
     } else if (details.matches.length > 0) {
-      explanations.push(`✅ Offers ${details.matches.length} required service(s)`);
+      explanations.push(
+        `✅ Offers ${details.matches.length} required service(s)`,
+      );
     }
 
     if (details.compatibleMatches.length > 0) {
-      explanations.push(`🔧 Has ${details.compatibleMatches.length} compatible service(s)`);
+      explanations.push(
+        `🔧 Has ${details.compatibleMatches.length} compatible service(s)`,
+      );
     }
 
     if (details.specializedServices.length > 0) {
@@ -247,9 +293,9 @@ export class ServiceMatcherService {
     }
 
     if (details.matchPercentage >= 80) {
-      explanations.push('🎯 Excellent service match');
+      explanations.push("🎯 Excellent service match");
     } else if (details.matchPercentage >= 60) {
-      explanations.push('👍 Good service match');
+      explanations.push("👍 Good service match");
     }
 
     return explanations;
@@ -264,7 +310,7 @@ export class ServiceMatcherService {
     problemType?: string,
   ): Array<{ mechanicId: string; score: number; matchDetails: any }> {
     return mechanics
-      .map(mechanic => ({
+      .map((mechanic) => ({
         mechanicId: mechanic.id,
         score: this.calculateServiceMatchScore(
           mechanic.services,

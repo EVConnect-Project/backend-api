@@ -1,9 +1,7 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
-export class FixPaymentMethodsSchemaForProduction1783000000000
-  implements MigrationInterface
-{
-  name = 'FixPaymentMethodsSchemaForProduction1783000000000';
+export class FixPaymentMethodsSchemaForProduction1783000000000 implements MigrationInterface {
+  name = "FixPaymentMethodsSchemaForProduction1783000000000";
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
@@ -50,19 +48,45 @@ export class FixPaymentMethodsSchemaForProduction1783000000000
       )
     `);
 
-    await queryRunner.query(`ALTER TABLE payment_methods ADD COLUMN IF NOT EXISTS "stripePaymentMethodId" VARCHAR`);
-    await queryRunner.query(`ALTER TABLE payment_methods ADD COLUMN IF NOT EXISTS brand VARCHAR`);
-    await queryRunner.query(`ALTER TABLE payment_methods ADD COLUMN IF NOT EXISTS "cardBrand" VARCHAR(50)`);
-    await queryRunner.query(`ALTER TABLE payment_methods ADD COLUMN IF NOT EXISTS "lastFour" VARCHAR(4)`);
-    await queryRunner.query(`ALTER TABLE payment_methods ADD COLUMN IF NOT EXISTS "expiryMonth" VARCHAR(2)`);
-    await queryRunner.query(`ALTER TABLE payment_methods ADD COLUMN IF NOT EXISTS "expiryYear" VARCHAR(2)`);
-    await queryRunner.query(`ALTER TABLE payment_methods ADD COLUMN IF NOT EXISTS "cardholderName" VARCHAR(255)`);
-    await queryRunner.query(`ALTER TABLE payment_methods ADD COLUMN IF NOT EXISTS token VARCHAR(255)`);
-    await queryRunner.query(`ALTER TABLE payment_methods ADD COLUMN IF NOT EXISTS "isDefault" BOOLEAN DEFAULT false`);
-    await queryRunner.query(`ALTER TABLE payment_methods ADD COLUMN IF NOT EXISTS "billingAddress" JSONB`);
-    await queryRunner.query(`ALTER TABLE payment_methods ADD COLUMN IF NOT EXISTS metadata JSONB`);
-    await queryRunner.query(`ALTER TABLE payment_methods ADD COLUMN IF NOT EXISTS "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
-    await queryRunner.query(`ALTER TABLE payment_methods ADD COLUMN IF NOT EXISTS "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
+    await queryRunner.query(
+      `ALTER TABLE payment_methods ADD COLUMN IF NOT EXISTS "stripePaymentMethodId" VARCHAR`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE payment_methods ADD COLUMN IF NOT EXISTS brand VARCHAR`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE payment_methods ADD COLUMN IF NOT EXISTS "cardBrand" VARCHAR(50)`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE payment_methods ADD COLUMN IF NOT EXISTS "lastFour" VARCHAR(4)`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE payment_methods ADD COLUMN IF NOT EXISTS "expiryMonth" VARCHAR(2)`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE payment_methods ADD COLUMN IF NOT EXISTS "expiryYear" VARCHAR(2)`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE payment_methods ADD COLUMN IF NOT EXISTS "cardholderName" VARCHAR(255)`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE payment_methods ADD COLUMN IF NOT EXISTS token VARCHAR(255)`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE payment_methods ADD COLUMN IF NOT EXISTS "isDefault" BOOLEAN DEFAULT false`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE payment_methods ADD COLUMN IF NOT EXISTS "billingAddress" JSONB`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE payment_methods ADD COLUMN IF NOT EXISTS metadata JSONB`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE payment_methods ADD COLUMN IF NOT EXISTS "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE payment_methods ADD COLUMN IF NOT EXISTS "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP`,
+    );
 
     await queryRunner.query(`
       DO $$
@@ -105,12 +129,22 @@ export class FixPaymentMethodsSchemaForProduction1783000000000
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX IF EXISTS idx_user_payment_settings_user_id`);
-    await queryRunner.query(`DROP INDEX IF EXISTS idx_payment_methods_is_default`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS idx_user_payment_settings_user_id`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS idx_payment_methods_is_default`,
+    );
     await queryRunner.query(`DROP INDEX IF EXISTS idx_payment_methods_user_id`);
 
-    await queryRunner.query(`ALTER TABLE payment_methods DROP COLUMN IF EXISTS "stripePaymentMethodId"`);
-    await queryRunner.query(`ALTER TABLE payment_methods DROP COLUMN IF EXISTS brand`);
-    await queryRunner.query(`ALTER TABLE payment_methods DROP COLUMN IF EXISTS "billingAddress"`);
+    await queryRunner.query(
+      `ALTER TABLE payment_methods DROP COLUMN IF EXISTS "stripePaymentMethodId"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE payment_methods DROP COLUMN IF EXISTS brand`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE payment_methods DROP COLUMN IF EXISTS "billingAddress"`,
+    );
   }
 }

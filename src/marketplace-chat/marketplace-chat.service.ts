@@ -1,10 +1,15 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { MarketplaceChat } from './entities/marketplace-chat.entity';
-import { ChatMessage } from './entities/chat-message.entity';
-import { CreateChatDto } from './dto/create-chat.dto';
-import { SendMessageDto } from './dto/send-message.dto';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { MarketplaceChat } from "./entities/marketplace-chat.entity";
+import { ChatMessage } from "./entities/chat-message.entity";
+import { CreateChatDto } from "./dto/create-chat.dto";
+import { SendMessageDto } from "./dto/send-message.dto";
 
 @Injectable()
 export class MarketplaceChatService {
@@ -18,7 +23,10 @@ export class MarketplaceChatService {
   /**
    * Create or get existing chat thread
    */
-  async createChat(dto: CreateChatDto, buyerId: string): Promise<MarketplaceChat> {
+  async createChat(
+    dto: CreateChatDto,
+    buyerId: string,
+  ): Promise<MarketplaceChat> {
     // Check if chat already exists
     const existingChat = await this.chatRepository.findOne({
       where: {
@@ -26,7 +34,7 @@ export class MarketplaceChatService {
         buyerId: buyerId,
         sellerId: dto.sellerId,
       },
-      relations: ['listing', 'buyer', 'seller'],
+      relations: ["listing", "buyer", "seller"],
     });
 
     if (existingChat) {
@@ -35,7 +43,7 @@ export class MarketplaceChatService {
 
     // Prevent seller from chatting with themselves
     if (buyerId === dto.sellerId) {
-      throw new BadRequestException('You cannot chat with yourself');
+      throw new BadRequestException("You cannot chat with yourself");
     }
 
     // Create new chat
@@ -49,11 +57,11 @@ export class MarketplaceChatService {
 
     const newChat = await this.chatRepository.findOne({
       where: { id: savedChat.id },
-      relations: ['listing', 'buyer', 'seller'],
+      relations: ["listing", "buyer", "seller"],
     });
 
     if (!newChat) {
-      throw new NotFoundException('Failed to create chat');
+      throw new NotFoundException("Failed to create chat");
     }
 
     return newChat;
@@ -64,13 +72,13 @@ export class MarketplaceChatService {
    */
   async getUserChats(userId: string): Promise<MarketplaceChat[]> {
     return this.chatRepository
-      .createQueryBuilder('chat')
-      .leftJoinAndSelect('chat.listing', 'listing')
-      .leftJoinAndSelect('chat.buyer', 'buyer')
-      .leftJoinAndSelect('chat.seller', 'seller')
-      .where('chat.buyerId = :userId OR chat.sellerId = :userId', { userId })
-      .orderBy('chat.lastMessageAt', 'DESC', 'NULLS LAST')
-      .addOrderBy('chat.createdAt', 'DESC')
+      .createQueryBuilder("chat")
+      .leftJoinAndSelect("chat.listing", "listing")
+      .leftJoinAndSelect("chat.buyer", "buyer")
+      .leftJoinAndSelect("chat.seller", "seller")
+      .where("chat.buyerId = :userId OR chat.sellerId = :userId", { userId })
+      .orderBy("chat.lastMessageAt", "DESC", "NULLS LAST")
+      .addOrderBy("chat.createdAt", "DESC")
       .getMany();
   }
 
@@ -80,16 +88,16 @@ export class MarketplaceChatService {
   async getChatById(chatId: string, userId: string): Promise<MarketplaceChat> {
     const chat = await this.chatRepository.findOne({
       where: { id: chatId },
-      relations: ['listing', 'buyer', 'seller'],
+      relations: ["listing", "buyer", "seller"],
     });
 
     if (!chat) {
-      throw new NotFoundException('Chat not found');
+      throw new NotFoundException("Chat not found");
     }
 
     // Check if user is participant
     if (chat.buyerId !== userId && chat.sellerId !== userId) {
-      throw new ForbiddenException('You are not a participant in this chat');
+      throw new ForbiddenException("You are not a participant in this chat");
     }
 
     return chat;
@@ -98,7 +106,10 @@ export class MarketplaceChatService {
   /**
    * Send a message in a chat
    */
-  async sendMessage(dto: SendMessageDto, senderId: string): Promise<ChatMessage> {
+  async sendMessage(
+    dto: SendMessageDto,
+    senderId: string,
+  ): Promise<ChatMessage> {
     // Verify chat exists and user is participant
     const chat = await this.getChatById(dto.chatId, senderId);
 
@@ -119,11 +130,11 @@ export class MarketplaceChatService {
     // Return message with sender info
     const messageWithSender = await this.messageRepository.findOne({
       where: { id: savedMessage.id },
-      relations: ['sender'],
+      relations: ["sender"],
     });
 
     if (!messageWithSender) {
-      throw new NotFoundException('Failed to retrieve sent message');
+      throw new NotFoundException("Failed to retrieve sent message");
     }
 
     return messageWithSender;
@@ -132,14 +143,17 @@ export class MarketplaceChatService {
   /**
    * Get all messages for a chat
    */
-  async getChatMessages(chatId: string, userId: string): Promise<ChatMessage[]> {
+  async getChatMessages(
+    chatId: string,
+    userId: string,
+  ): Promise<ChatMessage[]> {
     // Verify user has access to this chat
     await this.getChatById(chatId, userId);
 
     const messages = await this.messageRepository.find({
       where: { chatId },
-      relations: ['sender'],
-      order: { createdAt: 'ASC' },
+      relations: ["sender"],
+      order: { createdAt: "ASC" },
     });
 
     // Mark messages as read for the recipient
@@ -147,9 +161,9 @@ export class MarketplaceChatService {
       .createQueryBuilder()
       .update(ChatMessage)
       .set({ isRead: true })
-      .where('chatId = :chatId', { chatId })
-      .andWhere('senderId != :userId', { userId })
-      .andWhere('isRead = :isRead', { isRead: false })
+      .where("chatId = :chatId", { chatId })
+      .andWhere("senderId != :userId", { userId })
+      .andWhere("isRead = :isRead", { isRead: false })
       .execute();
 
     return messages;
@@ -172,10 +186,10 @@ export class MarketplaceChatService {
 
     // Count unread messages where user is NOT the sender
     const count = await this.messageRepository
-      .createQueryBuilder('message')
-      .where('message.chatId IN (:...chatIds)', { chatIds })
-      .andWhere('message.senderId != :userId', { userId })
-      .andWhere('message.isRead = :isRead', { isRead: false })
+      .createQueryBuilder("message")
+      .where("message.chatId IN (:...chatIds)", { chatIds })
+      .andWhere("message.senderId != :userId", { userId })
+      .andWhere("message.isRead = :isRead", { isRead: false })
       .getCount();
 
     return count;

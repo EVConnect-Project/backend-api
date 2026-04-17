@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class CreateMarketplaceChatTables1731802800000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
@@ -65,9 +65,15 @@ export class CreateMarketplaceChatTables1731802800000 implements MigrationInterf
     await queryRunner.query(`DROP INDEX IF EXISTS "IDX_chat_messages_unread"`);
     await queryRunner.query(`DROP INDEX IF EXISTS "IDX_chat_messages_sender"`);
     await queryRunner.query(`DROP INDEX IF EXISTS "IDX_chat_messages_chat"`);
-    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_marketplace_chats_listing"`);
-    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_marketplace_chats_seller"`);
-    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_marketplace_chats_buyer"`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_marketplace_chats_listing"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_marketplace_chats_seller"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_marketplace_chats_buyer"`,
+    );
 
     // Drop tables
     await queryRunner.query(`DROP TABLE IF EXISTS chat_messages`);

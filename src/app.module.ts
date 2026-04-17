@@ -1,60 +1,62 @@
-import { Module, OnModuleInit } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { ThrottlerModule } from '@nestjs/throttler';
-import { DataSource } from 'typeorm';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
-import { AuthModule } from './auth/auth.module';
-import { ChargerModule } from './charger/charger.module';
-import { UsersModule } from './users/users.module';
-import { BookingsModule } from './bookings/bookings.module';
-import { PaymentsModule } from './payments/payments.module';
-import { MechanicsModule } from './mechanics/mechanics.module';
-import { AdminModule } from './admin/admin.module';
-import { OwnerModule } from './owner/owner.module';
-import { MechanicModule } from './mechanic/mechanic.module';
-import { BreakdownModule } from './breakdown/breakdown.module';
-import { MarketplaceModule } from './marketplace/marketplace.module';
-import { CloudinaryModule } from './cloudinary/cloudinary.module';
-import { MarketplaceChatModule } from './marketplace-chat/marketplace-chat.module';
-import { ChatModule } from './chat/chat.module';
-import { ChargingModule } from './charging/charging.module';
-import { ChargerIntegrationModule } from './charger-integration/charger-integration.module';
-import { ReviewsModule } from './reviews/reviews.module';
-import { FavoritesModule } from './favorites/favorites.module';
-import { TripPlannerModule } from './trip-planner/trip-planner.module';
-import { NotificationsModule } from './notifications/notifications.module';
-import { TripModule } from './trip/trip.module';
-import { SupportModule } from './support/support.module';
-import { EmergencyModule } from './emergency/emergency.module';
-import { FeedbackModule } from './feedback/feedback.module';
-import { PromotionsModule } from './promotions/promotions.module';
-import { StationModule } from './station/station.module';
-import { DirectionsModule } from './directions/directions.module';
-import { LeadsModule } from './leads/leads.module';
-import { ServiceProvidersModule } from './service-providers/service-providers.module';
-import { WalletModule } from './wallet/wallet.module';
+import { Module, OnModuleInit } from "@nestjs/common";
+import { ConfigModule, ConfigService } from "@nestjs/config";
+import { TypeOrmModule } from "@nestjs/typeorm";
+import { ThrottlerModule } from "@nestjs/throttler";
+import { DataSource } from "typeorm";
+import { AppController } from "./app.controller";
+import { AppService } from "./app.service";
+import { AuthModule } from "./auth/auth.module";
+import { ChargerModule } from "./charger/charger.module";
+import { UsersModule } from "./users/users.module";
+import { BookingsModule } from "./bookings/bookings.module";
+import { PaymentsModule } from "./payments/payments.module";
+import { MechanicsModule } from "./mechanics/mechanics.module";
+import { AdminModule } from "./admin/admin.module";
+import { OwnerModule } from "./owner/owner.module";
+import { MechanicModule } from "./mechanic/mechanic.module";
+import { BreakdownModule } from "./breakdown/breakdown.module";
+import { MarketplaceModule } from "./marketplace/marketplace.module";
+import { CloudinaryModule } from "./cloudinary/cloudinary.module";
+import { MarketplaceChatModule } from "./marketplace-chat/marketplace-chat.module";
+import { ChatModule } from "./chat/chat.module";
+import { ChargingModule } from "./charging/charging.module";
+import { ChargerIntegrationModule } from "./charger-integration/charger-integration.module";
+import { ReviewsModule } from "./reviews/reviews.module";
+import { FavoritesModule } from "./favorites/favorites.module";
+import { TripPlannerModule } from "./trip-planner/trip-planner.module";
+import { NotificationsModule } from "./notifications/notifications.module";
+import { TripModule } from "./trip/trip.module";
+import { SupportModule } from "./support/support.module";
+import { EmergencyModule } from "./emergency/emergency.module";
+import { FeedbackModule } from "./feedback/feedback.module";
+import { PromotionsModule } from "./promotions/promotions.module";
+import { StationModule } from "./station/station.module";
+import { DirectionsModule } from "./directions/directions.module";
+import { LeadsModule } from "./leads/leads.module";
+import { ServiceProvidersModule } from "./service-providers/service-providers.module";
+import { WalletModule } from "./wallet/wallet.module";
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
     }),
-    ThrottlerModule.forRoot([{
-      ttl: 60000,  // 60 seconds
-      limit: 30,   // 30 requests per minute globally
-    }]),
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60000, // 60 seconds
+        limit: 30, // 30 requests per minute globally
+      },
+    ]),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
-        type: 'postgres',
-        url: configService.get('DATABASE_URL'),
-        entities: [__dirname + '/**/*.entity{.ts,.js}'],
-        migrations: [__dirname + '/migrations/**/*{.ts,.js}'],
-        synchronize: false,  // CRITICAL: Must be false to prevent schema destruction
+        type: "postgres",
+        url: configService.get("DATABASE_URL"),
+        entities: [__dirname + "/**/*.entity{.ts,.js}"],
+        migrations: [__dirname + "/migrations/**/*{.ts,.js}"],
+        synchronize: false, // CRITICAL: Must be false to prevent schema destruction
         migrationsRun: false,
-        autoLoadEntities: true,  // Allow auto-loading but don't sync
+        autoLoadEntities: true, // Allow auto-loading but don't sync
         logging: false,
       }),
       inject: [ConfigService],
@@ -99,32 +101,32 @@ export class AppModule implements OnModuleInit {
   private async runSchemaHealthCheck(queryRunner: any): Promise<void> {
     const requiredColumns: Record<string, string[]> = {
       users: [
-        'id',
-        'phone',
-        'countryCode',
-        'password',
-        'name',
-        'role',
-        'isVerified',
-        'isBanned',
-        'createdAt',
-        'updatedAt',
+        "id",
+        "phone",
+        "countryCode",
+        "password",
+        "name",
+        "role",
+        "isVerified",
+        "isBanned",
+        "createdAt",
+        "updatedAt",
       ],
       bookings: [
-        'id',
-        'userId',
-        'chargerId',
-        'socket_id',
-        'startTime',
-        'endTime',
-        'status',
-        'price',
-        'energyConsumed',
-        'paymentStatus',
-        'checkInTime',
-        'gracePeriodExpiresAt',
-        'createdAt',
-        'updatedAt',
+        "id",
+        "userId",
+        "chargerId",
+        "socket_id",
+        "startTime",
+        "endTime",
+        "status",
+        "price",
+        "energyConsumed",
+        "paymentStatus",
+        "checkInTime",
+        "gracePeriodExpiresAt",
+        "createdAt",
+        "updatedAt",
       ],
     };
 
@@ -140,7 +142,9 @@ export class AppModule implements OnModuleInit {
         [tableName],
       );
 
-      const existing = new Set(rows.map((row: { column_name: string }) => row.column_name));
+      const existing = new Set(
+        rows.map((row: { column_name: string }) => row.column_name),
+      );
       const missing = expected.filter((column) => !existing.has(column));
 
       if (missing.length > 0) {
@@ -149,16 +153,22 @@ export class AppModule implements OnModuleInit {
     }
 
     if (mismatches.length === 0) {
-      console.log('✅ Schema health check passed for critical users/bookings columns');
+      console.log(
+        "✅ Schema health check passed for critical users/bookings columns",
+      );
     } else {
-      console.error('⚠️ Schema health check detected mismatched columns:');
+      console.error("⚠️ Schema health check detected mismatched columns:");
       for (const mismatch of mismatches) {
-        console.error(`   - ${mismatch.table}: missing [${mismatch.missing.join(', ')}]`);
+        console.error(
+          `   - ${mismatch.table}: missing [${mismatch.missing.join(", ")}]`,
+        );
       }
-      console.error('⚠️ Fix entity mappings or apply migrations before using affected endpoints.');
+      console.error(
+        "⚠️ Fix entity mappings or apply migrations before using affected endpoints.",
+      );
     }
 
-    const requiredTables = ['ad_impressions', 'ab_tests', 'ad_revenue_ledger'];
+    const requiredTables = ["ad_impressions", "ab_tests", "ad_revenue_ledger"];
     const tableRows = await queryRunner.query(
       `
         SELECT table_name
@@ -167,24 +177,32 @@ export class AppModule implements OnModuleInit {
       `,
       [requiredTables],
     );
-    const existingTables = new Set(tableRows.map((row: { table_name: string }) => row.table_name));
-    const missingTables = requiredTables.filter((table) => !existingTables.has(table));
+    const existingTables = new Set(
+      tableRows.map((row: { table_name: string }) => row.table_name),
+    );
+    const missingTables = requiredTables.filter(
+      (table) => !existingTables.has(table),
+    );
 
     if (missingTables.length === 0) {
-      console.log('✅ Schema health check passed for promotion analytics tables');
+      console.log(
+        "✅ Schema health check passed for promotion analytics tables",
+      );
     } else {
-      console.error(`⚠️ Missing promotion analytics tables: [${missingTables.join(', ')}]`);
+      console.error(
+        `⚠️ Missing promotion analytics tables: [${missingTables.join(", ")}]`,
+      );
     }
   }
 
   async onModuleInit() {
-    console.log('🔧 Fixing schema after TypeORM initialization...');
-    
+    console.log("🔧 Fixing schema after TypeORM initialization...");
+
     const queryRunner = this.dataSource.createQueryRunner();
-    
+
     try {
       await queryRunner.connect();
-      
+
       // Create vehicle_profiles table if it doesn't exist
       await queryRunner.query(`
         CREATE TABLE IF NOT EXISTS vehicle_profiles (
@@ -205,20 +223,38 @@ export class AppModule implements OnModuleInit {
           "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
       `);
-      
+
       // Add missing columns to existing table if they don't exist
-      await queryRunner.query(`ALTER TABLE vehicle_profiles ADD COLUMN IF NOT EXISTS "averageConsumption" DECIMAL(10, 2)`);
-      await queryRunner.query(`ALTER TABLE vehicle_profiles ADD COLUMN IF NOT EXISTS "efficiency" DECIMAL(10, 2)`);
-      await queryRunner.query(`ALTER TABLE vehicle_profiles ADD COLUMN IF NOT EXISTS "chargingCurve" JSONB`);
-      await queryRunner.query(`ALTER TABLE vehicle_profiles ADD COLUMN IF NOT EXISTS "drivingMode" VARCHAR(20) DEFAULT 'normal'`);
-      await queryRunner.query(`ALTER TABLE vehicle_profiles ADD COLUMN IF NOT EXISTS "vehicleType" VARCHAR(50) DEFAULT 'car'`);
-      
+      await queryRunner.query(
+        `ALTER TABLE vehicle_profiles ADD COLUMN IF NOT EXISTS "averageConsumption" DECIMAL(10, 2)`,
+      );
+      await queryRunner.query(
+        `ALTER TABLE vehicle_profiles ADD COLUMN IF NOT EXISTS "efficiency" DECIMAL(10, 2)`,
+      );
+      await queryRunner.query(
+        `ALTER TABLE vehicle_profiles ADD COLUMN IF NOT EXISTS "chargingCurve" JSONB`,
+      );
+      await queryRunner.query(
+        `ALTER TABLE vehicle_profiles ADD COLUMN IF NOT EXISTS "drivingMode" VARCHAR(20) DEFAULT 'normal'`,
+      );
+      await queryRunner.query(
+        `ALTER TABLE vehicle_profiles ADD COLUMN IF NOT EXISTS "vehicleType" VARCHAR(50) DEFAULT 'car'`,
+      );
+
       // Update existing records to have 'car' as default vehicleType where NULL
-      await queryRunner.query(`UPDATE vehicle_profiles SET "vehicleType" = 'car' WHERE "vehicleType" IS NULL`);
-      
-      await queryRunner.query(`CREATE INDEX IF NOT EXISTS idx_vehicle_profiles_user_id ON vehicle_profiles("userId")`);
-      await queryRunner.query(`CREATE INDEX IF NOT EXISTS idx_vehicle_profiles_is_primary ON vehicle_profiles("isPrimary")`);
-      await queryRunner.query(`CREATE INDEX IF NOT EXISTS idx_vehicle_profiles_vehicle_type ON vehicle_profiles("vehicleType")`);
+      await queryRunner.query(
+        `UPDATE vehicle_profiles SET "vehicleType" = 'car' WHERE "vehicleType" IS NULL`,
+      );
+
+      await queryRunner.query(
+        `CREATE INDEX IF NOT EXISTS idx_vehicle_profiles_user_id ON vehicle_profiles("userId")`,
+      );
+      await queryRunner.query(
+        `CREATE INDEX IF NOT EXISTS idx_vehicle_profiles_is_primary ON vehicle_profiles("isPrimary")`,
+      );
+      await queryRunner.query(
+        `CREATE INDEX IF NOT EXISTS idx_vehicle_profiles_vehicle_type ON vehicle_profiles("vehicleType")`,
+      );
 
       // Service station domain safety tables (kept idempotent for environments with partial migrations)
       await queryRunner.query(`
@@ -271,19 +307,19 @@ export class AppModule implements OnModuleInit {
       `);
 
       await queryRunner.query(
-        `CREATE INDEX IF NOT EXISTS idx_service_station_applications_user ON service_station_applications(user_id)`
+        `CREATE INDEX IF NOT EXISTS idx_service_station_applications_user ON service_station_applications(user_id)`,
       );
       await queryRunner.query(
-        `CREATE INDEX IF NOT EXISTS idx_service_station_applications_status ON service_station_applications(application_status)`
+        `CREATE INDEX IF NOT EXISTS idx_service_station_applications_status ON service_station_applications(application_status)`,
       );
       await queryRunner.query(
-        `CREATE INDEX IF NOT EXISTS idx_service_stations_owner ON service_stations(owner_user_id)`
+        `CREATE INDEX IF NOT EXISTS idx_service_stations_owner ON service_stations(owner_user_id)`,
       );
       await queryRunner.query(
-        `CREATE INDEX IF NOT EXISTS idx_service_stations_city ON service_stations(city)`
+        `CREATE INDEX IF NOT EXISTS idx_service_stations_city ON service_stations(city)`,
       );
       await queryRunner.query(
-        `CREATE UNIQUE INDEX IF NOT EXISTS uq_service_stations_application ON service_stations(application_id) WHERE application_id IS NOT NULL`
+        `CREATE UNIQUE INDEX IF NOT EXISTS uq_service_stations_application ON service_stations(application_id) WHERE application_id IS NOT NULL`,
       );
 
       await queryRunner.query(`
@@ -302,24 +338,24 @@ export class AppModule implements OnModuleInit {
         )
       `);
       await queryRunner.query(
-        `CREATE INDEX IF NOT EXISTS idx_service_station_bookings_station_date ON service_station_bookings(station_id, appointment_date)`
+        `CREATE INDEX IF NOT EXISTS idx_service_station_bookings_station_date ON service_station_bookings(station_id, appointment_date)`,
       );
       await queryRunner.query(
-        `CREATE INDEX IF NOT EXISTS idx_service_station_bookings_user ON service_station_bookings(user_id)`
+        `CREATE INDEX IF NOT EXISTS idx_service_station_bookings_user ON service_station_bookings(user_id)`,
       );
       await queryRunner.query(
-        `ALTER TABLE service_station_bookings DROP CONSTRAINT IF EXISTS uq_station_slot`
+        `ALTER TABLE service_station_bookings DROP CONSTRAINT IF EXISTS uq_station_slot`,
       );
       await queryRunner.query(
-        `ALTER TABLE service_station_bookings ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP`
+        `ALTER TABLE service_station_bookings ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP`,
       );
       await queryRunner.query(
-        `ALTER TABLE service_station_bookings ADD COLUMN IF NOT EXISTS rating INT`
+        `ALTER TABLE service_station_bookings ADD COLUMN IF NOT EXISTS rating INT`,
       );
       await queryRunner.query(
-        `ALTER TABLE service_station_bookings ADD COLUMN IF NOT EXISTS feedback TEXT`
+        `ALTER TABLE service_station_bookings ADD COLUMN IF NOT EXISTS feedback TEXT`,
       );
-      
+
       // Create trigger function for vehicle_profiles if not exists
       await queryRunner.query(`
         CREATE OR REPLACE FUNCTION update_vehicle_profiles_updated_at()
@@ -330,31 +366,51 @@ export class AppModule implements OnModuleInit {
         END;
         $$ LANGUAGE plpgsql
       `);
-      
+
       await queryRunner.query(`
         DROP TRIGGER IF EXISTS trigger_update_vehicle_profiles_updated_at ON vehicle_profiles
       `);
-      
+
       await queryRunner.query(`
         CREATE TRIGGER trigger_update_vehicle_profiles_updated_at
         BEFORE UPDATE ON vehicle_profiles
         FOR EACH ROW
         EXECUTE FUNCTION update_vehicle_profiles_updated_at()
       `);
-      
+
       // Restore columns that TypeORM keeps dropping
-      await queryRunner.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR`);
-      await queryRunner.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS vehicle_type VARCHAR`);
-      await queryRunner.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS vehicle_brand VARCHAR`);
-      await queryRunner.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS vehicle_model VARCHAR`);
-      await queryRunner.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS battery_capacity DECIMAL(5,2)`);
-      await queryRunner.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS connector_type VARCHAR`);
-      await queryRunner.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS accepted_terms BOOLEAN DEFAULT false`);
-      await queryRunner.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS accepted_privacy_policy BOOLEAN DEFAULT false`);
-      await queryRunner.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_accepted_at TIMESTAMP`);
+      await queryRunner.query(
+        `ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR`,
+      );
+      await queryRunner.query(
+        `ALTER TABLE users ADD COLUMN IF NOT EXISTS vehicle_type VARCHAR`,
+      );
+      await queryRunner.query(
+        `ALTER TABLE users ADD COLUMN IF NOT EXISTS vehicle_brand VARCHAR`,
+      );
+      await queryRunner.query(
+        `ALTER TABLE users ADD COLUMN IF NOT EXISTS vehicle_model VARCHAR`,
+      );
+      await queryRunner.query(
+        `ALTER TABLE users ADD COLUMN IF NOT EXISTS battery_capacity DECIMAL(5,2)`,
+      );
+      await queryRunner.query(
+        `ALTER TABLE users ADD COLUMN IF NOT EXISTS connector_type VARCHAR`,
+      );
+      await queryRunner.query(
+        `ALTER TABLE users ADD COLUMN IF NOT EXISTS accepted_terms BOOLEAN DEFAULT false`,
+      );
+      await queryRunner.query(
+        `ALTER TABLE users ADD COLUMN IF NOT EXISTS accepted_privacy_policy BOOLEAN DEFAULT false`,
+      );
+      await queryRunner.query(
+        `ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_accepted_at TIMESTAMP`,
+      );
 
       // Bookings compatibility columns observed in production-like local schema
-      await queryRunner.query(`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS "paymentStatus" VARCHAR(50) DEFAULT 'pending'`);
+      await queryRunner.query(
+        `ALTER TABLE bookings ADD COLUMN IF NOT EXISTS "paymentStatus" VARCHAR(50) DEFAULT 'pending'`,
+      );
 
       // Promotions analytics tables required by PromotionsService event tracking
       await queryRunner.query(`
@@ -416,32 +472,57 @@ export class AppModule implements OnModuleInit {
       `);
 
       // Charger/Station city fields for display-friendly location text
-      await queryRunner.query(`ALTER TABLE chargers ADD COLUMN IF NOT EXISTS city VARCHAR(120)`);
-      await queryRunner.query(`ALTER TABLE charging_stations ADD COLUMN IF NOT EXISTS city VARCHAR(120)`);
-      await queryRunner.query(`ALTER TABLE IF EXISTS trip_plans ADD COLUMN IF NOT EXISTS "currentLat" DECIMAL(10,7)`);
-      await queryRunner.query(`ALTER TABLE IF EXISTS trip_plans ADD COLUMN IF NOT EXISTS "currentLng" DECIMAL(10,7)`);
-      await queryRunner.query(`ALTER TABLE IF EXISTS trip_plans ADD COLUMN IF NOT EXISTS "currentHeading" DECIMAL(6,2)`);
-      await queryRunner.query(`ALTER TABLE IF EXISTS trip_plans ADD COLUMN IF NOT EXISTS "currentSpeedKph" DECIMAL(7,2)`);
-      await queryRunner.query(`ALTER TABLE IF EXISTS trip_plans ADD COLUMN IF NOT EXISTS "lastLocationAt" TIMESTAMP`);
-      
+      await queryRunner.query(
+        `ALTER TABLE chargers ADD COLUMN IF NOT EXISTS city VARCHAR(120)`,
+      );
+      await queryRunner.query(
+        `ALTER TABLE charging_stations ADD COLUMN IF NOT EXISTS city VARCHAR(120)`,
+      );
+      await queryRunner.query(
+        `ALTER TABLE IF EXISTS trip_plans ADD COLUMN IF NOT EXISTS "currentLat" DECIMAL(10,7)`,
+      );
+      await queryRunner.query(
+        `ALTER TABLE IF EXISTS trip_plans ADD COLUMN IF NOT EXISTS "currentLng" DECIMAL(10,7)`,
+      );
+      await queryRunner.query(
+        `ALTER TABLE IF EXISTS trip_plans ADD COLUMN IF NOT EXISTS "currentHeading" DECIMAL(6,2)`,
+      );
+      await queryRunner.query(
+        `ALTER TABLE IF EXISTS trip_plans ADD COLUMN IF NOT EXISTS "currentSpeedKph" DECIMAL(7,2)`,
+      );
+      await queryRunner.query(
+        `ALTER TABLE IF EXISTS trip_plans ADD COLUMN IF NOT EXISTS "lastLocationAt" TIMESTAMP`,
+      );
+
       // Create indexes
-      await queryRunner.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_phone_users ON users(phone) WHERE phone IS NOT NULL`);
-      await queryRunner.query(`CREATE INDEX IF NOT EXISTS idx_ad_impressions_user_promo_event ON ad_impressions("userId", "promotionId", "eventType")`);
-      await queryRunner.query(`CREATE INDEX IF NOT EXISTS idx_ad_impressions_promo_event_created ON ad_impressions("promotionId", "eventType", "createdAt")`);
-      await queryRunner.query(`CREATE INDEX IF NOT EXISTS idx_ab_tests_status ON ab_tests(status)`);
-      await queryRunner.query(`CREATE INDEX IF NOT EXISTS idx_ad_revenue_ledger_promo_created ON ad_revenue_ledger("promotionId", "createdAt")`);
-      await queryRunner.query(`CREATE INDEX IF NOT EXISTS idx_service_provider_signals_user_mode_created ON service_provider_signals(user_id, mode, created_at DESC)`);
+      await queryRunner.query(
+        `CREATE UNIQUE INDEX IF NOT EXISTS uq_phone_users ON users(phone) WHERE phone IS NOT NULL`,
+      );
+      await queryRunner.query(
+        `CREATE INDEX IF NOT EXISTS idx_ad_impressions_user_promo_event ON ad_impressions("userId", "promotionId", "eventType")`,
+      );
+      await queryRunner.query(
+        `CREATE INDEX IF NOT EXISTS idx_ad_impressions_promo_event_created ON ad_impressions("promotionId", "eventType", "createdAt")`,
+      );
+      await queryRunner.query(
+        `CREATE INDEX IF NOT EXISTS idx_ab_tests_status ON ab_tests(status)`,
+      );
+      await queryRunner.query(
+        `CREATE INDEX IF NOT EXISTS idx_ad_revenue_ledger_promo_created ON ad_revenue_ledger("promotionId", "createdAt")`,
+      );
+      await queryRunner.query(
+        `CREATE INDEX IF NOT EXISTS idx_service_provider_signals_user_mode_created ON service_provider_signals(user_id, mode, created_at DESC)`,
+      );
 
       // Validate critical schema columns to surface mapping issues during startup.
       await this.runSchemaHealthCheck(queryRunner);
-      
-      console.log('✅ Schema fixes applied successfully');
+
+      console.log("✅ Schema fixes applied successfully");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.error('❌ Error applying schema fixes:', message);
+      console.error("❌ Error applying schema fixes:", message);
     } finally {
       await queryRunner.release();
     }
   }
 }
-

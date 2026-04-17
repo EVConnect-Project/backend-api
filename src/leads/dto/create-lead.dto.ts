@@ -1,5 +1,5 @@
-import { IsEmail, IsEnum, IsOptional, IsString } from 'class-validator';
-import { LeadType } from '../entities/lead.entity';
+import { IsEmail, IsEnum, IsOptional, IsString } from "class-validator";
+import { LeadType } from "../entities/lead.entity";
 
 export class CreateLeadDto {
   @IsOptional()
@@ -42,4 +42,3 @@ export class CreateLeadDto {
   @IsString()
   locationCount?: string;
 }
-

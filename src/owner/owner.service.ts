@@ -4,28 +4,29 @@ import {
   ForbiddenException,
   BadRequestException,
   InternalServerErrorException,
-} from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In, DataSource } from 'typeorm';
-import { HttpService } from '@nestjs/axios';
-import { lastValueFrom } from 'rxjs';
-import { Charger } from '../charger/entities/charger.entity';
-import { BookingEntity } from '../bookings/entities/booking.entity';
-import { UserEntity } from '../users/entities/user.entity';
-import { CreateChargerDto } from '../charger/dto/create-charger.dto';
-import { UpdateChargerDto } from '../charger/dto/update-charger.dto';
-import { CreateIndividualChargerDto } from './dto/create-individual-charger.dto';
-import { CreateStationDto } from './dto/create-station.dto';
-import { CreateServiceStationDto } from './dto/create-service-station.dto';
-import { ChargerSocket } from './entities/charger-socket.entity';
-import { ChargingStation } from './entities/charging-station.entity';
-import { ServiceStationApplicationEntity } from '../service-stations/entities/service-station-application.entity';
-import { ServiceStationEntity } from '../service-stations/entities/service-station.entity';
-import { BookingMode } from '../charger/enums/booking-mode.enum';
-import { ChargerStatus } from '../charger/enums/charger-status.enum';
-import { Station } from '../station/entities/station.entity';
-import { ChargersGateway } from '../charger/chargers.gateway';
-import { SmsService } from '../auth/sms.service';
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository, In, DataSource } from "typeorm";
+import { HttpService } from "@nestjs/axios";
+import { lastValueFrom } from "rxjs";
+import { Charger } from "../charger/entities/charger.entity";
+import { BookingEntity } from "../bookings/entities/booking.entity";
+import { UserEntity } from "../users/entities/user.entity";
+import { CreateChargerDto } from "../charger/dto/create-charger.dto";
+import { UpdateChargerDto } from "../charger/dto/update-charger.dto";
+import { CreateIndividualChargerDto } from "./dto/create-individual-charger.dto";
+import { CreateStationDto } from "./dto/create-station.dto";
+import { CreateServiceStationDto } from "./dto/create-service-station.dto";
+import { ChargerSocket } from "./entities/charger-socket.entity";
+import { ChargingStation } from "./entities/charging-station.entity";
+import { ServiceStationApplicationEntity } from "../service-stations/entities/service-station-application.entity";
+import { ServiceStationEntity } from "../service-stations/entities/service-station.entity";
+import { BookingMode } from "../charger/enums/booking-mode.enum";
+import { ChargerStatus } from "../charger/enums/charger-status.enum";
+import { Station } from "../station/entities/station.entity";
+import { ChargersGateway } from "../charger/chargers.gateway";
+import { SmsService } from "../auth/sms.service";
+import { PaymentEntity } from "../payments/entities/payment.entity";
 
 @Injectable()
 export class OwnerService {
@@ -34,6 +35,8 @@ export class OwnerService {
     private chargerRepository: Repository<Charger>,
     @InjectRepository(BookingEntity)
     private bookingRepository: Repository<BookingEntity>,
+    @InjectRepository(PaymentEntity)
+    private paymentRepository: Repository<PaymentEntity>,
     @InjectRepository(UserEntity)
     private userRepository: Repository<UserEntity>,
     @InjectRepository(ChargerSocket)
@@ -67,43 +70,47 @@ export class OwnerService {
       // 1. Fetch chargers without eager loading station (table might not exist)
       const chargers = await this.chargerRepository.find({
         where: { ownerId },
-        relations: ['sockets'],
-        order: { 
-          verified: 'DESC',  // Verified chargers first
-          createdAt: 'DESC'  // Then newest first
+        relations: ["sockets"],
+        order: {
+          verified: "DESC", // Verified chargers first
+          createdAt: "DESC", // Then newest first
         },
       });
 
-      console.log(`[OwnerService] Found ${chargers.length} chargers for owner ${ownerId}.`);
+      console.log(
+        `[OwnerService] Found ${chargers.length} chargers for owner ${ownerId}.`,
+      );
 
       if (chargers.length === 0) {
-        console.log('[OwnerService] No chargers found, returning empty array.');
+        console.log("[OwnerService] No chargers found, returning empty array.");
         return [];
       }
 
       const chargerIds = chargers.map((charger) => charger.id);
-      console.log(`[OwnerService] Charger IDs: ${chargerIds.join(', ')}`);
+      console.log(`[OwnerService] Charger IDs: ${chargerIds.join(", ")}`);
 
       // 2. Fetch booking statistics in a single efficient query
       let bookingStats = [];
       if (chargerIds.length > 0) {
-        console.log('[OwnerService] Fetching booking statistics...');
+        console.log("[OwnerService] Fetching booking statistics...");
         bookingStats = await this.bookingRepository
-          .createQueryBuilder('booking')
-          .select('booking.chargerId', 'chargerId')
-          .addSelect('COUNT(booking.id)', 'totalBookings')
+          .createQueryBuilder("booking")
+          .select("booking.chargerId", "chargerId")
+          .addSelect("COUNT(booking.id)", "totalBookings")
           .addSelect(
             "SUM(CASE WHEN booking.status = 'active' THEN 1 ELSE 0 END)",
-            'activeBookings',
+            "activeBookings",
           )
           .addSelect(
             "SUM(CASE WHEN booking.status = 'pending' THEN 1 ELSE 0 END)",
-            'pendingBookings',
+            "pendingBookings",
           )
-          .where('booking.chargerId IN (:...chargerIds)', { chargerIds })
-          .groupBy('booking.chargerId')
+          .where("booking.chargerId IN (:...chargerIds)", { chargerIds })
+          .groupBy("booking.chargerId")
           .getRawMany();
-        console.log(`[OwnerService] Retrieved stats for ${bookingStats.length} chargers.`);
+        console.log(
+          `[OwnerService] Retrieved stats for ${bookingStats.length} chargers.`,
+        );
       }
 
       // 3. Create a lookup map for quick access to stats
@@ -120,9 +127,11 @@ export class OwnerService {
 
       // 4. Manually and safely construct the final response object (without station)
       const chargersWithStats = chargers.map((charger) => {
-        const stats =
-          statsMap.get(charger.id) ||
-          { totalBookings: 0, activeBookings: 0, pendingBookings: 0 };
+        const stats = statsMap.get(charger.id) || {
+          totalBookings: 0,
+          activeBookings: 0,
+          pendingBookings: 0,
+        };
         return {
           id: charger.id,
           name: charger.name,
@@ -146,13 +155,13 @@ export class OwnerService {
       });
 
       console.log(
-        '[OwnerService] Successfully processed chargers with stats. Verified count:',
-        chargersWithStats.filter(c => c.verified).length,
+        "[OwnerService] Successfully processed chargers with stats. Verified count:",
+        chargersWithStats.filter((c) => c.verified).length,
       );
       return chargersWithStats;
     } catch (error) {
       console.error(
-        '❌ [OwnerService] Critical error in getMyChargers:',
+        "❌ [OwnerService] Critical error in getMyChargers:",
         error.message,
         error.stack,
       );
@@ -166,11 +175,11 @@ export class OwnerService {
   async registerServiceStation(dto: CreateServiceStationDto, userId: string) {
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException("User not found");
     }
 
-    if (user.role === 'user') {
-      user.role = 'owner';
+    if (user.role === "user") {
+      user.role = "owner";
       await this.userRepository.save(user);
     }
 
@@ -190,16 +199,18 @@ export class OwnerService {
       amenities: dto.amenities ?? [],
       openingHours: dto.openingHours ?? { is24Hours: true, schedule: {} },
       images: dto.images ?? [],
-      applicationStatus: 'pending',
+      applicationStatus: "pending",
       reviewNotes: null,
       reviewedBy: null,
       reviewedAt: null,
     });
 
-    const saved = await this.serviceStationApplicationRepository.save(application);
+    const saved =
+      await this.serviceStationApplicationRepository.save(application);
     return {
       ...saved,
-      message: 'Service station application submitted. Awaiting admin approval.',
+      message:
+        "Service station application submitted. Awaiting admin approval.",
       needsApproval: true,
     };
   }
@@ -207,12 +218,12 @@ export class OwnerService {
   async getMyServiceStations(userId: string) {
     const applications = await this.serviceStationApplicationRepository.find({
       where: { userId },
-      order: { createdAt: 'DESC' },
+      order: { createdAt: "DESC" },
     });
 
     const approvedStationRows = await this.serviceStationRepository.find({
       where: { ownerId: userId },
-      order: { createdAt: 'DESC' },
+      order: { createdAt: "DESC" },
     });
     const approvedByApplicationId = new Map(
       approvedStationRows
@@ -229,7 +240,7 @@ export class OwnerService {
       city: application.city,
       address: application.address,
       phoneNumber: application.phoneNumber,
-      verified: application.applicationStatus === 'approved',
+      verified: application.applicationStatus === "approved",
       status: application.applicationStatus,
       reviewNotes: application.reviewNotes,
       reviewedBy: application.reviewedBy,
@@ -242,7 +253,8 @@ export class OwnerService {
       images: application.images ?? [],
       createdAt: application.createdAt,
       updatedAt: application.updatedAt,
-      approvedStationId: approvedByApplicationId.get(application.id)?.id ?? null,
+      approvedStationId:
+        approvedByApplicationId.get(application.id)?.id ?? null,
     }));
   }
 
@@ -271,14 +283,16 @@ export class OwnerService {
     });
 
     if (!application) {
-      throw new NotFoundException('Service station application not found');
+      throw new NotFoundException("Service station application not found");
     }
 
     if (payload.stationName != null) {
       application.stationName = payload.stationName.trim();
     }
     if (payload.locationUrl != null && payload.locationUrl.trim().length > 0) {
-      const { lat, lng, address } = await this.parseLocationUrl(payload.locationUrl);
+      const { lat, lng, address } = await this.parseLocationUrl(
+        payload.locationUrl,
+      );
       application.locationUrl = payload.locationUrl.trim();
       application.lat = lat;
       application.lng = lng;
@@ -311,7 +325,8 @@ export class OwnerService {
       delete (application.openingHours as any).manualOverrideUpdatedAt;
     }
 
-    const saved = await this.serviceStationApplicationRepository.save(application);
+    const saved =
+      await this.serviceStationApplicationRepository.save(application);
 
     const approvedStation = await this.serviceStationRepository.findOne({
       where: { applicationId: saved.id, ownerId: userId },
@@ -361,17 +376,21 @@ export class OwnerService {
     });
 
     if (!application) {
-      throw new NotFoundException('Service station application not found');
+      throw new NotFoundException("Service station application not found");
     }
 
-    const current = application.openingHours ?? { is24Hours: true, schedule: {} };
+    const current = application.openingHours ?? {
+      is24Hours: true,
+      schedule: {},
+    };
     application.openingHours = {
       ...current,
       manualOverrideOpen: isOpen,
       manualOverrideUpdatedAt: new Date().toISOString(),
     } as any;
 
-    const saved = await this.serviceStationApplicationRepository.save(application);
+    const saved =
+      await this.serviceStationApplicationRepository.save(application);
     return {
       id: saved.id,
       isOpen,
@@ -386,7 +405,7 @@ export class OwnerService {
     });
 
     if (!application) {
-      throw new NotFoundException('Service station application not found');
+      throw new NotFoundException("Service station application not found");
     }
 
     const approvedStation = await this.serviceStationRepository.findOne({
@@ -400,7 +419,7 @@ export class OwnerService {
     await this.serviceStationApplicationRepository.remove(application);
 
     return {
-      message: 'Service station deleted successfully',
+      message: "Service station deleted successfully",
       deletedApplicationId: applicationId,
       deletedStationId: approvedStation?.id ?? null,
     };
@@ -421,13 +440,13 @@ export class OwnerService {
     const schedule = openingHours.schedule ?? {};
     const now = new Date();
     const dayNames = [
-      'sunday',
-      'monday',
-      'tuesday',
-      'wednesday',
-      'thursday',
-      'friday',
-      'saturday',
+      "sunday",
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday",
+      "saturday",
     ];
     const dayKey = dayNames[now.getDay()];
     const today = schedule[dayKey];
@@ -436,7 +455,7 @@ export class OwnerService {
 
     const toMinutes = (value?: string) => {
       if (!value) return -1;
-      const parts = value.split(':');
+      const parts = value.split(":");
       if (parts.length != 2) return -1;
       const hour = parseInt(parts[0], 10);
       const minute = parseInt(parts[1], 10);
@@ -457,7 +476,9 @@ export class OwnerService {
     return nowMinutes >= open || nowMinutes <= close;
   }
 
-  private mapAmenitiesToFlags(amenities?: string[]): Record<string, boolean> | null {
+  private mapAmenitiesToFlags(
+    amenities?: string[],
+  ): Record<string, boolean> | null {
     if (!amenities || amenities.length === 0) return null;
 
     const flags: Record<string, boolean> = {};
@@ -476,15 +497,15 @@ export class OwnerService {
   async getChargerById(id: string, ownerId: string) {
     const charger = await this.chargerRepository.findOne({
       where: { id },
-      relations: ['owner'],
+      relations: ["owner"],
     });
 
     if (!charger) {
-      throw new NotFoundException('Charger not found');
+      throw new NotFoundException("Charger not found");
     }
 
     if (charger.ownerId !== ownerId) {
-      throw new ForbiddenException('You can only view your own chargers');
+      throw new ForbiddenException("You can only view your own chargers");
     }
 
     // Get booking statistics
@@ -493,27 +514,30 @@ export class OwnerService {
     });
 
     const completedBookings = await this.bookingRepository.count({
-      where: { chargerId: id, status: 'completed' },
+      where: { chargerId: id, status: "completed" },
     });
 
     const totalRevenue = await this.bookingRepository
-      .createQueryBuilder('booking')
-      .select('SUM(booking.price)', 'total')
-      .where('booking.chargerId = :chargerId', { chargerId: id })
-      .andWhere('booking.status = :status', { status: 'completed' })
+      .createQueryBuilder("booking")
+      .select("SUM(booking.price)", "total")
+      .where("booking.chargerId = :chargerId", { chargerId: id })
+      .andWhere("booking.status = :status", { status: "completed" })
       .getRawOne();
 
     let imageFallback: string[] = [];
     if (charger.stationId) {
-      const parentStation = await this.stationRepository.findOne({ where: { id: charger.stationId } });
+      const parentStation = await this.stationRepository.findOne({
+        where: { id: charger.stationId },
+      });
       if (parentStation && parentStation.images) {
         imageFallback = parentStation.images;
       }
     }
 
-    const chargerImages = charger.images && charger.images.length > 0
-      ? charger.images
-      : imageFallback;
+    const chargerImages =
+      charger.images && charger.images.length > 0
+        ? charger.images
+        : imageFallback;
 
     return {
       ...charger,
@@ -522,7 +546,7 @@ export class OwnerService {
       stats: {
         totalBookings,
         completedBookings,
-        totalRevenue: parseFloat(totalRevenue?.total || '0'),
+        totalRevenue: parseFloat(totalRevenue?.total || "0"),
       },
     };
   }
@@ -538,21 +562,24 @@ export class OwnerService {
     const charger = await this.chargerRepository.findOne({ where: { id } });
 
     if (!charger) {
-      throw new NotFoundException('Charger not found');
+      throw new NotFoundException("Charger not found");
     }
 
     if (charger.ownerId !== ownerId) {
-      throw new ForbiddenException('You can only update your own chargers');
+      throw new ForbiddenException("You can only update your own chargers");
     }
 
     Object.assign(charger, updateChargerDto);
-    
+
     // Handle virtual powerKw field mapping to maxPowerKw
     // Object.assign doesn't properly invoke setters for virtual properties
-    if ('powerKw' in updateChargerDto && updateChargerDto.powerKw !== undefined) {
+    if (
+      "powerKw" in updateChargerDto &&
+      updateChargerDto.powerKw !== undefined
+    ) {
       charger.maxPowerKw = updateChargerDto.powerKw;
     }
-    
+
     return this.chargerRepository.save(charger);
   }
 
@@ -561,21 +588,23 @@ export class OwnerService {
    */
   async updateChargerStatus(
     id: string,
-    status: 'available' | 'in-use' | 'offline',
+    status: "available" | "in-use" | "offline",
     ownerId: string,
   ) {
     const charger = await this.chargerRepository.findOne({ where: { id } });
 
     if (!charger) {
-      throw new NotFoundException('Charger not found');
+      throw new NotFoundException("Charger not found");
     }
 
     if (charger.ownerId !== ownerId) {
-      throw new ForbiddenException('You can only update your own chargers');
+      throw new ForbiddenException("You can only update your own chargers");
     }
 
     if (!charger.verified) {
-      throw new ForbiddenException('Cannot change status of unverified charger. Please wait for admin approval.');
+      throw new ForbiddenException(
+        "Cannot change status of unverified charger. Please wait for admin approval.",
+      );
     }
 
     charger.status = status;
@@ -583,10 +612,13 @@ export class OwnerService {
 
     // Broadcast real-time update so the map removes/updates the pin immediately
     try {
-      const broadcastAction = status === 'offline' ? 'deleted' : 'updated';
+      const broadcastAction = status === "offline" ? "deleted" : "updated";
       this.chargersGateway.broadcastChargerUpdate(updated, broadcastAction);
     } catch (e) {
-      console.error('[OwnerService] Failed to broadcast charger status change:', e);
+      console.error(
+        "[OwnerService] Failed to broadcast charger status change:",
+        e,
+      );
     }
 
     return {
@@ -602,28 +634,28 @@ export class OwnerService {
     const charger = await this.chargerRepository.findOne({ where: { id } });
 
     if (!charger) {
-      throw new NotFoundException('Charger not found');
+      throw new NotFoundException("Charger not found");
     }
 
     if (charger.ownerId !== ownerId) {
-      throw new ForbiddenException('You can only delete your own chargers');
+      throw new ForbiddenException("You can only delete your own chargers");
     }
 
     // Check for active bookings
     const activeBookings = await this.bookingRepository.count({
-      where: { chargerId: id, status: 'active' },
+      where: { chargerId: id, status: "active" },
     });
 
     if (activeBookings > 0) {
       throw new BadRequestException(
-        'Cannot delete charger with active bookings',
+        "Cannot delete charger with active bookings",
       );
     }
 
     // Hard delete - permanently remove the charger
     await this.chargerRepository.remove(charger);
 
-    return { message: 'Charger deleted successfully' };
+    return { message: "Charger deleted successfully" };
   }
 
   /**
@@ -639,7 +671,7 @@ export class OwnerService {
     // First, get all charger IDs owned by this user
     const myChargers = await this.chargerRepository.find({
       where: { ownerId },
-      select: ['id'],
+      select: ["id"],
     });
 
     const chargerIds = myChargers.map((c) => c.id);
@@ -652,7 +684,7 @@ export class OwnerService {
     if (chargerId) {
       // Verify ownership
       if (!chargerIds.includes(chargerId)) {
-        throw new ForbiddenException('Charger not found or not owned by you');
+        throw new ForbiddenException("Charger not found or not owned by you");
       }
 
       whereConditions.chargerId = chargerId;
@@ -667,8 +699,8 @@ export class OwnerService {
 
     const bookings = await this.bookingRepository.find({
       where: whereConditions,
-      relations: ['user', 'charger'],
-      order: { createdAt: 'DESC' },
+      relations: ["user", "charger"],
+      order: { createdAt: "DESC" },
     });
 
     return bookings;
@@ -680,16 +712,18 @@ export class OwnerService {
   async getBookingById(id: string, ownerId: string) {
     const booking = await this.bookingRepository.findOne({
       where: { id },
-      relations: ['user', 'charger'],
+      relations: ["user", "charger"],
     });
 
     if (!booking) {
-      throw new NotFoundException('Booking not found');
+      throw new NotFoundException("Booking not found");
     }
 
     // Verify the charger is owned by this user
     if (booking.charger.ownerId !== ownerId) {
-      throw new ForbiddenException('You can only view bookings for your own chargers');
+      throw new ForbiddenException(
+        "You can only view bookings for your own chargers",
+      );
     }
 
     return booking;
@@ -701,31 +735,57 @@ export class OwnerService {
   async deletePendingBooking(id: string, ownerId: string) {
     const booking = await this.bookingRepository.findOne({
       where: { id },
-      relations: ['charger'],
+      relations: ["charger"],
     });
 
     if (!booking) {
-      throw new NotFoundException('Booking not found');
+      throw new NotFoundException("Booking not found");
     }
 
     // Verify the charger is owned by this user
     if (booking.charger.ownerId !== ownerId) {
-      throw new ForbiddenException('You can only delete bookings for your own chargers');
+      throw new ForbiddenException(
+        "You can only delete bookings for your own chargers",
+      );
     }
 
     // Allow deleting terminal records and still-pending requests.
-    const allowedStatuses = ['pending', 'cancelled', 'completed'];
+    const allowedStatuses = ["pending", "cancelled", "completed"];
     if (!allowedStatuses.includes(booking.status)) {
       throw new BadRequestException(
-        'Only pending, cancelled, or completed bookings can be deleted. This booking is ' +
-            booking.status,
+        "Only pending, cancelled, or completed bookings can be deleted. This booking is " +
+          booking.status,
       );
+    }
+
+    // Guard against FK failures and preserve financial audit data.
+    const linkedPayments = await this.paymentRepository.find({
+      where: { bookingId: booking.id },
+      select: ["id", "status"],
+    });
+
+    const hasSucceededPayment = linkedPayments.some(
+      (payment) => (payment.status || "").toLowerCase() === "succeeded",
+    );
+
+    if (hasSucceededPayment) {
+      throw new BadRequestException(
+        "This booking has a successful payment record and cannot be deleted.",
+      );
+    }
+
+    const deletablePaymentIds = linkedPayments
+      .filter((payment) => (payment.status || "").toLowerCase() !== "succeeded")
+      .map((payment) => payment.id);
+
+    if (deletablePaymentIds.length > 0) {
+      await this.paymentRepository.delete(deletablePaymentIds);
     }
 
     // Delete the booking
     await this.bookingRepository.remove(booking);
 
-    return { message: 'Booking deleted successfully' };
+    return { message: "Booking deleted successfully" };
   }
 
   /**
@@ -733,39 +793,41 @@ export class OwnerService {
    */
   async updateBookingStatusForOwner(
     id: string,
-    status: 'confirmed' | 'cancelled',
+    status: "confirmed" | "cancelled",
     ownerId: string,
   ) {
     const booking = await this.bookingRepository.findOne({
       where: { id },
-      relations: ['charger', 'user'],
+      relations: ["charger", "user"],
     });
 
     if (!booking) {
-      throw new NotFoundException('Booking not found');
+      throw new NotFoundException("Booking not found");
     }
 
     if (booking.charger.ownerId !== ownerId) {
-      throw new ForbiddenException('You can only manage bookings for your own chargers');
+      throw new ForbiddenException(
+        "You can only manage bookings for your own chargers",
+      );
     }
 
-    if (booking.status !== 'pending') {
+    if (booking.status !== "pending") {
       throw new BadRequestException(
         `Only pending bookings can be updated. Current status: ${booking.status}`,
       );
     }
 
     booking.status = status;
-    if (status === 'cancelled') {
+    if (status === "cancelled") {
       booking.cancelledAt = new Date();
     }
     const updated = await this.bookingRepository.save(booking);
 
-    if (status === 'confirmed' && booking.user?.phoneNumber) {
+    if (status === "confirmed" && booking.user?.phoneNumber) {
       this.smsService
         .sendBookingAcceptedSMS(booking.user.phoneNumber, {
           userName: booking.user.name,
-          chargerName: booking.charger?.name || 'your selected charger',
+          chargerName: booking.charger?.name || "your selected charger",
         })
         .catch((error) => {
           console.error(
@@ -777,9 +839,9 @@ export class OwnerService {
     return {
       booking: updated,
       message:
-        status == 'confirmed'
-            ? 'Booking request confirmed successfully'
-            : 'Booking request declined successfully',
+        status == "confirmed"
+          ? "Booking request confirmed successfully"
+          : "Booking request declined successfully",
     };
   }
 
@@ -789,7 +851,7 @@ export class OwnerService {
   async getBookingStats(ownerId: string) {
     const myChargers = await this.chargerRepository.find({
       where: { ownerId },
-      select: ['id'],
+      select: ["id"],
     });
 
     const chargerIds = myChargers.map((c) => c.id);
@@ -809,19 +871,19 @@ export class OwnerService {
     });
 
     const activeBookings = await this.bookingRepository.count({
-      where: { chargerId: In(chargerIds), status: 'active' },
+      where: { chargerId: In(chargerIds), status: "active" },
     });
 
     const completedBookings = await this.bookingRepository.count({
-      where: { chargerId: In(chargerIds), status: 'completed' },
+      where: { chargerId: In(chargerIds), status: "completed" },
     });
 
     const cancelledBookings = await this.bookingRepository.count({
-      where: { chargerId: In(chargerIds), status: 'cancelled' },
+      where: { chargerId: In(chargerIds), status: "cancelled" },
     });
 
     const pendingBookings = await this.bookingRepository.count({
-      where: { chargerId: In(chargerIds), status: 'pending' },
+      where: { chargerId: In(chargerIds), status: "pending" },
     });
 
     return {
@@ -836,15 +898,11 @@ export class OwnerService {
   /**
    * Get revenue statistics
    */
-  async getRevenueStats(
-    ownerId: string,
-    startDate?: string,
-    endDate?: string,
-  ) {
+  async getRevenueStats(ownerId: string, startDate?: string, endDate?: string) {
     try {
       const myChargers = await this.chargerRepository.find({
         where: { ownerId },
-        select: ['id'],
+        select: ["id"],
       });
 
       const chargerIds = myChargers.map((c) => c.id);
@@ -860,42 +918,49 @@ export class OwnerService {
       // Helper function to build base query
       const buildBaseQuery = () => {
         let query = this.bookingRepository
-          .createQueryBuilder('booking')
-          .where('booking.chargerId IN (:...chargerIds)', { chargerIds });
+          .createQueryBuilder("booking")
+          .where("booking.chargerId IN (:...chargerIds)", { chargerIds });
 
         if (startDate && endDate) {
-          query = query.andWhere('booking.createdAt BETWEEN :startDate AND :endDate', {
-            startDate: new Date(startDate),
-            endDate: new Date(endDate),
-          });
+          query = query.andWhere(
+            "booking.createdAt BETWEEN :startDate AND :endDate",
+            {
+              startDate: new Date(startDate),
+              endDate: new Date(endDate),
+            },
+          );
         }
         return query;
       };
 
       // Get total revenue (all bookings)
       const totalRevenue = await buildBaseQuery()
-        .select('SUM(booking.price)', 'total')
+        .select("SUM(booking.price)", "total")
         .getRawOne();
 
       // Get completed revenue
       const completedRevenue = await buildBaseQuery()
-        .andWhere('booking.status = :status', { status: 'completed' })
-        .select('SUM(booking.price)', 'total')
+        .andWhere("booking.status = :status", { status: "completed" })
+        .select("SUM(booking.price)", "total")
         .getRawOne();
 
       // Get pending revenue
       const pendingRevenue = await buildBaseQuery()
-        .andWhere('booking.status = :status', { status: 'pending' })
-        .select('SUM(booking.price)', 'total')
+        .andWhere("booking.status = :status", { status: "pending" })
+        .select("SUM(booking.price)", "total")
         .getRawOne();
 
       return {
-        totalRevenue: parseFloat(totalRevenue?.total || '0'),
-        completedBookingsRevenue: parseFloat(completedRevenue?.total || '0'),
-        pendingRevenue: parseFloat(pendingRevenue?.total || '0'),
+        totalRevenue: parseFloat(totalRevenue?.total || "0"),
+        completedBookingsRevenue: parseFloat(completedRevenue?.total || "0"),
+        pendingRevenue: parseFloat(pendingRevenue?.total || "0"),
       };
     } catch (error) {
-      console.error('[OwnerService] Error in getRevenueStats:', error.message, error.stack);
+      console.error(
+        "[OwnerService] Error in getRevenueStats:",
+        error.message,
+        error.stack,
+      );
       throw error;
     }
   }
@@ -915,12 +980,12 @@ export class OwnerService {
         });
 
         const completedBookings = await this.bookingRepository.count({
-          where: { chargerId: charger.id, status: 'completed' },
+          where: { chargerId: charger.id, status: "completed" },
         });
 
         // Calculate total hours booked
         const bookings = await this.bookingRepository.find({
-          where: { chargerId: charger.id, status: 'completed' },
+          where: { chargerId: charger.id, status: "completed" },
         });
 
         const totalHoursBooked = bookings.reduce((sum, booking) => {
@@ -955,45 +1020,47 @@ export class OwnerService {
     userId: string,
   ) {
     try {
-      console.log('=== REGISTER INDIVIDUAL CHARGER START ===');
-      console.log('User ID:', userId);
-      console.log('DTO received:', JSON.stringify(dto, null, 2));
-      
+      console.log("=== REGISTER INDIVIDUAL CHARGER START ===");
+      console.log("User ID:", userId);
+      console.log("DTO received:", JSON.stringify(dto, null, 2));
+
       const user = await this.userRepository.findOne({ where: { id: userId } });
       if (!user) {
-        console.error('User not found with ID:', userId);
-        throw new NotFoundException('User not found');
+        console.error("User not found with ID:", userId);
+        throw new NotFoundException("User not found");
       }
-      console.log('User found:', user.phoneNumber, 'Role:', user.role);
+      console.log("User found:", user.phoneNumber, "Role:", user.role);
 
       // Upgrade to owner role if needed
-      if (user.role === 'user') {
-        console.log('Upgrading user to owner role');
-        user.role = 'owner';
+      if (user.role === "user") {
+        console.log("Upgrading user to owner role");
+        user.role = "owner";
         await this.userRepository.save(user);
-        console.log('User role upgraded successfully');
+        console.log("User role upgraded successfully");
       }
 
       // Parse location URL to extract coordinates
-      console.log('Parsing location URL:', dto.locationUrl);
-      const { lat, lng, address } = await this.parseLocationUrl(dto.locationUrl);
-      console.log('Parsed coordinates:', { lat, lng, address });
+      console.log("Parsing location URL:", dto.locationUrl);
+      const { lat, lng, address } = await this.parseLocationUrl(
+        dto.locationUrl,
+      );
+      console.log("Parsed coordinates:", { lat, lng, address });
 
       // Validate maxPowerKw
       if (!dto.maxPowerKw || dto.maxPowerKw <= 0) {
-        console.error('Invalid maxPowerKw:', dto.maxPowerKw);
+        console.error("Invalid maxPowerKw:", dto.maxPowerKw);
         throw new BadRequestException(
-          'Invalid power rating. Please ensure maxPowerKw is a positive number.',
+          "Invalid power rating. Please ensure maxPowerKw is a positive number.",
         );
       }
-      console.log('maxPowerKw validated:', dto.maxPowerKw);
+      console.log("maxPowerKw validated:", dto.maxPowerKw);
 
       // Validate sockets
       if (!dto.sockets || dto.sockets.length === 0) {
-        console.error('No sockets provided');
-        throw new BadRequestException('At least one socket must be configured');
+        console.error("No sockets provided");
+        throw new BadRequestException("At least one socket must be configured");
       }
-      console.log('Sockets validated:', dto.sockets.length);
+      console.log("Sockets validated:", dto.sockets.length);
 
       // Use transaction to ensure atomicity
       const queryRunner = this.dataSource.createQueryRunner();
@@ -1001,20 +1068,23 @@ export class OwnerService {
       await queryRunner.startTransaction();
 
       try {
-        console.log('Starting database transaction');
-        
+        console.log("Starting database transaction");
+
         // Determine charger speed and connector type from sockets
         const firstSocket = dto.sockets[0];
-        console.log('First socket:', JSON.stringify(firstSocket, null, 2));
-        
-        const speedType = this.determineSpeedType(dto.chargerType, dto.maxPowerKw);
-        console.log('Determined speed type:', speedType);
-        
+        console.log("First socket:", JSON.stringify(firstSocket, null, 2));
+
+        const speedType = this.determineSpeedType(
+          dto.chargerType,
+          dto.maxPowerKw,
+        );
+        console.log("Determined speed type:", speedType);
+
         const connectorType = firstSocket.connectorType;
-        console.log('Connector type:', connectorType);
+        console.log("Connector type:", connectorType);
 
         // Create main charger entity
-        console.log('Creating charger entity with data:', {
+        console.log("Creating charger entity with data:", {
           ownerId: userId,
           name: dto.chargerName,
           lat,
@@ -1024,37 +1094,41 @@ export class OwnerService {
           connectorType,
           numberOfPlugs: dto.sockets.length,
         });
-        
-      const charger = queryRunner.manager.create(Charger, {
-        ownerId: userId,
-        name: dto.chargerName,
-        lat,
-        lng,
-        address,
-        city: dto.city?.trim(),
-        chargerType: dto.chargerType,
-        maxPowerKw: dto.maxPowerKw,
-        powerKw: dto.maxPowerKw,
-        pricePerKwh: firstSocket.pricePerKwh || firstSocket.pricePerHour || 0,
-        speedType,
-        connectorType,
-        numberOfPlugs: dto.sockets.length,
-        description: dto.description,
-        phoneNumber: dto.phoneNumber || null,
-        bookingMode: (dto.bookingMode as BookingMode) || BookingMode.HYBRID,
-        openingHours: dto.openingHours || { is24Hours: true, schedule: {} },
-        images: dto.images || [],
-        amenities: this.mapAmenitiesToFlags(dto.amenities),
-        verified: false,
-        status: 'offline',
-      });        console.log('Saving charger to database...');
+
+        const charger = queryRunner.manager.create(Charger, {
+          ownerId: userId,
+          name: dto.chargerName,
+          lat,
+          lng,
+          address,
+          city: dto.city?.trim(),
+          chargerType: dto.chargerType,
+          maxPowerKw: dto.maxPowerKw,
+          powerKw: dto.maxPowerKw,
+          pricePerKwh: firstSocket.pricePerKwh || firstSocket.pricePerHour || 0,
+          speedType,
+          connectorType,
+          numberOfPlugs: dto.sockets.length,
+          description: dto.description,
+          phoneNumber: dto.phoneNumber || null,
+          bookingMode: (dto.bookingMode as BookingMode) || BookingMode.HYBRID,
+          openingHours: dto.openingHours || { is24Hours: true, schedule: {} },
+          images: dto.images || [],
+          amenities: this.mapAmenitiesToFlags(dto.amenities),
+          verified: false,
+          status: "offline",
+        });
+        console.log("Saving charger to database...");
         const savedCharger = await queryRunner.manager.save(charger);
-        console.log('Charger saved successfully. ID:', savedCharger.id);
+        console.log("Charger saved successfully. ID:", savedCharger.id);
 
         // Create socket entities
-        console.log('Creating socket entities. Count:', dto.sockets.length);
+        console.log("Creating socket entities. Count:", dto.sockets.length);
         const sockets = dto.sockets.map((socketDto, index) => {
-          console.log(`Creating socket ${index + 1}:`, JSON.stringify(socketDto, null, 2));
+          console.log(
+            `Creating socket ${index + 1}:`,
+            JSON.stringify(socketDto, null, 2),
+          );
           return queryRunner.manager.create(ChargerSocket, {
             chargerId: savedCharger.id,
             socketNumber: socketDto.socketNumber,
@@ -1065,53 +1139,54 @@ export class OwnerService {
             pricePerHour: socketDto.pricePerHour,
             isFree: socketDto.isFree || false,
             bookingMode: socketDto.bookingMode || BookingMode.HYBRID,
-            status: 'available',
+            status: "available",
           });
         });
 
-        console.log('Saving sockets to database...');
+        console.log("Saving sockets to database...");
         await queryRunner.manager.save(sockets);
-        console.log('Sockets saved successfully. Count:', sockets.length);
+        console.log("Sockets saved successfully. Count:", sockets.length);
 
-        console.log('Committing transaction...');
+        console.log("Committing transaction...");
         await queryRunner.commitTransaction();
-        console.log('Transaction committed successfully');
+        console.log("Transaction committed successfully");
 
         // Return charger with sockets for compatibility
         return {
           ...savedCharger,
           sockets,
-          message: 'Individual charger registered successfully. Awaiting admin approval.',
+          message:
+            "Individual charger registered successfully. Awaiting admin approval.",
           needsApproval: true,
         };
       } catch (error) {
-        console.error('=== TRANSACTION ERROR ===');
-        console.error('Error type:', error.constructor.name);
-        console.error('Error message:', error.message);
-        console.error('Error stack:', error.stack);
-        console.error('Full error object:', JSON.stringify(error, null, 2));
-        
+        console.error("=== TRANSACTION ERROR ===");
+        console.error("Error type:", error.constructor.name);
+        console.error("Error message:", error.message);
+        console.error("Error stack:", error.stack);
+        console.error("Full error object:", JSON.stringify(error, null, 2));
+
         await queryRunner.rollbackTransaction();
-        console.log('Transaction rolled back');
+        console.log("Transaction rolled back");
         throw error;
       } finally {
         await queryRunner.release();
-        console.log('Database connection released');
+        console.log("Database connection released");
       }
     } catch (error) {
-      console.error('=== FATAL ERROR IN registerIndividualCharger ===');
-      console.error('Error type:', error.constructor.name);
-      console.error('Error message:', error.message);
-      console.error('Error stack:', error.stack);
-      
+      console.error("=== FATAL ERROR IN registerIndividualCharger ===");
+      console.error("Error type:", error.constructor.name);
+      console.error("Error message:", error.message);
+      console.error("Error stack:", error.stack);
+
       if (error.response && error.status) {
         // This is already an HTTP exception, rethrow it
         throw error;
       }
-      
+
       // Wrap unknown errors in InternalServerErrorException with details
       throw new InternalServerErrorException({
-        message: 'Failed to register charger',
+        message: "Failed to register charger",
         error: error.message,
         details: error.stack,
       });
@@ -1123,23 +1198,23 @@ export class OwnerService {
    * Creates station entity and all associated chargers with sockets
    */
   async registerStation(dto: CreateStationDto, userId: string) {
-    console.log('🏢 registerStation called with userId:', userId);
-    console.log('📝 Station DTO:', JSON.stringify(dto, null, 2));
-    
+    console.log("🏢 registerStation called with userId:", userId);
+    console.log("📝 Station DTO:", JSON.stringify(dto, null, 2));
+
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException("User not found");
     }
 
     // Upgrade to owner role if needed
-    if (user.role === 'user') {
-      user.role = 'owner';
+    if (user.role === "user") {
+      user.role = "owner";
       await this.userRepository.save(user);
     }
 
     // Parse location URL
     const { lat, lng, address } = await this.parseLocationUrl(dto.locationUrl);
-    console.log('📍 Parsed location:', { lat, lng, address });
+    console.log("📍 Parsed location:", { lat, lng, address });
 
     // Use transaction
     const queryRunner = this.dataSource.createQueryRunner();
@@ -1152,7 +1227,7 @@ export class OwnerService {
         ownerId: userId,
         stationName: dto.stationName,
         locationUrl: dto.locationUrl,
-        stationType: dto.stationType || 'public',
+        stationType: dto.stationType || "public",
         lat,
         lng,
         address,
@@ -1198,10 +1273,11 @@ export class OwnerService {
           connectorType: firstSocket.connectorType,
           numberOfPlugs: chargerDto.sockets.length,
           phoneNumber: dto.phoneNumber || null,
-          bookingMode: (chargerDto.bookingMode as BookingMode) || BookingMode.HYBRID,
+          bookingMode:
+            (chargerDto.bookingMode as BookingMode) || BookingMode.HYBRID,
           openingHours: dto.openingHours || { is24Hours: true, schedule: {} },
           verified: false,
-          status: 'offline',
+          status: "offline",
         });
 
         const savedCharger = await queryRunner.manager.save(charger);
@@ -1218,7 +1294,7 @@ export class OwnerService {
             pricePerHour: socketDto.pricePerHour,
             isFree: socketDto.isFree || false,
             bookingMode: socketDto.bookingMode || BookingMode.HYBRID,
-            status: 'available',
+            status: "available",
           }),
         );
 
@@ -1231,24 +1307,29 @@ export class OwnerService {
       }
 
       await queryRunner.commitTransaction();
-      console.log('✅ Station registration completed successfully');
+      console.log("✅ Station registration completed successfully");
 
       // Return station with chargers for compatibility
       return {
         ...savedStation,
-        chargers: chargersWithSockets.map(c => ({ ...c.charger, sockets: c.sockets })),
-        message: 'Charging station registered successfully. Awaiting admin approval.',
+        chargers: chargersWithSockets.map((c) => ({
+          ...c.charger,
+          sockets: c.sockets,
+        })),
+        message:
+          "Charging station registered successfully. Awaiting admin approval.",
         needsApproval: true,
       };
     } catch (error) {
-      console.error('❌ Station registration error:', error);
-      console.error('Error name:', error.name);
-      console.error('Error message:', error.message);
-      if (error.detail) console.error('Error detail:', error.detail);
-      if (error.constraint) console.error('Error constraint:', error.constraint);
+      console.error("❌ Station registration error:", error);
+      console.error("Error name:", error.name);
+      console.error("Error message:", error.message);
+      if (error.detail) console.error("Error detail:", error.detail);
+      if (error.constraint)
+        console.error("Error constraint:", error.constraint);
       await queryRunner.rollbackTransaction();
       throw new InternalServerErrorException({
-        message: 'Failed to register station',
+        message: "Failed to register station",
         error: error.message,
         details: error.stack,
       });
@@ -1271,36 +1352,44 @@ export class OwnerService {
     address: string;
   }> {
     try {
-      console.log('Parsing location URL:', locationUrl);
-      
-      if (!locationUrl || typeof locationUrl !== 'string') {
-        throw new BadRequestException('Location URL is required and must be a string');
+      console.log("Parsing location URL:", locationUrl);
+
+      if (!locationUrl || typeof locationUrl !== "string") {
+        throw new BadRequestException(
+          "Location URL is required and must be a string",
+        );
       }
 
       const trimmed = locationUrl.trim();
       if (trimmed.length === 0) {
-        throw new BadRequestException('Location URL cannot be empty');
+        throw new BadRequestException("Location URL cannot be empty");
       }
-      
+
       let urlToCheck = trimmed;
-      
+
       // Check if this is a shortened URL (goo.gl or maps.app.goo.gl)
       if (trimmed.match(/^https?:\/\/(maps\.app\.)?goo\.gl\//i)) {
-        console.log('📍 Detected shortened Google Maps URL, expanding...');
+        console.log("📍 Detected shortened Google Maps URL, expanding...");
         try {
           urlToCheck = await this.expandShortenedUrl(trimmed);
-          console.log('✅ Expanded URL:', urlToCheck);
+          console.log("✅ Expanded URL:", urlToCheck);
         } catch (expandError) {
-          console.warn('⚠️  Could not expand shortened URL:', expandError.message);
+          console.warn(
+            "⚠️  Could not expand shortened URL:",
+            expandError.message,
+          );
           // Fall through to try to extract from original URL
           urlToCheck = trimmed;
         }
       }
-      
+
       const extractCoordinates = (
         input: string,
       ): { lat: number; lng: number; source: string } | null => {
-        const parsePair = (latRaw: string, lngRaw: string): { lat: number; lng: number } | null => {
+        const parsePair = (
+          latRaw: string,
+          lngRaw: string,
+        ): { lat: number; lng: number } | null => {
           const lat = parseFloat(latRaw);
           const lng = parseFloat(lngRaw);
           if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
@@ -1312,23 +1401,27 @@ export class OwnerService {
           return { lat, lng };
         };
 
-        const parseFromText = (text: string): { lat: number; lng: number } | null => {
+        const parseFromText = (
+          text: string,
+        ): { lat: number; lng: number } | null => {
           const match = text.match(/(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/);
           if (!match) return null;
           return parsePair(match[1], match[2]);
         };
 
         // 1) Plain coordinates: "lat,lng"
-        const plain = input.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
+        const plain = input.match(
+          /^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/,
+        );
         if (plain) {
           const parsed = parsePair(plain[1], plain[2]);
-          if (parsed) return { ...parsed, source: 'plain_coordinates' };
+          if (parsed) return { ...parsed, source: "plain_coordinates" };
         }
 
         // 2) Query params usually represent explicit destination/search coordinates.
         try {
           const uri = new URL(input);
-          const candidateKeys = ['destination', 'daddr', 'q', 'll', 'query'];
+          const candidateKeys = ["destination", "daddr", "q", "ll", "query"];
           for (const key of candidateKeys) {
             const value = uri.searchParams.get(key);
             if (!value) continue;
@@ -1340,10 +1433,12 @@ export class OwnerService {
         }
 
         // 3) Google Maps !3dLAT!4dLNG pattern (usually place pin location).
-        const bangMatch = input.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/);
+        const bangMatch = input.match(
+          /!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/,
+        );
         if (bangMatch) {
           const parsed = parsePair(bangMatch[1], bangMatch[2]);
-          if (parsed) return { ...parsed, source: 'bang_3d_4d' };
+          if (parsed) return { ...parsed, source: "bang_3d_4d" };
         }
 
         // 4) Encoded query fragments in raw text.
@@ -1353,14 +1448,14 @@ export class OwnerService {
         if (queryLike?.[1]) {
           const decoded = decodeURIComponent(queryLike[1]);
           const parsed = parseFromText(decoded);
-          if (parsed) return { ...parsed, source: 'raw_query_fragment' };
+          if (parsed) return { ...parsed, source: "raw_query_fragment" };
         }
 
         // 5) /@lat,lng pattern is usually viewport center and may be less accurate.
         const atMatch = input.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
         if (atMatch) {
           const parsed = parsePair(atMatch[1], atMatch[2]);
-          if (parsed) return { ...parsed, source: 'viewport_at' };
+          if (parsed) return { ...parsed, source: "viewport_at" };
         }
 
         // 6) Path coordinates such as /place/6.9271,79.8612 or /search/6.9271,79.8612
@@ -1369,7 +1464,7 @@ export class OwnerService {
         );
         if (pathMatch) {
           const parsed = parsePair(pathMatch[1], pathMatch[2]);
-          if (parsed) return { ...parsed, source: 'path_place_search' };
+          if (parsed) return { ...parsed, source: "path_place_search" };
         }
 
         return null;
@@ -1378,7 +1473,7 @@ export class OwnerService {
       const coordinates = extractCoordinates(urlToCheck);
 
       if (coordinates) {
-        console.log('✅ Extracted coordinates:', {
+        console.log("✅ Extracted coordinates:", {
           lat: coordinates.lat,
           lng: coordinates.lng,
           source: coordinates.source,
@@ -1391,17 +1486,17 @@ export class OwnerService {
       }
 
       // If no coordinates found, throw error with hint
-      console.error('❌ Could not extract coordinates from:', urlToCheck);
+      console.error("❌ Could not extract coordinates from:", urlToCheck);
       throw new BadRequestException(
-        'Could not extract coordinates from location URL. Please provide a Google Maps link or coordinates in format: latitude,longitude',
+        "Could not extract coordinates from location URL. Please provide a Google Maps link or coordinates in format: latitude,longitude",
       );
     } catch (error) {
-      console.error('Error parsing location URL:', error.message);
+      console.error("Error parsing location URL:", error.message);
       if (error instanceof BadRequestException) {
         throw error;
       }
       throw new BadRequestException(
-        'Invalid location URL format. Please use a Google Maps share link or coordinates.',
+        "Invalid location URL format. Please use a Google Maps share link or coordinates.",
       );
     }
   }
@@ -1412,40 +1507,45 @@ export class OwnerService {
    */
   private async expandShortenedUrl(shortenedUrl: string): Promise<string> {
     try {
-      console.log('🔗 Fetching expanded URL from:', shortenedUrl);
-      
+      console.log("🔗 Fetching expanded URL from:", shortenedUrl);
+
       // Make a request with maxRedirects: 0 to capture the first redirect Location header
       const response = await lastValueFrom(
         this.httpService.get(shortenedUrl, {
           maxRedirects: 0,
           validateStatus: (status) => status >= 200 && status < 400,
-        })
+        }),
       ).catch((err) => {
         // Axios throws on 3xx when maxRedirects: 0, so catch and inspect headers
-        if (err.response && err.response.status >= 300 && err.response.status < 400) {
+        if (
+          err.response &&
+          err.response.status >= 300 &&
+          err.response.status < 400
+        ) {
           return err.response;
         }
         throw err;
       });
 
-      // Check Location header for redirect target  
+      // Check Location header for redirect target
       const location = response.headers?.location;
       if (location) {
-        console.log('✅ Location header found:', location);
+        console.log("✅ Location header found:", location);
         return location;
       }
 
       // If no redirect, try the final URL
-      const finalUrl = response.request?.res?.responseUrl || response.config?.url;
+      const finalUrl =
+        response.request?.res?.responseUrl || response.config?.url;
       if (finalUrl && finalUrl !== shortenedUrl) {
-        console.log('✅ Final URL found:', finalUrl);
+        console.log("✅ Final URL found:", finalUrl);
         return finalUrl;
       }
 
-      console.warn('⚠️  Could not determine redirect URL, using original');
+      console.warn("⚠️  Could not determine redirect URL, using original");
       return shortenedUrl;
     } catch (error) {
-      console.warn('⚠️  Error expanding shortened URL:', error.message);
+      console.warn("⚠️  Error expanding shortened URL:", error.message);
       return shortenedUrl;
     }
   }
@@ -1454,15 +1554,15 @@ export class OwnerService {
    * Determine speed type based on charger type and power
    */
   private determineSpeedType(
-    chargerType: 'ac' | 'dc',
+    chargerType: "ac" | "dc",
     powerKw: number,
-  ): 'ac_slow' | 'ac_fast' | 'dc_fast' | 'dc_rapid' | 'ultra_rapid' {
-    if (chargerType === 'ac') {
-      return powerKw <= 7 ? 'ac_slow' : 'ac_fast';
+  ): "ac_slow" | "ac_fast" | "dc_fast" | "dc_rapid" | "ultra_rapid" {
+    if (chargerType === "ac") {
+      return powerKw <= 7 ? "ac_slow" : "ac_fast";
     } else {
-      if (powerKw <= 60) return 'dc_fast';
-      if (powerKw <= 150) return 'dc_rapid';
-      return 'ultra_rapid';
+      if (powerKw <= 60) return "dc_fast";
+      if (powerKw <= 150) return "dc_rapid";
+      return "ultra_rapid";
     }
   }
 }

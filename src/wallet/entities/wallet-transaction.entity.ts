@@ -6,58 +6,58 @@ import {
   Index,
   ManyToOne,
   JoinColumn,
-} from 'typeorm';
-import { UserEntity } from '../../users/entities/user.entity';
+} from "typeorm";
+import { UserEntity } from "../../users/entities/user.entity";
 
 export enum WalletTransactionType {
-  TOPUP = 'TOPUP',
-  PAYMENT = 'PAYMENT',
-  REFUND = 'REFUND',
+  TOPUP = "TOPUP",
+  PAYMENT = "PAYMENT",
+  REFUND = "REFUND",
 }
 
 export enum WalletTransactionStatus {
-  PENDING = 'PENDING',
-  SUCCESS = 'SUCCESS',
-  FAILED = 'FAILED',
+  PENDING = "PENDING",
+  SUCCESS = "SUCCESS",
+  FAILED = "FAILED",
 }
 
-@Entity('wallet_transactions')
+@Entity("wallet_transactions")
 export class WalletTransactionEntity {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn("uuid")
   transactionId: string;
 
-  @Column({ type: 'uuid' })
-  @Index('idx_wallet_transactions_user_id')
+  @Column({ type: "uuid" })
+  @Index("idx_wallet_transactions_user_id")
   userId: string;
 
   @ManyToOne(() => UserEntity)
-  @JoinColumn({ name: 'userId' })
+  @JoinColumn({ name: "userId" })
   user: UserEntity;
 
   @Column({
-    type: 'enum',
+    type: "enum",
     enum: WalletTransactionType,
   })
-  @Index('idx_wallet_transactions_type')
+  @Index("idx_wallet_transactions_type")
   type: WalletTransactionType;
 
-  @Column({ type: 'decimal', precision: 12, scale: 2 })
+  @Column({ type: "decimal", precision: 12, scale: 2 })
   amount: number;
 
   @Column({
-    type: 'enum',
+    type: "enum",
     enum: WalletTransactionStatus,
     default: WalletTransactionStatus.PENDING,
   })
-  @Index('idx_wallet_transactions_status')
+  @Index("idx_wallet_transactions_status")
   status: WalletTransactionStatus;
 
-  @Column({ type: 'varchar', length: 255, nullable: true, unique: true })
+  @Column({ type: "varchar", length: 255, nullable: true, unique: true })
   referenceId: string | null;
 
-  @Column({ type: 'jsonb', nullable: true })
+  @Column({ type: "jsonb", nullable: true })
   metadata: Record<string, unknown> | null;
 
-  @CreateDateColumn({ name: 'createdAt' })
+  @CreateDateColumn({ name: "createdAt" })
   createdAt: Date;
 }

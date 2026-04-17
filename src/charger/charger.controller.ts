@@ -1,19 +1,34 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, Query, ValidationPipe } from '@nestjs/common';
-import { ChargerService } from './charger.service';
-import { CreateChargerDto } from './dto/create-charger.dto';
-import { UpdateChargerDto } from './dto/update-charger.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { UpdateBookingModeDto } from './dto/update-booking-mode.dto';
-import { UpdateChargerStatusDto } from './dto/update-charger-status.dto';
-import { BookingMode } from './enums/booking-mode.enum';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  UseGuards,
+  Request,
+  Query,
+  ValidationPipe,
+} from "@nestjs/common";
+import { ChargerService } from "./charger.service";
+import { CreateChargerDto } from "./dto/create-charger.dto";
+import { UpdateChargerDto } from "./dto/update-charger.dto";
+import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
+import { UpdateBookingModeDto } from "./dto/update-booking-mode.dto";
+import { UpdateChargerStatusDto } from "./dto/update-charger-status.dto";
+import { BookingMode } from "./enums/booking-mode.enum";
 
-@Controller('chargers')
+@Controller("chargers")
 export class ChargerController {
   constructor(private readonly chargerService: ChargerService) {}
 
   @Post()
   @UseGuards(JwtAuthGuard)
-  create(@Body(ValidationPipe) createChargerDto: CreateChargerDto, @Request() req) {
+  create(
+    @Body(ValidationPipe) createChargerDto: CreateChargerDto,
+    @Request() req,
+  ) {
     return this.chargerService.create(createChargerDto, req.user.userId);
   }
 
@@ -29,7 +44,7 @@ export class ChargerController {
    * Each station/charger/socket gets a `compatibility` object with:
    *   isCompatible, effectiveChargingPowerKw, estimatedChargeTimeMinutes, matchedConnectorTypes
    */
-  @Get('compatible-stations')
+  @Get("compatible-stations")
   @UseGuards(JwtAuthGuard)
   getCompatibleStations(@Query() query: any, @Request() req) {
     return this.chargerService.getCompatibleStations(
@@ -39,33 +54,53 @@ export class ChargerController {
         lat: query.lat ? parseFloat(query.lat) : undefined,
         lng: query.lng ? parseFloat(query.lng) : undefined,
         radius: query.radius ? parseFloat(query.radius) : undefined,
-        availableNow: query.availableNow === 'true',
-        sortBy: query.sortBy || 'distance',
-        sortOrder: query.sortOrder || 'asc',
+        availableNow: query.availableNow === "true",
+        sortBy: query.sortBy || "distance",
+        sortOrder: query.sortOrder || "asc",
         limit: query.limit ? parseInt(query.limit) : 100,
         offset: query.offset ? parseInt(query.offset) : 0,
       },
     );
   }
 
-  @Get('filter')
+  @Get("filter")
   filterChargers(@Query() filters: any) {
     // Convert string query params to proper types
     const filterDto = {
       lat: filters.lat ? parseFloat(filters.lat) : undefined,
       lng: filters.lng ? parseFloat(filters.lng) : undefined,
       radius: filters.radius ? parseFloat(filters.radius) : undefined,
-      minPowerKw: filters.minPowerKw ? parseFloat(filters.minPowerKw) : undefined,
-      maxPowerKw: filters.maxPowerKw ? parseFloat(filters.maxPowerKw) : undefined,
-      speedTypes: filters.speedTypes ? (Array.isArray(filters.speedTypes) ? filters.speedTypes : [filters.speedTypes]) : undefined,
-      connectorTypes: filters.connectorTypes ? (Array.isArray(filters.connectorTypes) ? filters.connectorTypes : [filters.connectorTypes]) : undefined,
+      minPowerKw: filters.minPowerKw
+        ? parseFloat(filters.minPowerKw)
+        : undefined,
+      maxPowerKw: filters.maxPowerKw
+        ? parseFloat(filters.maxPowerKw)
+        : undefined,
+      speedTypes: filters.speedTypes
+        ? Array.isArray(filters.speedTypes)
+          ? filters.speedTypes
+          : [filters.speedTypes]
+        : undefined,
+      connectorTypes: filters.connectorTypes
+        ? Array.isArray(filters.connectorTypes)
+          ? filters.connectorTypes
+          : [filters.connectorTypes]
+        : undefined,
       minPrice: filters.minPrice ? parseFloat(filters.minPrice) : undefined,
       maxPrice: filters.maxPrice ? parseFloat(filters.maxPrice) : undefined,
-      availableNow: filters.availableNow === 'true',
-      bookingModes: filters.bookingModes ? (Array.isArray(filters.bookingModes) ? filters.bookingModes : filters.bookingModes.split(',')) : undefined,
-      amenities: filters.amenities ? (Array.isArray(filters.amenities) ? filters.amenities : [filters.amenities]) : undefined,
-      sortBy: filters.sortBy || 'distance',
-      sortOrder: filters.sortOrder || 'asc',
+      availableNow: filters.availableNow === "true",
+      bookingModes: filters.bookingModes
+        ? Array.isArray(filters.bookingModes)
+          ? filters.bookingModes
+          : filters.bookingModes.split(",")
+        : undefined,
+      amenities: filters.amenities
+        ? Array.isArray(filters.amenities)
+          ? filters.amenities
+          : [filters.amenities]
+        : undefined,
+      sortBy: filters.sortBy || "distance",
+      sortOrder: filters.sortOrder || "asc",
       limit: filters.limit ? parseInt(filters.limit) : 50,
       offset: filters.offset ? parseInt(filters.offset) : 0,
     };
@@ -73,23 +108,33 @@ export class ChargerController {
     return this.chargerService.filterChargers(filterDto);
   }
 
-  @Get('filter-stations')
+  @Get("filter-stations")
   filterStations(@Query() filters: any) {
     // Convert string query params to proper types
     const filterDto = {
       lat: filters.lat ? parseFloat(filters.lat) : undefined,
       lng: filters.lng ? parseFloat(filters.lng) : undefined,
       radius: filters.radius ? parseFloat(filters.radius) : undefined,
-      availableNow: filters.availableNow === 'true',
+      availableNow: filters.availableNow === "true",
       chargerType: filters.chargerType || undefined,
-      connectorTypes: filters.connectorTypes ? (Array.isArray(filters.connectorTypes) ? filters.connectorTypes : [filters.connectorTypes]) : undefined,
-      amenities: filters.amenities ? (Array.isArray(filters.amenities) ? filters.amenities : [filters.amenities]) : undefined,
-      minPowerKw: filters.minPowerKw ? parseFloat(filters.minPowerKw) : undefined,
+      connectorTypes: filters.connectorTypes
+        ? Array.isArray(filters.connectorTypes)
+          ? filters.connectorTypes
+          : [filters.connectorTypes]
+        : undefined,
+      amenities: filters.amenities
+        ? Array.isArray(filters.amenities)
+          ? filters.amenities
+          : [filters.amenities]
+        : undefined,
+      minPowerKw: filters.minPowerKw
+        ? parseFloat(filters.minPowerKw)
+        : undefined,
       minPrice: filters.minPrice ? parseFloat(filters.minPrice) : undefined,
       maxPrice: filters.maxPrice ? parseFloat(filters.maxPrice) : undefined,
       stationType: filters.stationType || undefined,
-      sortBy: filters.sortBy || 'distance',
-      sortOrder: filters.sortOrder || 'asc',
+      sortBy: filters.sortBy || "distance",
+      sortOrder: filters.sortOrder || "asc",
       limit: filters.limit ? parseInt(filters.limit) : 50,
       offset: filters.offset ? parseInt(filters.offset) : 0,
     };
@@ -97,108 +142,116 @@ export class ChargerController {
     return this.chargerService.filterStations(filterDto);
   }
 
-  @Get('nearby')
+  @Get("nearby")
   findNearby(
-    @Query('lat') lat: string,
-    @Query('lng') lng: string,
-    @Query('radius') radius?: string,
+    @Query("lat") lat: string,
+    @Query("lng") lng: string,
+    @Query("radius") radius?: string,
   ) {
     const latNum = parseFloat(lat);
     const lngNum = parseFloat(lng);
     const radiusNum = radius ? parseFloat(radius) : 10;
-    
+
     return this.chargerService.findNearby(latNum, lngNum, radiusNum);
   }
 
-  @Get('nearby-stations')
+  @Get("nearby-stations")
   findNearbyStations(
-    @Query('lat') lat: string,
-    @Query('lng') lng: string,
-    @Query('radius') radius?: string,
+    @Query("lat") lat: string,
+    @Query("lng") lng: string,
+    @Query("radius") radius?: string,
   ) {
     const latNum = parseFloat(lat);
     const lngNum = parseFloat(lng);
     const radiusNum = radius ? parseFloat(radius) : 10;
-    
+
     return this.chargerService.filterStations({
       lat: latNum,
       lng: lngNum,
       radius: radiusNum,
-      sortBy: 'distance',
-      sortOrder: 'asc',
+      sortBy: "distance",
+      sortOrder: "asc",
       limit: 50,
       offset: 0,
     });
   }
 
-  @Get('my-chargers')
+  @Get("my-chargers")
   @UseGuards(JwtAuthGuard)
   findMyChargers(@Request() req) {
     return this.chargerService.findByOwner(req.user.userId);
   }
 
-  @Get('stations/:stationId')
-  getStation(@Param('stationId') stationId: string) {
+  @Get("stations/:stationId")
+  getStation(@Param("stationId") stationId: string) {
     return this.chargerService.getStationWithChargers(stationId);
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
+  @Get(":id")
+  findOne(@Param("id") id: string) {
     return this.chargerService.findOne(id);
   }
 
-  @Patch(':id')
+  @Patch(":id")
   @UseGuards(JwtAuthGuard)
   update(
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body(ValidationPipe) updateChargerDto: UpdateChargerDto,
     @Request() req,
   ) {
     return this.chargerService.update(id, updateChargerDto, req.user.userId);
   }
 
-  @Delete(':id')
+  @Delete(":id")
   @UseGuards(JwtAuthGuard)
-  remove(@Param('id') id: string, @Request() req) {
+  remove(@Param("id") id: string, @Request() req) {
     return this.chargerService.remove(id, req.user.userId);
   }
 
-  @Patch(':id/booking-mode')
+  @Patch(":id/booking-mode")
   @UseGuards(JwtAuthGuard)
   updateBookingMode(
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body(ValidationPipe) updateDto: UpdateBookingModeDto,
     @Request() req,
   ) {
-    return this.chargerService.updateBookingMode(id, updateDto, req.user.userId);
+    return this.chargerService.updateBookingMode(
+      id,
+      updateDto,
+      req.user.userId,
+    );
   }
 
-  @Patch(':id/status')
+  @Patch(":id/status")
   @UseGuards(JwtAuthGuard)
   updateChargerStatus(
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body(ValidationPipe) updateDto: UpdateChargerStatusDto,
     @Request() req,
   ) {
-    return this.chargerService.updateChargerStatus(id, updateDto, req.user.userId);
+    return this.chargerService.updateChargerStatus(
+      id,
+      updateDto,
+      req.user.userId,
+    );
   }
 
-  @Get('available/by-mode')
+  @Get("available/by-mode")
   getAvailableChargers(
-    @Query('bookingMode') bookingMode?: BookingMode,
-    @Query('lat') lat?: string,
-    @Query('lng') lng?: string,
-    @Query('radius') radius?: string,
+    @Query("bookingMode") bookingMode?: BookingMode,
+    @Query("lat") lat?: string,
+    @Query("lng") lng?: string,
+    @Query("radius") radius?: string,
   ) {
     const latNum = lat ? parseFloat(lat) : undefined;
     const lngNum = lng ? parseFloat(lng) : undefined;
     const radiusNum = radius ? parseFloat(radius) : 10;
-    
+
     return this.chargerService.getAvailableChargers(
-      bookingMode, 
-      latNum, 
-      lngNum, 
-      radiusNum
+      bookingMode,
+      latNum,
+      lngNum,
+      radiusNum,
     );
   }
 }

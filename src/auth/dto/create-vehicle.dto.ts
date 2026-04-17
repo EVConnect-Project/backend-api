@@ -1,5 +1,15 @@
-import { IsString, IsNumber, IsNotEmpty, Min, Max, IsOptional, IsIn, IsArray, ValidateNested } from 'class-validator';
-import { Type } from 'class-transformer';
+import {
+  IsString,
+  IsNumber,
+  IsNotEmpty,
+  Min,
+  Max,
+  IsOptional,
+  IsIn,
+  IsArray,
+  ValidateNested,
+} from "class-validator";
+import { Type } from "class-transformer";
 
 class ChargingCurvePoint {
   @IsNumber()
@@ -75,6 +85,6 @@ export class CreateVehicleDto {
 
   @IsOptional()
   @IsString()
-  @IsIn(['eco', 'normal', 'sport'])
-  drivingMode?: 'eco' | 'normal' | 'sport';
+  @IsIn(["eco", "normal", "sport"])
+  drivingMode?: "eco" | "normal" | "sport";
 }

@@ -3,18 +3,20 @@ import {
   WebSocketServer,
   OnGatewayConnection,
   OnGatewayDisconnect,
-} from '@nestjs/websockets';
-import { Server, Socket } from 'socket.io';
-import { Logger } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
+} from "@nestjs/websockets";
+import { Server, Socket } from "socket.io";
+import { Logger } from "@nestjs/common";
+import { JwtService } from "@nestjs/jwt";
 
 @WebSocketGateway({
   cors: {
-    origin: '*',
+    origin: "*",
   },
-  namespace: '/notifications',
+  namespace: "/notifications",
 })
-export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class NotificationsGateway
+  implements OnGatewayConnection, OnGatewayDisconnect
+{
   @WebSocketServer()
   server: Server;
 
@@ -33,7 +35,7 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
 
     let userId: string | undefined;
     try {
-      const payload = this.jwtService.verify(token) as any;
+      const payload = this.jwtService.verify(token);
       userId = (payload?.userId || payload?.sub) as string | undefined;
     } catch {
       this.logger.warn(`Client connected with invalid token: ${client.id}`);
@@ -67,11 +69,11 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
 
   private extractToken(client: Socket): string | null {
     const authToken = client.handshake.auth?.token as string | undefined;
-    const authHeader = client.handshake.headers?.authorization as string | undefined;
+    const authHeader = client.handshake.headers?.authorization;
     const raw = authToken || authHeader;
 
     if (!raw) return null;
-    if (raw.startsWith('Bearer ')) return raw.substring(7);
+    if (raw.startsWith("Bearer ")) return raw.substring(7);
     return raw;
   }
 
@@ -82,7 +84,9 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
         if (socketIds.size === 0) {
           this.connectedUsers.delete(userId);
         }
-        this.logger.log(`User ${userId} disconnected from notifications (socket: ${client.id})`);
+        this.logger.log(
+          `User ${userId} disconnected from notifications (socket: ${client.id})`,
+        );
         break;
       }
     }
@@ -92,30 +96,38 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
    * Emit a new notification to a specific user in real-time.
    * Called from NotificationsService after saving + sending FCM.
    */
-  sendNotificationToUser(userId: string, notification: {
-    id: string;
-    type: string;
-    title: string;
-    body: string;
-    data?: Record<string, any> | null;
-    status: string;
-    createdAt: Date;
-  }) {
-    this.server.to(`user:${userId}`).emit('newNotification', notification);
-    this.logger.log(`Emitted newNotification to user ${userId}: ${notification.title}`);
+  sendNotificationToUser(
+    userId: string,
+    notification: {
+      id: string;
+      type: string;
+      title: string;
+      body: string;
+      data?: Record<string, any> | null;
+      status: string;
+      createdAt: Date;
+    },
+  ) {
+    this.server.to(`user:${userId}`).emit("newNotification", notification);
+    this.logger.log(
+      `Emitted newNotification to user ${userId}: ${notification.title}`,
+    );
   }
 
   /**
    * Emit updated unread count to user (after read/clear actions)
    */
   sendUnreadCount(userId: string, count: number) {
-    this.server.to(`user:${userId}`).emit('unreadCount', { count });
+    this.server.to(`user:${userId}`).emit("unreadCount", { count });
   }
 
   /**
    * Check if a user is currently connected
    */
   isUserConnected(userId: string): boolean {
-    return this.connectedUsers.has(userId) && this.connectedUsers.get(userId)!.size > 0;
+    return (
+      this.connectedUsers.has(userId) &&
+      this.connectedUsers.get(userId)!.size > 0
+    );
   }
 }

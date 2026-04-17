@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class AddReviewsAndFavorites1234567890123 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
@@ -72,14 +72,24 @@ export class AddReviewsAndFavorites1234567890123 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP TRIGGER IF EXISTS trigger_update_charger_reviews_updated_at ON charger_reviews`);
-    await queryRunner.query(`DROP FUNCTION IF EXISTS update_charger_reviews_updated_at()`);
-    await queryRunner.query(`DROP INDEX IF EXISTS idx_favorite_chargers_charger_id`);
-    await queryRunner.query(`DROP INDEX IF EXISTS idx_favorite_chargers_user_id`);
+    await queryRunner.query(
+      `DROP TRIGGER IF EXISTS trigger_update_charger_reviews_updated_at ON charger_reviews`,
+    );
+    await queryRunner.query(
+      `DROP FUNCTION IF EXISTS update_charger_reviews_updated_at()`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS idx_favorite_chargers_charger_id`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS idx_favorite_chargers_user_id`,
+    );
     await queryRunner.query(`DROP TABLE IF EXISTS favorite_chargers`);
     await queryRunner.query(`DROP INDEX IF EXISTS idx_charger_reviews_rating`);
     await queryRunner.query(`DROP INDEX IF EXISTS idx_charger_reviews_user_id`);
-    await queryRunner.query(`DROP INDEX IF EXISTS idx_charger_reviews_charger_id`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS idx_charger_reviews_charger_id`,
+    );
     await queryRunner.query(`DROP TABLE IF EXISTS charger_reviews`);
   }
 }

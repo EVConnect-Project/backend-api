@@ -1,6 +1,6 @@
-import { PartialType } from '@nestjs/mapped-types';
-import { CreateReviewDto } from './create-review.dto';
-import { IsInt, Min, Max, IsString, IsOptional } from 'class-validator';
+import { PartialType } from "@nestjs/mapped-types";
+import { CreateReviewDto } from "./create-review.dto";
+import { IsInt, Min, Max, IsString, IsOptional } from "class-validator";
 
 export class UpdateReviewDto extends PartialType(CreateReviewDto) {
   @IsOptional()

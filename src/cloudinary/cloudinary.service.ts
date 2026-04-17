@@ -1,16 +1,20 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { v2 as cloudinary, UploadApiResponse, UploadApiErrorResponse } from 'cloudinary';
-import { Multer } from 'multer';
+import { Injectable, BadRequestException } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import {
+  v2 as cloudinary,
+  UploadApiResponse,
+  UploadApiErrorResponse,
+} from "cloudinary";
+import { Multer } from "multer";
 
 @Injectable()
 export class CloudinaryService {
   constructor(private configService: ConfigService) {
     // Configure Cloudinary
     cloudinary.config({
-      cloud_name: this.configService.get<string>('CLOUDINARY_CLOUD_NAME'),
-      api_key: this.configService.get<string>('CLOUDINARY_API_KEY'),
-      api_secret: this.configService.get<string>('CLOUDINARY_API_SECRET'),
+      cloud_name: this.configService.get<string>("CLOUDINARY_CLOUD_NAME"),
+      api_key: this.configService.get<string>("CLOUDINARY_API_KEY"),
+      api_secret: this.configService.get<string>("CLOUDINARY_API_SECRET"),
     });
   }
 
@@ -20,23 +24,29 @@ export class CloudinaryService {
    * @param folder - Cloudinary folder path (default: 'marketplace')
    * @returns Secure URL of uploaded image
    */
-  async uploadImage(file: Express.Multer.File, folder: string = 'marketplace'): Promise<string> {
+  async uploadImage(
+    file: Express.Multer.File,
+    folder: string = "marketplace",
+  ): Promise<string> {
     try {
       const result: UploadApiResponse = await new Promise((resolve, reject) => {
         const uploadStream = cloudinary.uploader.upload_stream(
           {
             folder: folder,
-            resource_type: 'image',
+            resource_type: "image",
             transformation: [
-              { width: 1200, height: 1200, crop: 'limit' }, // Max dimensions
-              { quality: 'auto:good' }, // Auto quality optimization
-              { fetch_format: 'auto' }, // Auto format (WebP for supported browsers)
+              { width: 1200, height: 1200, crop: "limit" }, // Max dimensions
+              { quality: "auto:good" }, // Auto quality optimization
+              { fetch_format: "auto" }, // Auto format (WebP for supported browsers)
             ],
           },
-          (error: UploadApiErrorResponse | undefined, result: UploadApiResponse | undefined) => {
+          (
+            error: UploadApiErrorResponse | undefined,
+            result: UploadApiResponse | undefined,
+          ) => {
             if (error) reject(error);
             else if (result) resolve(result);
-            else reject(new Error('Upload failed'));
+            else reject(new Error("Upload failed"));
           },
         );
 
@@ -55,15 +65,18 @@ export class CloudinaryService {
    * @param folder - Cloudinary folder path (default: 'marketplace')
    * @returns Secure URL of uploaded image
    */
-  async uploadBase64Image(base64String: string, folder: string = 'marketplace'): Promise<string> {
+  async uploadBase64Image(
+    base64String: string,
+    folder: string = "marketplace",
+  ): Promise<string> {
     try {
       const result = await cloudinary.uploader.upload(base64String, {
         folder: folder,
-        resource_type: 'image',
+        resource_type: "image",
         transformation: [
-          { width: 1200, height: 1200, crop: 'limit' },
-          { quality: 'auto:good' },
-          { fetch_format: 'auto' },
+          { width: 1200, height: 1200, crop: "limit" },
+          { quality: "auto:good" },
+          { fetch_format: "auto" },
         ],
       });
 
@@ -79,7 +92,10 @@ export class CloudinaryService {
    * @param folder - Cloudinary folder path
    * @returns Array of secure URLs
    */
-  async uploadMultipleImages(files: Express.Multer.File[], folder: string = 'marketplace'): Promise<string[]> {
+  async uploadMultipleImages(
+    files: Express.Multer.File[],
+    folder: string = "marketplace",
+  ): Promise<string[]> {
     const uploadPromises = files.map((file) => this.uploadImage(file, folder));
     return Promise.all(uploadPromises);
   }
@@ -102,9 +118,9 @@ export class CloudinaryService {
    * @returns Public ID
    */
   extractPublicId(url: string): string {
-    const parts = url.split('/');
+    const parts = url.split("/");
     const filename = parts[parts.length - 1];
-    const publicId = filename.split('.')[0];
+    const publicId = filename.split(".")[0];
     const folder = parts[parts.length - 2];
     return `${folder}/${publicId}`;
   }

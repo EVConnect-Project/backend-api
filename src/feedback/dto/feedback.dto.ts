@@ -6,7 +6,7 @@ import {
   IsOptional,
   Min,
   Max,
-} from 'class-validator';
+} from "class-validator";
 
 export class SubmitFeedbackDto {
   @IsString()
@@ -108,12 +108,12 @@ export class MechanicAnalyticsDto {
 export class MechanicPerformanceDto {
   mechanicId: string;
   mechanicName: string;
-  
+
   // Performance
   totalJobs: number;
   completedJobs: number;
   completionRate: number;
-  
+
   // Ratings
   averageRating: number;
   totalRatings: number;
@@ -124,15 +124,15 @@ export class MechanicPerformanceDto {
     professionalism: number;
     value: number;
   };
-  
+
   // Time metrics
   averageResponseTime: string;
   averageArrivalTime: string;
   fastestResponseTime: string;
-  
+
   // Recommendations
   recommendationRate: number;
-  
+
   // Issues
   totalIssues: number;
   issueBreakdown: {

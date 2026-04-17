@@ -1,7 +1,7 @@
-import { Injectable } from '@nestjs/common';
-import { ChatService } from '../../chat/chat.service';
-import { ConversationType } from '../../chat/entities/conversation.entity';
-import { MessageType } from '../../chat/entities/message.entity';
+import { Injectable } from "@nestjs/common";
+import { ChatService } from "../../chat/chat.service";
+import { ConversationType } from "../../chat/entities/conversation.entity";
+import { MessageType } from "../../chat/entities/message.entity";
 
 export interface EmergencyChatOptions {
   userId: string;
@@ -13,7 +13,7 @@ export interface EmergencyChatOptions {
 
 export interface QuickMessageTemplate {
   id: string;
-  category: 'status' | 'eta' | 'info' | 'help';
+  category: "status" | "eta" | "info" | "help";
   message: string;
   icon: string;
 }
@@ -33,7 +33,7 @@ export class EmergencyChatService {
         type: ConversationType.MECHANIC,
         participantId: options.mechanicId,
         referenceId: options.emergencyRequestId,
-        referenceType: 'emergency_request',
+        referenceType: "emergency_request",
         initialMessage,
       },
       options.userId,
@@ -50,17 +50,17 @@ export class EmergencyChatService {
    */
   private getInitialEmergencyMessage(options: EmergencyChatOptions): string {
     const problemLabels = {
-      battery_dead: '🔋 Battery Dead / Jump Start',
-      flat_tire: '🛞 Flat Tire',
-      out_of_fuel: '⛽ Out of Fuel',
-      engine_trouble: '🔧 Engine Trouble',
-      towing_required: '🚗 Towing Required',
-      ev_charging_issue: '⚡ EV Charging Issue',
-      accident: '🚙 Accident / Collision',
-      general: '🔩 General Issue',
+      battery_dead: "🔋 Battery Dead / Jump Start",
+      flat_tire: "🛞 Flat Tire",
+      out_of_fuel: "⛽ Out of Fuel",
+      engine_trouble: "🔧 Engine Trouble",
+      towing_required: "🚗 Towing Required",
+      ev_charging_issue: "⚡ EV Charging Issue",
+      accident: "🚙 Accident / Collision",
+      general: "🔩 General Issue",
     };
 
-    const problemLabel = problemLabels[options.problemType] || 'Emergency';
+    const problemLabel = problemLabels[options.problemType] || "Emergency";
     const locationLink = `https://maps.google.com/?q=${options.location.lat},${options.location.lng}`;
 
     return `🚨 EMERGENCY: ${problemLabel}\n\n📍 Location: ${locationLink}\n\nI need immediate assistance. Please confirm you're on your way.`;
@@ -72,34 +72,34 @@ export class EmergencyChatService {
   getQuickMessageTemplates(problemType: string): QuickMessageTemplate[] {
     const commonTemplates: QuickMessageTemplate[] = [
       {
-        id: 'eta_request',
-        category: 'eta',
-        message: '⏰ How long until you arrive?',
-        icon: '⏰',
+        id: "eta_request",
+        category: "eta",
+        message: "⏰ How long until you arrive?",
+        icon: "⏰",
       },
       {
-        id: 'confirm',
-        category: 'status',
-        message: '✅ Confirmed. I\'ll be here waiting.',
-        icon: '✅',
+        id: "confirm",
+        category: "status",
+        message: "✅ Confirmed. I'll be here waiting.",
+        icon: "✅",
       },
       {
-        id: 'additional_help',
-        category: 'help',
-        message: '🆘 I need additional help/equipment',
-        icon: '🆘',
+        id: "additional_help",
+        category: "help",
+        message: "🆘 I need additional help/equipment",
+        icon: "🆘",
       },
       {
-        id: 'location_update',
-        category: 'info',
-        message: '📍 My exact location is: [Share Location]',
-        icon: '📍',
+        id: "location_update",
+        category: "info",
+        message: "📍 My exact location is: [Share Location]",
+        icon: "📍",
       },
       {
-        id: 'thank_you',
-        category: 'status',
-        message: '🙏 Thank you for coming!',
-        icon: '🙏',
+        id: "thank_you",
+        category: "status",
+        message: "🙏 Thank you for coming!",
+        icon: "🙏",
       },
     ];
 
@@ -107,58 +107,58 @@ export class EmergencyChatService {
     const specificTemplates: Record<string, QuickMessageTemplate[]> = {
       battery_dead: [
         {
-          id: 'battery_age',
-          category: 'info',
-          message: '🔋 Battery is more than 3 years old',
-          icon: '🔋',
+          id: "battery_age",
+          category: "info",
+          message: "🔋 Battery is more than 3 years old",
+          icon: "🔋",
         },
         {
-          id: 'tried_jump',
-          category: 'info',
-          message: '⚡ Already tried jump start - didn\'t work',
-          icon: '⚡',
+          id: "tried_jump",
+          category: "info",
+          message: "⚡ Already tried jump start - didn't work",
+          icon: "⚡",
         },
       ],
       flat_tire: [
         {
-          id: 'spare_tire',
-          category: 'info',
-          message: '🛞 I have a spare tire in the trunk',
-          icon: '🛞',
+          id: "spare_tire",
+          category: "info",
+          message: "🛞 I have a spare tire in the trunk",
+          icon: "🛞",
         },
         {
-          id: 'no_spare',
-          category: 'help',
-          message: '❌ No spare tire available',
-          icon: '❌',
+          id: "no_spare",
+          category: "help",
+          message: "❌ No spare tire available",
+          icon: "❌",
         },
       ],
       engine_trouble: [
         {
-          id: 'engine_sound',
-          category: 'info',
-          message: '🔊 Engine making unusual sounds',
-          icon: '🔊',
+          id: "engine_sound",
+          category: "info",
+          message: "🔊 Engine making unusual sounds",
+          icon: "🔊",
         },
         {
-          id: 'smoke',
-          category: 'help',
-          message: '💨 Smoke coming from engine',
-          icon: '💨',
+          id: "smoke",
+          category: "help",
+          message: "💨 Smoke coming from engine",
+          icon: "💨",
         },
       ],
       accident: [
         {
-          id: 'injuries',
-          category: 'help',
-          message: '🚑 There are injuries - called 911',
-          icon: '🚑',
+          id: "injuries",
+          category: "help",
+          message: "🚑 There are injuries - called 911",
+          icon: "🚑",
         },
         {
-          id: 'police_called',
-          category: 'status',
-          message: '👮 Police have been notified',
-          icon: '👮',
+          id: "police_called",
+          category: "status",
+          message: "👮 Police have been notified",
+          icon: "👮",
         },
       ],
     };
@@ -173,46 +173,46 @@ export class EmergencyChatService {
   getMechanicQuickTemplates(): QuickMessageTemplate[] {
     return [
       {
-        id: 'on_way',
-        category: 'status',
-        message: '🚗 On my way! ETA: [X] minutes',
-        icon: '🚗',
+        id: "on_way",
+        category: "status",
+        message: "🚗 On my way! ETA: [X] minutes",
+        icon: "🚗",
       },
       {
-        id: 'arrived',
-        category: 'status',
-        message: '📍 I\'ve arrived at your location',
-        icon: '📍',
+        id: "arrived",
+        category: "status",
+        message: "📍 I've arrived at your location",
+        icon: "📍",
       },
       {
-        id: 'need_info',
-        category: 'info',
-        message: '❓ Can you provide more details about the issue?',
-        icon: '❓',
+        id: "need_info",
+        category: "info",
+        message: "❓ Can you provide more details about the issue?",
+        icon: "❓",
       },
       {
-        id: 'additional_tools',
-        category: 'info',
-        message: '🔧 I need to get additional tools/parts',
-        icon: '🔧',
+        id: "additional_tools",
+        category: "info",
+        message: "🔧 I need to get additional tools/parts",
+        icon: "🔧",
       },
       {
-        id: 'delay',
-        category: 'status',
-        message: '⏱️ Running 10 minutes late due to traffic',
-        icon: '⏱️',
+        id: "delay",
+        category: "status",
+        message: "⏱️ Running 10 minutes late due to traffic",
+        icon: "⏱️",
       },
       {
-        id: 'completed',
-        category: 'status',
-        message: '✅ Service completed! Safe to drive now.',
-        icon: '✅',
+        id: "completed",
+        category: "status",
+        message: "✅ Service completed! Safe to drive now.",
+        icon: "✅",
       },
       {
-        id: 'follow_up',
-        category: 'status',
-        message: '📞 Please call me if you have any issues',
-        icon: '📞',
+        id: "follow_up",
+        category: "status",
+        message: "📞 Please call me if you have any issues",
+        icon: "📞",
       },
     ];
   }
@@ -223,15 +223,15 @@ export class EmergencyChatService {
   async sendEmergencyStatusUpdate(
     conversationId: string,
     userId: string,
-    status: 'en_route' | 'arrived' | 'working' | 'completed' | 'delayed',
+    status: "en_route" | "arrived" | "working" | "completed" | "delayed",
     additionalInfo?: string,
   ) {
     const statusMessages = {
-      en_route: '🚗 I\'m on my way to your location',
-      arrived: '📍 I\'ve arrived. Looking for your vehicle now.',
-      working: '🔧 Working on fixing the issue',
-      completed: '✅ All done! Your vehicle is ready.',
-      delayed: '⏱️ Running a bit late',
+      en_route: "🚗 I'm on my way to your location",
+      arrived: "📍 I've arrived. Looking for your vehicle now.",
+      working: "🔧 Working on fixing the issue",
+      completed: "✅ All done! Your vehicle is ready.",
+      delayed: "⏱️ Running a bit late",
     };
 
     const message = additionalInfo
@@ -282,14 +282,15 @@ export class EmergencyChatService {
     trafficConditions?: string,
   ) {
     let message = `⏰ I'll be there in approximately ${etaMinutes} minutes.`;
-    
-    if (trafficConditions && trafficConditions !== 'low') {
-      const trafficEmoji = {
-        moderate: '🟡',
-        heavy: '🟠',
-        severe: '🔴',
-      }[trafficConditions] || '';
-      
+
+    if (trafficConditions && trafficConditions !== "low") {
+      const trafficEmoji =
+        {
+          moderate: "🟡",
+          heavy: "🟠",
+          severe: "🔴",
+        }[trafficConditions] || "";
+
       message += `\n${trafficEmoji} Traffic: ${trafficConditions}`;
     }
 
@@ -307,16 +308,24 @@ export class EmergencyChatService {
    * Get emergency chat summary
    */
   async getEmergencyChatSummary(conversationId: string, userId: string) {
-    const conversation = await this.chatService.getConversation(conversationId, userId);
+    const conversation = await this.chatService.getConversation(
+      conversationId,
+      userId,
+    );
     const messages = await this.chatService.getMessages(conversationId, userId);
 
-    const mechanicMessages = messages.filter(m => m.senderId !== userId);
-    const userMessages = messages.filter(m => m.senderId === userId);
+    const mechanicMessages = messages.filter((m) => m.senderId !== userId);
+    const userMessages = messages.filter((m) => m.senderId === userId);
 
     // Extract status updates
     const statusUpdates = messages
-      .filter(m => m.content.includes('🚗') || m.content.includes('📍') || m.content.includes('✅'))
-      .map(m => ({
+      .filter(
+        (m) =>
+          m.content.includes("🚗") ||
+          m.content.includes("📍") ||
+          m.content.includes("✅"),
+      )
+      .map((m) => ({
         timestamp: m.createdAt,
         status: this.extractStatus(m.content),
         message: m.content,
@@ -337,11 +346,18 @@ export class EmergencyChatService {
    * Extract status from message content
    */
   private extractStatus(content: string): string {
-    if (content.includes('on my way') || content.includes('🚗')) return 'en_route';
-    if (content.includes('arrived') || content.includes('📍')) return 'arrived';
-    if (content.includes('working') || content.includes('🔧')) return 'working';
-    if (content.includes('completed') || content.includes('✅')) return 'completed';
-    if (content.includes('late') || content.includes('delay') || content.includes('⏱️')) return 'delayed';
-    return 'unknown';
+    if (content.includes("on my way") || content.includes("🚗"))
+      return "en_route";
+    if (content.includes("arrived") || content.includes("📍")) return "arrived";
+    if (content.includes("working") || content.includes("🔧")) return "working";
+    if (content.includes("completed") || content.includes("✅"))
+      return "completed";
+    if (
+      content.includes("late") ||
+      content.includes("delay") ||
+      content.includes("⏱️")
+    )
+      return "delayed";
+    return "unknown";
   }
 }

@@ -1,28 +1,35 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  ManyToOne,
+  JoinColumn,
+} from "typeorm";
 
-@Entity('chat_messages')
+@Entity("chat_messages")
 export class ChatMessage {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn("uuid")
   id: string;
 
-  @Column({ type: 'uuid' })
+  @Column({ type: "uuid" })
   chatId: string;
 
-  @Column({ type: 'uuid' })
+  @Column({ type: "uuid" })
   senderId: string;
 
-  @Column('text')
+  @Column("text")
   message: string;
 
   @Column({ default: false })
   isRead: boolean;
 
-  @ManyToOne('MarketplaceChat', 'messages')
-  @JoinColumn({ name: 'chatId' })
+  @ManyToOne("MarketplaceChat", "messages")
+  @JoinColumn({ name: "chatId" })
   chat: any;
 
-  @ManyToOne('UserEntity')
-  @JoinColumn({ name: 'senderId' })
+  @ManyToOne("UserEntity")
+  @JoinColumn({ name: "senderId" })
   sender: any;
 
   @CreateDateColumn()

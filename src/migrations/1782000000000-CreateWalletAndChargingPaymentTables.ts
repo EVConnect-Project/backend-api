@@ -1,9 +1,7 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
-export class CreateWalletAndChargingPaymentTables1782000000000
-  implements MigrationInterface
-{
-  name = 'CreateWalletAndChargingPaymentTables1782000000000';
+export class CreateWalletAndChargingPaymentTables1782000000000 implements MigrationInterface {
+  name = "CreateWalletAndChargingPaymentTables1782000000000";
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
@@ -115,20 +113,38 @@ export class CreateWalletAndChargingPaymentTables1782000000000
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX IF EXISTS uq_wallet_charging_sessions_user_active`);
-    await queryRunner.query(`DROP INDEX IF EXISTS idx_wallet_charging_sessions_status`);
-    await queryRunner.query(`DROP INDEX IF EXISTS idx_wallet_charging_sessions_user_id`);
-    await queryRunner.query(`DROP INDEX IF EXISTS idx_wallet_transactions_status`);
-    await queryRunner.query(`DROP INDEX IF EXISTS idx_wallet_transactions_type`);
-    await queryRunner.query(`DROP INDEX IF EXISTS idx_wallet_transactions_user_id`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS uq_wallet_charging_sessions_user_active`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS idx_wallet_charging_sessions_status`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS idx_wallet_charging_sessions_user_id`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS idx_wallet_transactions_status`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS idx_wallet_transactions_type`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS idx_wallet_transactions_user_id`,
+    );
     await queryRunner.query(`DROP INDEX IF EXISTS idx_wallets_user_id`);
 
     await queryRunner.query(`DROP TABLE IF EXISTS wallet_charging_sessions`);
     await queryRunner.query(`DROP TABLE IF EXISTS wallet_transactions`);
     await queryRunner.query(`DROP TABLE IF EXISTS wallets`);
 
-    await queryRunner.query(`DROP TYPE IF EXISTS wallet_charging_sessions_status_enum`);
-    await queryRunner.query(`DROP TYPE IF EXISTS wallet_transactions_status_enum`);
-    await queryRunner.query(`DROP TYPE IF EXISTS wallet_transactions_type_enum`);
+    await queryRunner.query(
+      `DROP TYPE IF EXISTS wallet_charging_sessions_status_enum`,
+    );
+    await queryRunner.query(
+      `DROP TYPE IF EXISTS wallet_transactions_status_enum`,
+    );
+    await queryRunner.query(
+      `DROP TYPE IF EXISTS wallet_transactions_type_enum`,
+    );
   }
 }

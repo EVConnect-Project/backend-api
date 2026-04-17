@@ -1,5 +1,5 @@
-import { IsEnum, IsOptional, IsString } from 'class-validator';
-import { ApplicationStatus } from '../entities/mechanic-application.entity';
+import { IsEnum, IsOptional, IsString } from "class-validator";
+import { ApplicationStatus } from "../entities/mechanic-application.entity";
 
 export class ReviewApplicationDto {
   @IsEnum(ApplicationStatus)

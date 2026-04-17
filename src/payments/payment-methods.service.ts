@@ -1,9 +1,14 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { PaymentMethodEntity } from './entities/payment-method.entity';
-import { CreatePaymentMethodDto } from './dto/create-payment-method.dto';
-import { UpdatePaymentMethodDto } from './dto/update-payment-method.dto';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { PaymentMethodEntity } from "./entities/payment-method.entity";
+import { CreatePaymentMethodDto } from "./dto/create-payment-method.dto";
+import { UpdatePaymentMethodDto } from "./dto/update-payment-method.dto";
 
 @Injectable()
 export class PaymentMethodsService {
@@ -12,7 +17,10 @@ export class PaymentMethodsService {
     private paymentMethodRepository: Repository<PaymentMethodEntity>,
   ) {}
 
-  async create(createDto: CreatePaymentMethodDto, userId: string): Promise<PaymentMethodEntity> {
+  async create(
+    createDto: CreatePaymentMethodDto,
+    userId: string,
+  ): Promise<PaymentMethodEntity> {
     // If this is set as default, unset other default payment methods
     if (createDto.isDefault) {
       await this.paymentMethodRepository.update(
@@ -33,9 +41,9 @@ export class PaymentMethodsService {
   async findAll(userId: string): Promise<PaymentMethodEntity[]> {
     return await this.paymentMethodRepository.find({
       where: { userId },
-      order: { 
-        isDefault: 'DESC' as any,
-        createdAt: 'DESC' as any,
+      order: {
+        isDefault: "DESC" as any,
+        createdAt: "DESC" as any,
       },
     });
   }
@@ -46,7 +54,7 @@ export class PaymentMethodsService {
     });
 
     if (!paymentMethod) {
-      throw new NotFoundException('Payment method not found');
+      throw new NotFoundException("Payment method not found");
     }
 
     return paymentMethod;
@@ -95,9 +103,11 @@ export class PaymentMethodsService {
 
     // Don't allow removing default payment method if it's the only one
     if (paymentMethod.isDefault) {
-      const count = await this.paymentMethodRepository.count({ where: { userId } });
+      const count = await this.paymentMethodRepository.count({
+        where: { userId },
+      });
       if (count === 1) {
-        throw new BadRequestException('Cannot remove the only payment method');
+        throw new BadRequestException("Cannot remove the only payment method");
       }
     }
 

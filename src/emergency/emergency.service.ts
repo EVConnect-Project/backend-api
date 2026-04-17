@@ -1,12 +1,23 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { EmergencyRequestEntity, EmergencyStatus } from './entities/emergency-request.entity';
-import { MechanicResponseEntity, ResponseType, MechanicStatus } from './entities/mechanic-response.entity';
-import { MechanicEntity } from '../mechanics/entities/mechanic.entity';
-import { UserEntity } from '../users/entities/user.entity';
-import { NotificationsService } from '../notifications/notifications.service';
-import { NotificationType } from '../notifications/types/notification-types';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import {
+  EmergencyRequestEntity,
+  EmergencyStatus,
+} from "./entities/emergency-request.entity";
+import {
+  MechanicResponseEntity,
+  ResponseType,
+  MechanicStatus,
+} from "./entities/mechanic-response.entity";
+import { MechanicEntity } from "../mechanics/entities/mechanic.entity";
+import { UserEntity } from "../users/entities/user.entity";
+import { NotificationsService } from "../notifications/notifications.service";
+import { NotificationType } from "../notifications/types/notification-types";
 
 @Injectable()
 export class EmergencyService {
@@ -43,12 +54,14 @@ export class EmergencyService {
       problemType: problemType as any,
       vehicleDetails,
       urgencyLevel: urgencyLevel as any,
-      status: 'pending',
+      status: "pending",
       alertedMechanicIds,
     });
 
     const saved = await this.emergencyRequestRepository.save(emergencyRequest);
-    console.log(`✅ Emergency request created: ${saved.id} (problem: ${problemType || 'not specified'})`);
+    console.log(
+      `✅ Emergency request created: ${saved.id} (problem: ${problemType || "not specified"})`,
+    );
     return saved;
   }
 
@@ -65,15 +78,20 @@ export class EmergencyService {
     // Check if request exists
     const emergencyRequest = await this.emergencyRequestRepository.findOne({
       where: { id: requestId },
-      relations: ['user', 'responses'],
+      relations: ["user", "responses"],
     });
 
     if (!emergencyRequest) {
-      throw new NotFoundException('Emergency request not found');
+      throw new NotFoundException("Emergency request not found");
     }
 
-    if (emergencyRequest.status === 'completed' || emergencyRequest.status === 'cancelled') {
-      throw new BadRequestException('This emergency request is no longer active');
+    if (
+      emergencyRequest.status === "completed" ||
+      emergencyRequest.status === "cancelled"
+    ) {
+      throw new BadRequestException(
+        "This emergency request is no longer active",
+      );
     }
 
     // Check if mechanic already responded
@@ -82,13 +100,17 @@ export class EmergencyService {
     });
 
     if (existingResponse) {
-      throw new BadRequestException('You have already responded to this request');
+      throw new BadRequestException(
+        "You have already responded to this request",
+      );
     }
 
     // Get mechanic details
-    const mechanic = await this.mechanicRepository.findOne({ where: { id: mechanicId } });
+    const mechanic = await this.mechanicRepository.findOne({
+      where: { id: mechanicId },
+    });
     if (!mechanic) {
-      throw new NotFoundException('Mechanic not found');
+      throw new NotFoundException("Mechanic not found");
     }
 
     // Create response
@@ -99,35 +121,37 @@ export class EmergencyService {
       etaMinutes,
       notes,
     };
-    
-    if (responseType === 'accepted') {
-      responseData.status = 'accepted';
+
+    if (responseType === "accepted") {
+      responseData.status = "accepted";
     }
-    
+
     const response = this.mechanicResponseRepository.create(responseData);
     const saveResult = await this.mechanicResponseRepository.save(response);
     const saved = Array.isArray(saveResult) ? saveResult[0] : saveResult;
 
     // Notify user about the response
-    if (responseType === 'accepted') {
+    if (responseType === "accepted") {
       await this.notificationsService.sendToUser(
         emergencyRequest.userId,
         NotificationType.MECHANIC_ASSIGNED,
         {
-          title: '✅ Mechanic Accepted Your Request',
+          title: "✅ Mechanic Accepted Your Request",
           body: `${mechanic.name} has accepted your emergency request and is on the way!`,
           data: {
-            type: 'mechanic_accepted',
+            type: "mechanic_accepted",
             requestId,
             mechanicId,
             mechanicName: mechanic.name,
-            eta: etaMinutes ? `${etaMinutes} minutes` : 'Unknown',
+            eta: etaMinutes ? `${etaMinutes} minutes` : "Unknown",
           },
         },
       );
     }
 
-    console.log(`✅ Mechanic ${mechanicId} ${responseType} emergency request ${requestId}`);
+    console.log(
+      `✅ Mechanic ${mechanicId} ${responseType} emergency request ${requestId}`,
+    );
     return saved;
   }
 
@@ -141,44 +165,53 @@ export class EmergencyService {
   ): Promise<EmergencyRequestEntity> {
     const emergencyRequest = await this.emergencyRequestRepository.findOne({
       where: { id: requestId, userId },
-      relations: ['responses', 'responses.mechanic'],
+      relations: ["responses", "responses.mechanic"],
     });
 
     if (!emergencyRequest) {
-      throw new NotFoundException('Emergency request not found');
+      throw new NotFoundException("Emergency request not found");
     }
 
-    if (emergencyRequest.status !== 'pending') {
-      throw new BadRequestException('Emergency request is not in pending state');
+    if (emergencyRequest.status !== "pending") {
+      throw new BadRequestException(
+        "Emergency request is not in pending state",
+      );
     }
 
     // Check if mechanic accepted
     const mechanicResponse = emergencyRequest.responses.find(
-      r => r.mechanicId === mechanicId && r.responseType === 'accepted',
+      (r) => r.mechanicId === mechanicId && r.responseType === "accepted",
     );
 
     if (!mechanicResponse) {
-      throw new BadRequestException('This mechanic has not accepted your request');
+      throw new BadRequestException(
+        "This mechanic has not accepted your request",
+      );
     }
 
     // Update request
     emergencyRequest.selectedMechanicId = mechanicId;
-    emergencyRequest.status = 'accepted';
-    const updated = await this.emergencyRequestRepository.save(emergencyRequest);
+    emergencyRequest.status = "accepted";
+    const updated =
+      await this.emergencyRequestRepository.save(emergencyRequest);
 
     // Notify selected mechanic
-    const selectedMechanic = await this.mechanicRepository.findOne({ where: { id: mechanicId } });
+    const selectedMechanic = await this.mechanicRepository.findOne({
+      where: { id: mechanicId },
+    });
     if (selectedMechanic) {
-      const mechanicUser = await this.userRepository.findOne({ where: { id: selectedMechanic.userId } });
+      const mechanicUser = await this.userRepository.findOne({
+        where: { id: selectedMechanic.userId },
+      });
       if (mechanicUser) {
         await this.notificationsService.sendToUser(
           mechanicUser.id,
           NotificationType.MECHANIC_ASSIGNED,
           {
-            title: '🎉 You Were Selected!',
-            body: 'The user has selected you for their emergency assistance.',
+            title: "🎉 You Were Selected!",
+            body: "The user has selected you for their emergency assistance.",
             data: {
-              type: 'selected_for_emergency',
+              type: "selected_for_emergency",
               requestId,
               userId: emergencyRequest.userId,
             },
@@ -189,22 +222,26 @@ export class EmergencyService {
 
     // Notify other mechanics who were not selected
     const otherResponses = emergencyRequest.responses.filter(
-      r => r.mechanicId !== mechanicId && r.responseType === 'accepted',
+      (r) => r.mechanicId !== mechanicId && r.responseType === "accepted",
     );
 
     for (const response of otherResponses) {
-      const mechanic = await this.mechanicRepository.findOne({ where: { id: response.mechanicId } });
+      const mechanic = await this.mechanicRepository.findOne({
+        where: { id: response.mechanicId },
+      });
       if (mechanic) {
-        const mechanicUser = await this.userRepository.findOne({ where: { id: mechanic.userId } });
+        const mechanicUser = await this.userRepository.findOne({
+          where: { id: mechanic.userId },
+        });
         if (mechanicUser) {
           await this.notificationsService.sendToUser(
             mechanicUser.id,
             NotificationType.BOOKING_CANCELLED,
             {
-              title: 'Request Fulfilled',
-              body: 'Another mechanic was selected for this emergency request.',
+              title: "Request Fulfilled",
+              body: "Another mechanic was selected for this emergency request.",
               data: {
-                type: 'not_selected',
+                type: "not_selected",
                 requestId,
               },
             },
@@ -213,7 +250,9 @@ export class EmergencyService {
       }
     }
 
-    console.log(`✅ User selected mechanic ${mechanicId} for request ${requestId}`);
+    console.log(
+      `✅ User selected mechanic ${mechanicId} for request ${requestId}`,
+    );
     return updated;
   }
 
@@ -229,15 +268,17 @@ export class EmergencyService {
   ): Promise<MechanicResponseEntity> {
     const response = await this.mechanicResponseRepository.findOne({
       where: { emergencyRequestId: requestId, mechanicId },
-      relations: ['emergencyRequest'],
+      relations: ["emergencyRequest"],
     });
 
     if (!response) {
-      throw new NotFoundException('Response not found');
+      throw new NotFoundException("Response not found");
     }
 
-    if (response.responseType !== 'accepted') {
-      throw new BadRequestException('Only accepted responses can update status');
+    if (response.responseType !== "accepted") {
+      throw new BadRequestException(
+        "Only accepted responses can update status",
+      );
     }
 
     // Update response
@@ -249,35 +290,42 @@ export class EmergencyService {
     const updated = await this.mechanicResponseRepository.save(response);
 
     // Update emergency request status if job complete
-    if (status === 'job_complete') {
+    if (status === "job_complete") {
       await this.emergencyRequestRepository.update(
         { id: requestId },
-        { status: 'completed', completedAt: new Date() },
+        { status: "completed", completedAt: new Date() },
       );
-    } else if (status === 'on_the_way' && response.emergencyRequest.status === 'accepted') {
+    } else if (
+      status === "on_the_way" &&
+      response.emergencyRequest.status === "accepted"
+    ) {
       await this.emergencyRequestRepository.update(
         { id: requestId },
-        { status: 'in_progress' },
+        { status: "in_progress" },
       );
     }
 
     // Notify user about status change
     const statusMessages = {
-      on_the_way: 'The mechanic is on the way to your location',
-      arrived: 'The mechanic has arrived at your location',
-      job_complete: 'The job has been completed',
+      on_the_way: "The mechanic is on the way to your location",
+      arrived: "The mechanic has arrived at your location",
+      job_complete: "The job has been completed",
     };
 
-    const mechanic = await this.mechanicRepository.findOne({ where: { id: mechanicId } });
+    const mechanic = await this.mechanicRepository.findOne({
+      where: { id: mechanicId },
+    });
     if (mechanic) {
       await this.notificationsService.sendToUser(
         response.emergencyRequest.userId,
-        status === 'job_complete' ? NotificationType.SERVICE_COMPLETED : NotificationType.MECHANIC_ON_WAY,
+        status === "job_complete"
+          ? NotificationType.SERVICE_COMPLETED
+          : NotificationType.MECHANIC_ON_WAY,
         {
-          title: `Status Update: ${status.replace(/_/g, ' ').toUpperCase()}`,
-          body: statusMessages[status] || 'Status updated',
+          title: `Status Update: ${status.replace(/_/g, " ").toUpperCase()}`,
+          body: statusMessages[status] || "Status updated",
           data: {
-            type: 'status_update',
+            type: "status_update",
             requestId,
             mechanicId,
             mechanicName: mechanic.name,
@@ -287,7 +335,9 @@ export class EmergencyService {
       );
     }
 
-    console.log(`✅ Updated status for mechanic ${mechanicId} on request ${requestId}: ${status}`);
+    console.log(
+      `✅ Updated status for mechanic ${mechanicId} on request ${requestId}: ${status}`,
+    );
     return updated;
   }
 
@@ -297,26 +347,27 @@ export class EmergencyService {
   async getEmergencyRequest(requestId: string, userId: string): Promise<any> {
     const request = await this.emergencyRequestRepository.findOne({
       where: { id: requestId, userId },
-      relations: ['responses', 'responses.mechanic', 'selectedMechanic'],
+      relations: ["responses", "responses.mechanic", "selectedMechanic"],
     });
 
     if (!request) {
-      throw new NotFoundException('Emergency request not found');
+      throw new NotFoundException("Emergency request not found");
     }
 
     return {
       ...request,
       acceptedMechanics: request.responses
-        .filter(r => r.responseType === 'accepted')
-        .map(r => ({
+        .filter((r) => r.responseType === "accepted")
+        .map((r) => ({
           ...r.mechanic,
           responseId: r.id,
           status: r.status,
           etaMinutes: r.etaMinutes,
           notes: r.notes,
-          currentLocation: r.currentLatitude && r.currentLongitude
-            ? { lat: r.currentLatitude, lng: r.currentLongitude }
-            : null,
+          currentLocation:
+            r.currentLatitude && r.currentLongitude
+              ? { lat: r.currentLatitude, lng: r.currentLongitude }
+              : null,
           respondedAt: r.respondedAt,
         })),
     };
@@ -325,33 +376,38 @@ export class EmergencyService {
   /**
    * Get all emergency requests for a user
    */
-  async getUserEmergencyRequests(userId: string): Promise<EmergencyRequestEntity[]> {
+  async getUserEmergencyRequests(
+    userId: string,
+  ): Promise<EmergencyRequestEntity[]> {
     return this.emergencyRequestRepository.find({
       where: { userId },
-      relations: ['responses', 'responses.mechanic', 'selectedMechanic'],
-      order: { createdAt: 'DESC' },
+      relations: ["responses", "responses.mechanic", "selectedMechanic"],
+      order: { createdAt: "DESC" },
     });
   }
 
   /**
    * Cancel emergency request
    */
-  async cancelEmergencyRequest(requestId: string, userId: string): Promise<void> {
+  async cancelEmergencyRequest(
+    requestId: string,
+    userId: string,
+  ): Promise<void> {
     const request = await this.emergencyRequestRepository.findOne({
       where: { id: requestId, userId },
     });
 
     if (!request) {
-      throw new NotFoundException('Emergency request not found');
+      throw new NotFoundException("Emergency request not found");
     }
 
-    if (request.status === 'completed' || request.status === 'cancelled') {
-      throw new BadRequestException('Cannot cancel this request');
+    if (request.status === "completed" || request.status === "cancelled") {
+      throw new BadRequestException("Cannot cancel this request");
     }
 
     await this.emergencyRequestRepository.update(
       { id: requestId },
-      { status: 'cancelled', cancelledAt: new Date() },
+      { status: "cancelled", cancelledAt: new Date() },
     );
 
     console.log(`✅ Emergency request ${requestId} cancelled by user`);
@@ -369,20 +425,25 @@ export class EmergencyService {
   ): Promise<EmergencyRequestEntity> {
     const request = await this.emergencyRequestRepository.findOne({
       where: { id: requestId, userId },
-      relations: ['selectedMechanic'],
+      relations: ["selectedMechanic"],
     });
 
     if (!request) {
-      throw new NotFoundException('Emergency request not found');
+      throw new NotFoundException("Emergency request not found");
     }
 
-    if (request.status !== 'completed') {
-      throw new BadRequestException('Cannot provide feedback for incomplete requests');
+    if (request.status !== "completed") {
+      throw new BadRequestException(
+        "Cannot provide feedback for incomplete requests",
+      );
     }
 
     // Calculate resolution time from creation to completion
-    const resolutionMinutes = request.completedAt 
-      ? Math.round((request.completedAt.getTime() - request.createdAt.getTime()) / (1000 * 60))
+    const resolutionMinutes = request.completedAt
+      ? Math.round(
+          (request.completedAt.getTime() - request.createdAt.getTime()) /
+            (1000 * 60),
+        )
       : null;
 
     // Update the request with feedback
@@ -395,12 +456,14 @@ export class EmergencyService {
       },
     );
 
-    console.log(`✅ Feedback recorded for request ${requestId}: rating=${satisfactionRating}, resolution=${resolutionMinutes}min`);
+    console.log(
+      `✅ Feedback recorded for request ${requestId}: rating=${satisfactionRating}, resolution=${resolutionMinutes}min`,
+    );
 
     // Return the updated request along with expertise update info
     const updatedRequest = await this.emergencyRequestRepository.findOne({
       where: { id: requestId },
-      relations: ['selectedMechanic'],
+      relations: ["selectedMechanic"],
     });
     return updatedRequest!;
   }
@@ -427,11 +490,13 @@ export class EmergencyService {
     return {
       mechanicId: request.selectedMechanicId,
       problemType: request.problemType,
-      successful: request.status === 'completed' && 
-        (request.userSatisfactionRating === null || request.userSatisfactionRating >= 3),
+      successful:
+        request.status === "completed" &&
+        (request.userSatisfactionRating === null ||
+          request.userSatisfactionRating >= 3),
       resolutionMinutes: request.resolutionTimeMinutes,
-      satisfactionRating: request.userSatisfactionRating 
-        ? parseFloat(request.userSatisfactionRating as any) 
+      satisfactionRating: request.userSatisfactionRating
+        ? parseFloat(request.userSatisfactionRating as any)
         : null,
     };
   }

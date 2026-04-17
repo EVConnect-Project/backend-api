@@ -26,8 +26,8 @@ export class FilterChargersDto {
   amenities?: string[]; // ['wifi', 'restroom', 'restaurant', 'parking', 'shelter']
 
   // Sorting
-  sortBy?: 'distance' | 'price' | 'power' | 'rating';
-  sortOrder?: 'asc' | 'desc';
+  sortBy?: "distance" | "price" | "power" | "rating";
+  sortOrder?: "asc" | "desc";
 
   // Pagination
   limit?: number;

@@ -1,9 +1,7 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
-export class CreateServiceStationDomain1776000000000
-  implements MigrationInterface
-{
-  name = 'CreateServiceStationDomain1776000000000';
+export class CreateServiceStationDomain1776000000000 implements MigrationInterface {
+  name = "CreateServiceStationDomain1776000000000";
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
@@ -210,13 +208,21 @@ export class CreateServiceStationDomain1776000000000
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX IF EXISTS idx_service_stations_verified`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS idx_service_stations_verified`,
+    );
     await queryRunner.query(`DROP INDEX IF EXISTS idx_service_stations_owner`);
     await queryRunner.query(`DROP TABLE IF EXISTS service_stations`);
 
-    await queryRunner.query(`DROP INDEX IF EXISTS idx_service_station_applications_status`);
-    await queryRunner.query(`DROP INDEX IF EXISTS idx_service_station_applications_user`);
-    await queryRunner.query(`DROP TABLE IF EXISTS service_station_applications`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS idx_service_station_applications_status`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS idx_service_station_applications_user`,
+    );
+    await queryRunner.query(
+      `DROP TABLE IF EXISTS service_station_applications`,
+    );
 
     await queryRunner.query(
       `DROP INDEX IF EXISTS idx_service_provider_signals_mode_issue`,

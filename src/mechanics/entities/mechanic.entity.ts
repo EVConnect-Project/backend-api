@@ -1,85 +1,118 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, OneToMany, JoinColumn } from 'typeorm';
-import { UserEntity } from '../../users/entities/user.entity';
-import { MechanicExpertiseEntity } from './mechanic-expertise.entity';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  ManyToOne,
+  OneToMany,
+  JoinColumn,
+} from "typeorm";
+import { UserEntity } from "../../users/entities/user.entity";
+import { MechanicExpertiseEntity } from "./mechanic-expertise.entity";
 
-@Entity('mechanics')
+@Entity("mechanics")
 export class MechanicEntity {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn("uuid")
   id: string;
 
-  @Column({ name: 'user_id' })
+  @Column({ name: "user_id" })
   userId: string;
 
   @ManyToOne(() => UserEntity)
-  @JoinColumn({ name: 'user_id' })
+  @JoinColumn({ name: "user_id" })
   user: UserEntity;
 
   @Column()
   name: string;
 
-  @Column({ type: 'text', array: true, default: '{}' })
+  @Column({ type: "text", array: true, default: "{}" })
   services: string[]; // e.g., ['tire-change', 'battery-jump', 'towing', 'repair']
 
   @Column({ nullable: true })
   specialization: string;
 
-  @Column({ name: 'yearsOfExperience', type: 'int', default: 0 })
+  @Column({ name: "yearsOfExperience", type: "int", default: 0 })
   yearsOfExperience: number;
 
-  @Column({ type: 'decimal', precision: 10, scale: 7 })
+  @Column({ type: "decimal", precision: 10, scale: 7 })
   lat: number;
 
-  @Column({ type: 'decimal', precision: 10, scale: 7 })
+  @Column({ type: "decimal", precision: 10, scale: 7 })
   lng: number;
 
-  @Column({ type: 'decimal', precision: 3, scale: 2, default: 0 })
+  @Column({ type: "decimal", precision: 3, scale: 2, default: 0 })
   rating: number;
 
   @Column({ nullable: true })
   phone: string;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: "text", nullable: true })
   description: string;
 
-  @Column({ name: 'serviceRadius', type: 'decimal', precision: 5, scale: 2, default: 5 })
+  @Column({
+    name: "serviceRadius",
+    type: "decimal",
+    precision: 5,
+    scale: 2,
+    default: 5,
+  })
   serviceRadius: number; // Service radius in kilometers (e.g., 5, 10, 25)
 
   @Column({ default: true })
   available: boolean;
 
-  @Column({ name: 'isBanned', default: false })
+  @Column({ name: "isBanned", default: false })
   isBanned: boolean;
 
-  @Column({ name: 'pricePerHour', type: 'decimal', precision: 10, scale: 2, nullable: true })
+  @Column({
+    name: "pricePerHour",
+    type: "decimal",
+    precision: 10,
+    scale: 2,
+    nullable: true,
+  })
   pricePerHour: number;
 
-  @Column({ name: 'completedJobs', type: 'int', default: 0 })
+  @Column({ name: "completedJobs", type: "int", default: 0 })
   completedJobs: number;
 
-  @Column({ name: 'licenseNumber', nullable: true })
+  @Column({ name: "licenseNumber", nullable: true })
   licenseNumber: string;
 
   @Column({ nullable: true })
   certifications: string;
 
-  @Column({ name: 'currentLocationLat', type: 'decimal', precision: 10, scale: 7, nullable: true })
+  @Column({
+    name: "currentLocationLat",
+    type: "decimal",
+    precision: 10,
+    scale: 7,
+    nullable: true,
+  })
   currentLocationLat: number;
 
-  @Column({ name: 'currentLocationLng', type: 'decimal', precision: 10, scale: 7, nullable: true })
+  @Column({
+    name: "currentLocationLng",
+    type: "decimal",
+    precision: 10,
+    scale: 7,
+    nullable: true,
+  })
   currentLocationLng: number;
 
-  @Column({ name: 'isOnJob', type: 'boolean', default: false })
+  @Column({ name: "isOnJob", type: "boolean", default: false })
   isOnJob: boolean;
 
-  @Column({ name: 'lastOnlineAt', type: 'timestamp', nullable: true })
+  @Column({ name: "lastOnlineAt", type: "timestamp", nullable: true })
   lastOnlineAt: Date;
 
-  @CreateDateColumn({ name: 'createdAt' })
+  @CreateDateColumn({ name: "createdAt" })
   createdAt: Date;
 
-  @UpdateDateColumn({ name: 'updatedAt' })
+  @UpdateDateColumn({ name: "updatedAt" })
   updatedAt: Date;
 
-  @OneToMany(() => MechanicExpertiseEntity, expertise => expertise.mechanic)
+  @OneToMany(() => MechanicExpertiseEntity, (expertise) => expertise.mechanic)
   expertise: MechanicExpertiseEntity[];
 }

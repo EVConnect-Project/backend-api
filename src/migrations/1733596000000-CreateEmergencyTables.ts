@@ -1,11 +1,11 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class CreateEmergencyTables1733596000000 implements MigrationInterface {
-    name = 'CreateEmergencyTables1733596000000'
+  name = "CreateEmergencyTables1733596000000";
 
-    public async up(queryRunner: QueryRunner): Promise<void> {
-        // Create emergency_requests table
-        await queryRunner.query(`
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    // Create emergency_requests table
+    await queryRunner.query(`
             CREATE TABLE IF NOT EXISTS "emergency_requests" (
                 "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
                 "userId" uuid NOT NULL,
@@ -25,8 +25,8 @@ export class CreateEmergencyTables1733596000000 implements MigrationInterface {
             )
         `);
 
-        // Create mechanic_responses table
-        await queryRunner.query(`
+    // Create mechanic_responses table
+    await queryRunner.query(`
             CREATE TABLE IF NOT EXISTS "mechanic_responses" (
                 "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
                 "emergencyRequestId" uuid NOT NULL,
@@ -43,8 +43,8 @@ export class CreateEmergencyTables1733596000000 implements MigrationInterface {
             )
         `);
 
-        // Add foreign keys
-                await queryRunner.query(`
+    // Add foreign keys
+    await queryRunner.query(`
                         DO $$
                         BEGIN
                             IF NOT EXISTS (
@@ -60,7 +60,7 @@ export class CreateEmergencyTables1733596000000 implements MigrationInterface {
                         END $$;
                 `);
 
-                await queryRunner.query(`
+    await queryRunner.query(`
                         DO $$
                         BEGIN
                             IF NOT EXISTS (
@@ -76,7 +76,7 @@ export class CreateEmergencyTables1733596000000 implements MigrationInterface {
                         END $$;
                 `);
 
-                await queryRunner.query(`
+    await queryRunner.query(`
                         DO $$
                         BEGIN
                             IF NOT EXISTS (
@@ -92,7 +92,7 @@ export class CreateEmergencyTables1733596000000 implements MigrationInterface {
                         END $$;
                 `);
 
-                await queryRunner.query(`
+    await queryRunner.query(`
                         DO $$
                         BEGIN
                             IF NOT EXISTS (
@@ -108,39 +108,55 @@ export class CreateEmergencyTables1733596000000 implements MigrationInterface {
                         END $$;
                 `);
 
-        // Create indexes for better query performance
-        await queryRunner.query(`
+    // Create indexes for better query performance
+    await queryRunner.query(`
             CREATE INDEX IF NOT EXISTS "IDX_emergency_requests_userId" ON "emergency_requests" ("userId")
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
             CREATE INDEX IF NOT EXISTS "IDX_emergency_requests_status" ON "emergency_requests" ("status")
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
             CREATE INDEX IF NOT EXISTS "IDX_mechanic_responses_emergencyRequestId" ON "mechanic_responses" ("emergencyRequestId")
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
             CREATE INDEX IF NOT EXISTS "IDX_mechanic_responses_mechanicId" ON "mechanic_responses" ("mechanicId")
         `);
-    }
+  }
 
-    public async down(queryRunner: QueryRunner): Promise<void> {
-        // Drop indexes
-        await queryRunner.query(`DROP INDEX IF EXISTS "IDX_mechanic_responses_mechanicId"`);
-        await queryRunner.query(`DROP INDEX IF EXISTS "IDX_mechanic_responses_emergencyRequestId"`);
-        await queryRunner.query(`DROP INDEX IF EXISTS "IDX_emergency_requests_status"`);
-        await queryRunner.query(`DROP INDEX IF EXISTS "IDX_emergency_requests_userId"`);
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    // Drop indexes
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_mechanic_responses_mechanicId"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_mechanic_responses_emergencyRequestId"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_emergency_requests_status"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_emergency_requests_userId"`,
+    );
 
-        // Drop foreign keys
-        await queryRunner.query(`ALTER TABLE "mechanic_responses" DROP CONSTRAINT IF EXISTS "FK_mechanic_responses_mechanic"`);
-        await queryRunner.query(`ALTER TABLE "mechanic_responses" DROP CONSTRAINT IF EXISTS "FK_mechanic_responses_emergency"`);
-        await queryRunner.query(`ALTER TABLE "emergency_requests" DROP CONSTRAINT IF EXISTS "FK_emergency_requests_mechanic"`);
-        await queryRunner.query(`ALTER TABLE "emergency_requests" DROP CONSTRAINT IF EXISTS "FK_emergency_requests_user"`);
+    // Drop foreign keys
+    await queryRunner.query(
+      `ALTER TABLE "mechanic_responses" DROP CONSTRAINT IF EXISTS "FK_mechanic_responses_mechanic"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "mechanic_responses" DROP CONSTRAINT IF EXISTS "FK_mechanic_responses_emergency"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "emergency_requests" DROP CONSTRAINT IF EXISTS "FK_emergency_requests_mechanic"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "emergency_requests" DROP CONSTRAINT IF EXISTS "FK_emergency_requests_user"`,
+    );
 
-        // Drop tables
-        await queryRunner.query(`DROP TABLE IF EXISTS "mechanic_responses"`);
-        await queryRunner.query(`DROP TABLE IF EXISTS "emergency_requests"`);
-    }
+    // Drop tables
+    await queryRunner.query(`DROP TABLE IF EXISTS "mechanic_responses"`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "emergency_requests"`);
+  }
 }

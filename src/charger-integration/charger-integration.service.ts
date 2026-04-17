@@ -1,16 +1,22 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Charger } from '../charger/entities/charger.entity';
-import { HttpService } from '@nestjs/axios';
-import { firstValueFrom } from 'rxjs';
-import * as crypto from 'crypto';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { Charger } from "../charger/entities/charger.entity";
+import { HttpService } from "@nestjs/axios";
+import { firstValueFrom } from "rxjs";
+import * as crypto from "crypto";
 
 @Injectable()
 export class ChargerIntegrationService {
   private readonly logger = new Logger(ChargerIntegrationService.name);
-  private readonly chargingServiceUrl = 'http://localhost:4000';
-  private readonly apiKey = process.env.CHARGING_SERVICE_API_KEY || 'evconnect-backend-api-key-dev';
+  private readonly chargingServiceUrl = "http://localhost:4000";
+  private readonly apiKey =
+    process.env.CHARGING_SERVICE_API_KEY || "evconnect-backend-api-key-dev";
 
   constructor(
     @InjectRepository(Charger)
@@ -29,33 +35,37 @@ export class ChargerIntegrationService {
   }> {
     const charger = await this.chargerRepository.findOne({
       where: { id: chargerId },
-      relations: ['owner'],
+      relations: ["owner"],
     });
 
     if (!charger) {
-      throw new NotFoundException('Charger not found');
+      throw new NotFoundException("Charger not found");
     }
 
     if (charger.chargeBoxIdentity) {
       this.logger.warn(`Charger ${chargerId} already has OCPP credentials`);
       return {
         chargeBoxIdentity: charger.chargeBoxIdentity,
-        setupInstructions: this.generateSetupInstructions(charger.chargeBoxIdentity),
+        setupInstructions: this.generateSetupInstructions(
+          charger.chargeBoxIdentity,
+        ),
         wsUrl: `ws://192.168.2.1:4000/ocpp`,
       };
     }
 
     // Generate unique chargeBoxIdentity
-    const prefix = 'EVCONNECT-CHG';
-    const randomId = crypto.randomBytes(4).toString('hex').toUpperCase();
+    const prefix = "EVCONNECT-CHG";
+    const randomId = crypto.randomBytes(4).toString("hex").toUpperCase();
     const chargeBoxIdentity = `${prefix}-${randomId}`;
 
     // Update charger with OCPP credentials
     charger.chargeBoxIdentity = chargeBoxIdentity;
-    charger.ocppStatus = 'pending';
+    charger.ocppStatus = "pending";
     await this.chargerRepository.save(charger);
 
-    this.logger.log(`Generated OCPP credentials for charger ${chargerId}: ${chargeBoxIdentity}`);
+    this.logger.log(
+      `Generated OCPP credentials for charger ${chargerId}: ${chargeBoxIdentity}`,
+    );
 
     return {
       chargeBoxIdentity,
@@ -68,7 +78,10 @@ export class ChargerIntegrationService {
    * Link OCPP charger to registered charger when it connects
    * Called by charging service via webhook or polling
    */
-  async linkOcppCharger(chargeBoxIdentity: string, ocppChargerId: string): Promise<void> {
+  async linkOcppCharger(
+    chargeBoxIdentity: string,
+    ocppChargerId: string,
+  ): Promise<void> {
     const charger = await this.chargerRepository.findOne({
       where: { chargeBoxIdentity },
     });
@@ -91,17 +104,19 @@ export class ChargerIntegrationService {
             longitude: parseFloat(charger.lng.toString()),
           },
           {
-            headers: { 'X-API-Key': this.apiKey },
+            headers: { "X-API-Key": this.apiKey },
           },
         ),
       );
 
       // Update registration record
-      charger.ocppStatus = 'connected';
+      charger.ocppStatus = "connected";
       charger.isOnline = true;
       await this.chargerRepository.save(charger);
 
-      this.logger.log(`Linked OCPP charger ${chargeBoxIdentity} to registry ${charger.id}`);
+      this.logger.log(
+        `Linked OCPP charger ${chargeBoxIdentity} to registry ${charger.id}`,
+      );
     } catch (error) {
       this.logger.error(`Failed to link OCPP charger: ${error.message}`);
       throw error;
@@ -127,7 +142,7 @@ export class ChargerIntegrationService {
         this.httpService.get(
           `${this.chargingServiceUrl}/chargers/by-identity/${chargeBoxIdentity}`,
           {
-            headers: { 'X-API-Key': this.apiKey },
+            headers: { "X-API-Key": this.apiKey },
           },
         ),
       );
@@ -141,15 +156,18 @@ export class ChargerIntegrationService {
       } else {
         charger.lastHeartbeat = null;
       }
-      charger.ocppStatus = ocppCharger.isOnline ? 'connected' : 'configured';
-      
+      charger.ocppStatus = ocppCharger.isOnline ? "connected" : "configured";
+
       // Update availability status
-      if (ocppCharger.status === 'Charging' || ocppCharger.status === 'Preparing') {
-        charger.status = 'in-use';
+      if (
+        ocppCharger.status === "Charging" ||
+        ocppCharger.status === "Preparing"
+      ) {
+        charger.status = "in-use";
       } else if (ocppCharger.isOnline) {
-        charger.status = 'available';
+        charger.status = "available";
       } else {
-        charger.status = 'offline';
+        charger.status = "offline";
       }
 
       await this.chargerRepository.save(charger);
@@ -170,9 +188,12 @@ export class ChargerIntegrationService {
     try {
       // Get session details from charging service
       const response = await firstValueFrom(
-        this.httpService.get(`${this.chargingServiceUrl}/sessions/${sessionId}`, {
-          headers: { 'X-API-Key': this.apiKey },
-        }),
+        this.httpService.get(
+          `${this.chargingServiceUrl}/sessions/${sessionId}`,
+          {
+            headers: { "X-API-Key": this.apiKey },
+          },
+        ),
       );
 
       const session = response.data;
@@ -195,7 +216,7 @@ export class ChargerIntegrationService {
             platformEarnings,
           },
           {
-            headers: { 'X-API-Key': this.apiKey },
+            headers: { "X-API-Key": this.apiKey },
           },
         ),
       );
@@ -217,11 +238,11 @@ export class ChargerIntegrationService {
   async getChargerWithOcppStatus(chargerId: string): Promise<any> {
     const charger = await this.chargerRepository.findOne({
       where: { id: chargerId },
-      relations: ['owner'],
+      relations: ["owner"],
     });
 
     if (!charger) {
-      throw new NotFoundException('Charger not found');
+      throw new NotFoundException("Charger not found");
     }
 
     let ocppStatus = null;
@@ -232,13 +253,15 @@ export class ChargerIntegrationService {
           this.httpService.get(
             `${this.chargingServiceUrl}/chargers/by-identity/${charger.chargeBoxIdentity}`,
             {
-              headers: { 'X-API-Key': this.apiKey },
+              headers: { "X-API-Key": this.apiKey },
             },
           ),
         );
         ocppStatus = response.data;
       } catch (error) {
-        this.logger.warn(`Could not fetch OCPP status for ${charger.chargeBoxIdentity}`);
+        this.logger.warn(
+          `Could not fetch OCPP status for ${charger.chargeBoxIdentity}`,
+        );
       }
     }
 
@@ -294,9 +317,12 @@ Need help? Contact support@evconnect.com
   }> {
     try {
       const response = await firstValueFrom(
-        this.httpService.get(`${this.chargingServiceUrl}/owner/${ownerId}/revenue`, {
-          headers: { 'X-API-Key': this.apiKey },
-        }),
+        this.httpService.get(
+          `${this.chargingServiceUrl}/owner/${ownerId}/revenue`,
+          {
+            headers: { "X-API-Key": this.apiKey },
+          },
+        ),
       );
 
       return response.data;

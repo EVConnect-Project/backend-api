@@ -1,7 +1,12 @@
-import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Charger } from '../../charger/entities/charger.entity';
+import {
+  Injectable,
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException,
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { Charger } from "../../charger/entities/charger.entity";
 
 /**
  * Guard to check if user owns any chargers (is a charger owner)
@@ -19,16 +24,16 @@ export class IsChargerOwnerGuard implements CanActivate {
     const user = request.user;
 
     if (!user || !user.userId) {
-      throw new ForbiddenException('User not authenticated');
+      throw new ForbiddenException("User not authenticated");
     }
 
     // Admins always have access
-    if (user.role === 'admin') {
+    if (user.role === "admin") {
       return true;
     }
 
     // Check if user has role 'owner'
-    if (user.role === 'owner') {
+    if (user.role === "owner") {
       return true;
     }
 
@@ -41,6 +46,8 @@ export class IsChargerOwnerGuard implements CanActivate {
       return true;
     }
 
-    throw new ForbiddenException('You must be a charger owner to access this resource');
+    throw new ForbiddenException(
+      "You must be a charger owner to access this resource",
+    );
   }
 }

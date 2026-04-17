@@ -1,9 +1,13 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { ChargerReview } from './entities/review.entity';
-import { CreateReviewDto } from './dto/create-review.dto';
-import { UpdateReviewDto } from './dto/update-review.dto';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { ChargerReview } from "./entities/review.entity";
+import { CreateReviewDto } from "./dto/create-review.dto";
+import { UpdateReviewDto } from "./dto/update-review.dto";
 
 @Injectable()
 export class ReviewsService {
@@ -12,7 +16,10 @@ export class ReviewsService {
     private reviewsRepository: Repository<ChargerReview>,
   ) {}
 
-  async create(createReviewDto: CreateReviewDto, userId: string): Promise<ChargerReview> {
+  async create(
+    createReviewDto: CreateReviewDto,
+    userId: string,
+  ): Promise<ChargerReview> {
     // Check if user already reviewed this charger
     const existing = await this.reviewsRepository.findOne({
       where: {
@@ -22,7 +29,7 @@ export class ReviewsService {
     });
 
     if (existing) {
-      throw new ForbiddenException('You have already reviewed this charger');
+      throw new ForbiddenException("You have already reviewed this charger");
     }
 
     const review = this.reviewsRepository.create({
@@ -40,8 +47,8 @@ export class ReviewsService {
   ): Promise<{ reviews: ChargerReview[]; total: number }> {
     const [reviews, total] = await this.reviewsRepository.findAndCount({
       where: { chargerId },
-      relations: ['user'],
-      order: { createdAt: 'DESC' },
+      relations: ["user"],
+      order: { createdAt: "DESC" },
       skip: (page - 1) * limit,
       take: limit,
     });
@@ -49,7 +56,7 @@ export class ReviewsService {
     // Map to include user info
     const reviewsWithUser = reviews.map((review) => ({
       ...review,
-      userName: review.user?.name || 'Anonymous',
+      userName: review.user?.name || "Anonymous",
       userAvatar: null, // UserEntity doesn't have profilePicture field
       isVerifiedUser: review.user?.phoneNumber ? true : false,
     }));
@@ -64,7 +71,7 @@ export class ReviewsService {
   }> {
     const reviews = await this.reviewsRepository.find({
       where: { chargerId },
-      select: ['rating'],
+      select: ["rating"],
     });
 
     const total = reviews.length;
@@ -94,11 +101,11 @@ export class ReviewsService {
   async findOne(id: string): Promise<ChargerReview> {
     const review = await this.reviewsRepository.findOne({
       where: { id },
-      relations: ['user'],
+      relations: ["user"],
     });
 
     if (!review) {
-      throw new NotFoundException('Review not found');
+      throw new NotFoundException("Review not found");
     }
 
     return review;
@@ -112,7 +119,7 @@ export class ReviewsService {
     const review = await this.findOne(id);
 
     if (review.userId !== userId) {
-      throw new ForbiddenException('You can only update your own reviews');
+      throw new ForbiddenException("You can only update your own reviews");
     }
 
     Object.assign(review, updateReviewDto);
@@ -123,7 +130,7 @@ export class ReviewsService {
     const review = await this.findOne(id);
 
     if (review.userId !== userId) {
-      throw new ForbiddenException('You can only delete your own reviews');
+      throw new ForbiddenException("You can only delete your own reviews");
     }
 
     await this.reviewsRepository.remove(review);

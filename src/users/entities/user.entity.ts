@@ -1,15 +1,22 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToMany } from 'typeorm';
-import { Exclude } from 'class-transformer';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  OneToMany,
+} from "typeorm";
+import { Exclude } from "class-transformer";
 
-@Entity('users')
+@Entity("users")
 export class UserEntity {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn("uuid")
   id: string;
 
-  @Column({ name: 'phone', nullable: true, unique: true })
+  @Column({ name: "phone", nullable: true, unique: true })
   phoneNumber: string;
 
-  @Column({ name: 'countryCode', nullable: true })
+  @Column({ name: "countryCode", nullable: true })
   countryCode: string;
 
   @Column()
@@ -22,53 +29,59 @@ export class UserEntity {
   @Column({ nullable: true })
   gender: string;
 
-  @Column({ default: 'user' })
+  @Column({ default: "user" })
   role: string;
 
-  @Column({ name: 'isVerified', default: false })
+  @Column({ name: "isVerified", default: false })
   isVerified: boolean;
 
-  @Column({ name: 'isBanned', default: false })
+  @Column({ name: "isBanned", default: false })
   isBanned: boolean;
 
   // EV Driver Profile Information
   // Vehicle types: car, van, bus, truck, three-wheeler, bike
-  @Column({ name: 'vehicle_type', nullable: true })
+  @Column({ name: "vehicle_type", nullable: true })
   vehicleType: string;
 
-  @Column({ name: 'vehicle_brand', nullable: true })
+  @Column({ name: "vehicle_brand", nullable: true })
   vehicleBrand: string;
 
-  @Column({ name: 'vehicle_model', nullable: true })
+  @Column({ name: "vehicle_model", nullable: true })
   vehicleModel: string;
 
-  @Column({ name: 'battery_capacity', type: 'decimal', precision: 5, scale: 2, nullable: true })
+  @Column({
+    name: "battery_capacity",
+    type: "decimal",
+    precision: 5,
+    scale: 2,
+    nullable: true,
+  })
   batteryCapacity: number;
 
   // Multiple connector types supported (JSON array)
   // e.g., ["Type 2 (AC)", "CCS2 (DC)"]
-  @Column({ name: 'connector_type', type: 'jsonb', nullable: true })
+  @Column({ name: "connector_type", type: "jsonb", nullable: true })
   connectorTypes: string[];
 
   // Legal Requirements
-  @Column({ name: 'accepted_terms', default: false })
+  @Column({ name: "accepted_terms", default: false })
   acceptedTerms: boolean;
 
-  @Column({ name: 'accepted_privacy_policy', default: false })
+  @Column({ name: "accepted_privacy_policy", default: false })
   acceptedPrivacyPolicy: boolean;
 
-  @Column({ name: 'terms_accepted_at', type: 'timestamp', nullable: true })
+  @Column({ name: "terms_accepted_at", type: "timestamp", nullable: true })
   termsAcceptedAt: Date;
 
   // Token version for logout invalidation - incremented on logout to invalidate all existing tokens
   tokenVersion: number;
 
-  @OneToMany('MarketplaceListing', 'seller')
+  @OneToMany("MarketplaceListing", "seller")
   marketplaceListings: any[];
 
-  @CreateDateColumn({ name: 'createdAt' })
+  @CreateDateColumn({ name: "createdAt" })
   createdAt: Date;
 
-  @UpdateDateColumn({ name: 'updatedAt' })
+  @UpdateDateColumn({ name: "updatedAt" })
   updatedAt: Date;
 }

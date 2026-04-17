@@ -1,13 +1,22 @@
-import { Injectable, Logger, OnModuleInit, Inject, forwardRef } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
-import { ConfigService } from '@nestjs/config';
-import * as admin from 'firebase-admin';
-import { FcmTokenEntity } from './entities/fcm-token.entity';
-import { NotificationLogEntity } from './entities/notification-log.entity';
-import { NotificationPreferenceEntity } from './entities/notification-preference.entity';
-import { NotificationType, NotificationPayload } from './types/notification-types';
-import { NotificationsGateway } from './notifications.gateway';
+import {
+  Injectable,
+  Logger,
+  OnModuleInit,
+  Inject,
+  forwardRef,
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository, In } from "typeorm";
+import { ConfigService } from "@nestjs/config";
+import * as admin from "firebase-admin";
+import { FcmTokenEntity } from "./entities/fcm-token.entity";
+import { NotificationLogEntity } from "./entities/notification-log.entity";
+import { NotificationPreferenceEntity } from "./entities/notification-preference.entity";
+import {
+  NotificationType,
+  NotificationPayload,
+} from "./types/notification-types";
+import { NotificationsGateway } from "./notifications.gateway";
 
 @Injectable()
 export class NotificationsService implements OnModuleInit {
@@ -35,16 +44,20 @@ export class NotificationsService implements OnModuleInit {
       // If Firebase is already initialized by another service, reuse it
       if (admin.apps.length) {
         this.firebaseApp = admin.app();
-        this.logger.log('Firebase Admin SDK reused from existing instance');
+        this.logger.log("Firebase Admin SDK reused from existing instance");
         return;
       }
 
-      const projectId = this.configService.get('FIREBASE_PROJECT_ID');
-      const privateKey = this.configService.get('FIREBASE_PRIVATE_KEY')?.replace(/\\n/g, '\n');
-      const clientEmail = this.configService.get('FIREBASE_CLIENT_EMAIL');
+      const projectId = this.configService.get("FIREBASE_PROJECT_ID");
+      const privateKey = this.configService
+        .get("FIREBASE_PRIVATE_KEY")
+        ?.replace(/\\n/g, "\n");
+      const clientEmail = this.configService.get("FIREBASE_CLIENT_EMAIL");
 
       if (!projectId || !privateKey || !clientEmail) {
-        this.logger.warn('Firebase credentials not configured. Push notifications will be disabled.');
+        this.logger.warn(
+          "Firebase credentials not configured. Push notifications will be disabled.",
+        );
         return;
       }
 
@@ -56,9 +69,9 @@ export class NotificationsService implements OnModuleInit {
         }),
       });
 
-      this.logger.log('✅ Firebase Admin SDK initialized successfully');
+      this.logger.log("✅ Firebase Admin SDK initialized successfully");
     } catch (error) {
-      this.logger.error('❌ Failed to initialize Firebase Admin SDK', error);
+      this.logger.error("❌ Failed to initialize Firebase Admin SDK", error);
     }
   }
 
@@ -68,7 +81,7 @@ export class NotificationsService implements OnModuleInit {
   async saveFcmToken(
     userId: string,
     fcmToken: string,
-    platform: 'ios' | 'android' | 'web',
+    platform: "ios" | "android" | "web",
     deviceId?: string,
   ): Promise<FcmTokenEntity> {
     // Check if token already exists
@@ -126,7 +139,9 @@ export class NotificationsService implements OnModuleInit {
     // Check if user has enabled this notification type
     const isEnabled = await this.isNotificationEnabled(userId, type);
     if (!isEnabled) {
-      this.logger.log(`Notification type ${type} is disabled for user ${userId}`);
+      this.logger.log(
+        `Notification type ${type} is disabled for user ${userId}`,
+      );
       return;
     }
 
@@ -144,7 +159,7 @@ export class NotificationsService implements OnModuleInit {
       title: payload.title,
       body: payload.body,
       data: payload.data || null,
-      status: 'pending',
+      status: "pending",
     });
     await this.notificationLogRepository.save(log);
 
@@ -155,10 +170,12 @@ export class NotificationsService implements OnModuleInit {
 
     try {
       await Promise.all(sendPromises);
-      log.status = 'sent';
+      log.status = "sent";
       log.sentAt = new Date();
       await this.notificationLogRepository.save(log);
-      this.logger.log(`✅ Notification sent to user ${userId} (${tokens.length} devices)`);
+      this.logger.log(
+        `✅ Notification sent to user ${userId} (${tokens.length} devices)`,
+      );
 
       // Emit via WebSocket for real-time delivery
       try {
@@ -172,12 +189,17 @@ export class NotificationsService implements OnModuleInit {
           createdAt: log.createdAt,
         });
       } catch (wsError) {
-        this.logger.warn(`WebSocket emit failed for user ${userId}: ${wsError}`);
+        this.logger.warn(
+          `WebSocket emit failed for user ${userId}: ${wsError}`,
+        );
       }
     } catch (error) {
-      log.status = 'failed';
+      log.status = "failed";
       await this.notificationLogRepository.save(log);
-      this.logger.error(`❌ Failed to send notification to user ${userId}`, error);
+      this.logger.error(
+        `❌ Failed to send notification to user ${userId}`,
+        error,
+      );
     }
   }
 
@@ -190,7 +212,7 @@ export class NotificationsService implements OnModuleInit {
     type: string,
   ): Promise<void> {
     if (!this.firebaseApp) {
-      this.logger.warn('Firebase not initialized. Skipping notification send.');
+      this.logger.warn("Firebase not initialized. Skipping notification send.");
       return;
     }
 
@@ -205,11 +227,11 @@ export class NotificationsService implements OnModuleInit {
         ...(payload.data || {}),
       },
       android: {
-        priority: 'high',
+        priority: "high",
         notification: {
           channelId: this.getChannelId(type),
-          sound: 'default',
-          priority: 'high',
+          sound: "default",
+          priority: "high",
         },
       },
       apns: {
@@ -219,7 +241,7 @@ export class NotificationsService implements OnModuleInit {
               title: payload.title,
               body: payload.body,
             },
-            sound: 'default',
+            sound: "default",
             badge: 1,
           },
         },
@@ -230,9 +252,13 @@ export class NotificationsService implements OnModuleInit {
       await admin.messaging().send(message);
     } catch (error: any) {
       // Handle invalid token
-      if (error.code === 'messaging/invalid-registration-token' || 
-          error.code === 'messaging/registration-token-not-registered') {
-        this.logger.warn(`Invalid token, marking as inactive: ${fcmToken.substring(0, 20)}...`);
+      if (
+        error.code === "messaging/invalid-registration-token" ||
+        error.code === "messaging/registration-token-not-registered"
+      ) {
+        this.logger.warn(
+          `Invalid token, marking as inactive: ${fcmToken.substring(0, 20)}...`,
+        );
         await this.fcmTokenRepository.update({ fcmToken }, { isActive: false });
       }
       throw error;
@@ -243,16 +269,16 @@ export class NotificationsService implements OnModuleInit {
    * Get notification channel ID based on type
    */
   private getChannelId(type: string): string {
-    if (type.startsWith('charging')) {
-      return 'charging_channel';
+    if (type.startsWith("charging")) {
+      return "charging_channel";
     }
-    if (type.startsWith('booking')) {
-      return 'booking_channel';
+    if (type.startsWith("booking")) {
+      return "booking_channel";
     }
-    if (type.startsWith('payment')) {
-      return 'payment_channel';
+    if (type.startsWith("payment")) {
+      return "payment_channel";
     }
-    return 'general_channel';
+    return "general_channel";
   }
 
   /**
@@ -265,12 +291,12 @@ export class NotificationsService implements OnModuleInit {
     sessionId?: string,
   ): Promise<void> {
     await this.sendToUser(userId, NotificationType.CHARGING_STARTED, {
-      title: '⚡ Charging Started',
+      title: "⚡ Charging Started",
       body: `Your EV is now charging at ${chargerName}`,
       data: {
         chargerId,
         sessionId,
-        navigate: sessionId ? `/sessions/${sessionId}` : '/sessions',
+        navigate: sessionId ? `/sessions/${sessionId}` : "/sessions",
       },
     });
   }
@@ -285,12 +311,12 @@ export class NotificationsService implements OnModuleInit {
     sessionId?: string,
   ): Promise<void> {
     await this.sendToUser(userId, NotificationType.CHARGING_80_PERCENT, {
-      title: '🔋 80% Charged',
+      title: "🔋 80% Charged",
       body: `Your EV at ${chargerName} is 80% charged. Consider unplugging for optimal battery health.`,
       data: {
         chargerId,
         sessionId,
-        navigate: sessionId ? `/sessions/${sessionId}` : '/sessions',
+        navigate: sessionId ? `/sessions/${sessionId}` : "/sessions",
       },
     });
   }
@@ -305,12 +331,12 @@ export class NotificationsService implements OnModuleInit {
     sessionId?: string,
   ): Promise<void> {
     await this.sendToUser(userId, NotificationType.CHARGING_COMPLETED, {
-      title: '✅ Charging Complete',
+      title: "✅ Charging Complete",
       body: `Your EV at ${chargerName} is fully charged!`,
       data: {
         chargerId,
         sessionId,
-        navigate: sessionId ? `/sessions/${sessionId}` : '/sessions',
+        navigate: sessionId ? `/sessions/${sessionId}` : "/sessions",
       },
     });
   }
@@ -325,7 +351,7 @@ export class NotificationsService implements OnModuleInit {
     startTime: Date,
   ): Promise<void> {
     await this.sendToUser(userId, NotificationType.BOOKING_CONFIRMED, {
-      title: '📅 Booking Confirmed',
+      title: "📅 Booking Confirmed",
       body: `Your booking at ${chargerName} for ${startTime.toLocaleString()} is confirmed`,
       data: {
         bookingId,
@@ -344,7 +370,7 @@ export class NotificationsService implements OnModuleInit {
     minutesUntil: number,
   ): Promise<void> {
     await this.sendToUser(userId, NotificationType.BOOKING_REMINDER, {
-      title: '⏰ Booking Reminder',
+      title: "⏰ Booking Reminder",
       body: `Your booking at ${chargerName} starts in ${minutesUntil} minutes`,
       data: {
         bookingId,
@@ -362,11 +388,11 @@ export class NotificationsService implements OnModuleInit {
     chargerName: string,
   ): Promise<void> {
     await this.sendToUser(userId, NotificationType.BOOKING_AUTO_CANCELLED, {
-      title: '❌ Booking Auto-Cancelled',
+      title: "❌ Booking Auto-Cancelled",
       body: `Your booking at ${chargerName} was cancelled due to no-show`,
       data: {
         bookingId,
-        navigate: '/bookings',
+        navigate: "/bookings",
       },
     });
   }
@@ -380,7 +406,7 @@ export class NotificationsService implements OnModuleInit {
     paymentId: string,
   ): Promise<void> {
     await this.sendToUser(userId, NotificationType.PAYMENT_SUCCESS, {
-      title: '💳 Payment Successful',
+      title: "💳 Payment Successful",
       body: `Payment of $${amount.toFixed(2)} processed successfully`,
       data: {
         paymentId,
@@ -398,7 +424,7 @@ export class NotificationsService implements OnModuleInit {
     paymentId: string,
   ): Promise<void> {
     await this.sendToUser(userId, NotificationType.PAYMENT_FAILED, {
-      title: '❌ Payment Failed',
+      title: "❌ Payment Failed",
       body: `Payment of $${amount.toFixed(2)} could not be processed`,
       data: {
         paymentId,
@@ -416,7 +442,7 @@ export class NotificationsService implements OnModuleInit {
     mechanicName: string,
   ): Promise<void> {
     await this.sendToUser(userId, NotificationType.MECHANIC_ASSIGNED, {
-      title: '🔧 Mechanic Assigned',
+      title: "🔧 Mechanic Assigned",
       body: `${mechanicName} has been assigned to your breakdown request`,
       data: {
         requestId,
@@ -428,13 +454,10 @@ export class NotificationsService implements OnModuleInit {
   /**
    * Send service completed notification
    */
-  async sendServiceCompleted(
-    userId: string,
-    requestId: string,
-  ): Promise<void> {
+  async sendServiceCompleted(userId: string, requestId: string): Promise<void> {
     await this.sendToUser(userId, NotificationType.SERVICE_COMPLETED, {
-      title: '✅ Service Completed',
-      body: 'Your breakdown service has been completed successfully',
+      title: "✅ Service Completed",
+      body: "Your breakdown service has been completed successfully",
       data: {
         requestId,
         navigate: `/breakdown/${requestId}`,
@@ -452,7 +475,7 @@ export class NotificationsService implements OnModuleInit {
     chargerId: string,
   ): Promise<void> {
     await this.sendToUser(userId, NotificationType.CHARGER_AVAILABLE_NEARBY, {
-      title: '⚡ Charger Available Nearby',
+      title: "⚡ Charger Available Nearby",
       body: `${chargerName} is now available ${distance.toFixed(1)} km away`,
       data: {
         chargerId,
@@ -472,9 +495,9 @@ export class NotificationsService implements OnModuleInit {
     newPrice: number,
     chargerId: string,
   ): Promise<void> {
-    const discount = ((oldPrice - newPrice) / oldPrice * 100).toFixed(0);
+    const discount = (((oldPrice - newPrice) / oldPrice) * 100).toFixed(0);
     await this.sendToUser(userId, NotificationType.PRICE_DROP_ALERT, {
-      title: '💰 Price Drop Alert',
+      title: "💰 Price Drop Alert",
       body: `${chargerName} price dropped by ${discount}%! Now $${newPrice.toFixed(2)}/kWh`,
       data: {
         chargerId,
@@ -493,13 +516,18 @@ export class NotificationsService implements OnModuleInit {
     userId: string,
     limit: number = 20,
     offset: number = 0,
-  ): Promise<{ notifications: NotificationLogEntity[]; total: number; hasMore: boolean }> {
-    const [notifications, total] = await this.notificationLogRepository.findAndCount({
-      where: { userId },
-      order: { createdAt: 'DESC' },
-      take: limit,
-      skip: offset,
-    });
+  ): Promise<{
+    notifications: NotificationLogEntity[];
+    total: number;
+    hasMore: boolean;
+  }> {
+    const [notifications, total] =
+      await this.notificationLogRepository.findAndCount({
+        where: { userId },
+        order: { createdAt: "DESC" },
+        take: limit,
+        skip: offset,
+      });
 
     return {
       notifications,
@@ -513,14 +541,17 @@ export class NotificationsService implements OnModuleInit {
    */
   async getUnreadCount(userId: string): Promise<number> {
     return this.notificationLogRepository.count({
-      where: { userId, status: 'sent' },
+      where: { userId, status: "sent" },
     });
   }
 
   /**
    * Delete a single notification
    */
-  async deleteNotification(userId: string, notificationId: string): Promise<boolean> {
+  async deleteNotification(
+    userId: string,
+    notificationId: string,
+  ): Promise<boolean> {
     const result = await this.notificationLogRepository.delete({
       id: notificationId,
       userId,
@@ -542,7 +573,7 @@ export class NotificationsService implements OnModuleInit {
   async markAsRead(userId: string, notificationId: string): Promise<boolean> {
     const result = await this.notificationLogRepository.update(
       { id: notificationId, userId },
-      { status: 'read', readAt: new Date() },
+      { status: "read", readAt: new Date() },
     );
     return (result.affected || 0) > 0;
   }
@@ -552,8 +583,8 @@ export class NotificationsService implements OnModuleInit {
    */
   async markAllAsRead(userId: string): Promise<number> {
     const result = await this.notificationLogRepository.update(
-      { userId, status: 'sent' },
-      { status: 'read', readAt: new Date() },
+      { userId, status: "sent" },
+      { status: "read", readAt: new Date() },
     );
     return result.affected || 0;
   }
@@ -561,10 +592,12 @@ export class NotificationsService implements OnModuleInit {
   /**
    * Get user notification preferences
    */
-  async getUserPreferences(userId: string): Promise<NotificationPreferenceEntity[]> {
+  async getUserPreferences(
+    userId: string,
+  ): Promise<NotificationPreferenceEntity[]> {
     return this.notificationPreferenceRepository.find({
       where: { userId },
-      order: { notificationType: 'ASC' },
+      order: { notificationType: "ASC" },
     });
   }
 
@@ -605,7 +638,10 @@ export class NotificationsService implements OnModuleInit {
   /**
    * Check if user has enabled a specific notification type
    */
-  async isNotificationEnabled(userId: string, type: NotificationType): Promise<boolean> {
+  async isNotificationEnabled(
+    userId: string,
+    type: NotificationType,
+  ): Promise<boolean> {
     const preference = await this.notificationPreferenceRepository.findOne({
       where: { userId, notificationType: type },
     });
@@ -623,12 +659,12 @@ export class NotificationsService implements OnModuleInit {
     chargerId: string,
   ): Promise<void> {
     await this.sendToUser(userId, NotificationType.CHARGER_APPROVED, {
-      title: '✅ Charger Approved',
+      title: "✅ Charger Approved",
       body: `Your charger "${chargerName}" has been approved and is now live!`,
       data: {
         chargerId,
         chargerName,
-        screen: 'OwnerDashboard',
+        screen: "OwnerDashboard",
       },
     });
   }
@@ -642,12 +678,12 @@ export class NotificationsService implements OnModuleInit {
     reason: string,
   ): Promise<void> {
     await this.sendToUser(userId, NotificationType.CHARGER_REJECTED, {
-      title: '❌ Charger Rejected',
+      title: "❌ Charger Rejected",
       body: `Your charger "${chargerName}" was rejected. Reason: ${reason}`,
       data: {
         chargerName,
         reason,
-        screen: 'ConnectWithEV',
+        screen: "ConnectWithEV",
       },
     });
   }
@@ -666,7 +702,7 @@ export class NotificationsService implements OnModuleInit {
     distance: number,
   ): Promise<void> {
     await this.sendToUser(userId, NotificationType.VEHICLE_COMPATIBLE_STATION, {
-      title: '🔌 Compatible Charger Found',
+      title: "🔌 Compatible Charger Found",
       body: `${stationName} supports your ${vehicleName} (${connectorType}, ${maxPowerKw} kW) — ${distance.toFixed(1)} km away`,
       data: {
         stationId,
@@ -692,25 +728,33 @@ export class NotificationsService implements OnModuleInit {
     estimatedMinutes: number,
     distance: number,
   ): Promise<void> {
-    await this.sendToUser(userId, NotificationType.VEHICLE_FAST_CHARGER_NEARBY, {
-      title: '⚡ Fast Charger Nearby',
-      body: `${stationName} can charge your ${vehicleName} in ~${estimatedMinutes} min (${powerKw} kW) — ${distance.toFixed(1)} km away`,
-      data: {
-        stationId,
-        vehicleName,
-        powerKw,
-        estimatedMinutes,
-        distance,
-        navigate: `/chargers/station/${stationId}`,
+    await this.sendToUser(
+      userId,
+      NotificationType.VEHICLE_FAST_CHARGER_NEARBY,
+      {
+        title: "⚡ Fast Charger Nearby",
+        body: `${stationName} can charge your ${vehicleName} in ~${estimatedMinutes} min (${powerKw} kW) — ${distance.toFixed(1)} km away`,
+        data: {
+          stationId,
+          vehicleName,
+          powerKw,
+          estimatedMinutes,
+          distance,
+          navigate: `/chargers/station/${stationId}`,
+        },
       },
-    });
+    );
   }
 
   /**
    * Update user's FCM token (for Firebase notification integration)
    */
-  async updateUserFcmToken(userId: string, fcmToken: string, platform?: 'ios' | 'android' | 'web'): Promise<void> {
-    await this.saveFcmToken(userId, fcmToken, platform || 'android');
+  async updateUserFcmToken(
+    userId: string,
+    fcmToken: string,
+    platform?: "ios" | "android" | "web",
+  ): Promise<void> {
+    await this.saveFcmToken(userId, fcmToken, platform || "android");
   }
 
   /**
@@ -719,7 +763,7 @@ export class NotificationsService implements OnModuleInit {
   async getUserFcmToken(userId: string): Promise<string | null> {
     const tokens = await this.fcmTokenRepository.find({
       where: { userId, isActive: true },
-      order: { createdAt: 'DESC' },
+      order: { createdAt: "DESC" },
       take: 1,
     });
 
@@ -735,7 +779,7 @@ export class NotificationsService implements OnModuleInit {
     });
 
     const tokenMap = new Map<string, string[]>();
-    tokens.forEach(token => {
+    tokens.forEach((token) => {
       if (!tokenMap.has(token.userId)) {
         tokenMap.set(token.userId, []);
       }

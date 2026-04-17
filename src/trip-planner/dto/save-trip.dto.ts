@@ -1,5 +1,15 @@
-import { IsString, IsNumber, IsOptional, IsArray, IsInt, Min, Max, ValidateNested, IsIn } from 'class-validator';
-import { Type } from 'class-transformer';
+import {
+  IsString,
+  IsNumber,
+  IsOptional,
+  IsArray,
+  IsInt,
+  Min,
+  Max,
+  ValidateNested,
+  IsIn,
+} from "class-validator";
+import { Type } from "class-transformer";
 
 class WaypointDto {
   @IsNumber()
@@ -140,7 +150,7 @@ export class SaveTripDto {
 
   @IsOptional()
   @IsString()
-  @IsIn(['eco', 'normal', 'sport'])
+  @IsIn(["eco", "normal", "sport"])
   drivingMode?: string;
 
   @IsOptional()

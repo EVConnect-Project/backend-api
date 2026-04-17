@@ -1,21 +1,31 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThan } from 'typeorm';
-import { BookingEntity } from './entities/booking.entity';
-import { CreateBookingDto } from './dto/create-booking.dto';
-import { Charger } from '../charger/entities/charger.entity';
-import { ChargerSocket } from '../owner/entities/charger-socket.entity';
-import { Cron, CronExpression } from '@nestjs/schedule';
-import { NotificationsService } from '../notifications/notifications.service';
-import { SmsService } from '../auth/sms.service';
-import { BookingMode } from '../charger/enums/booking-mode.enum';
-import { BookingType } from '../charger/enums/booking-type.enum';
-import { ChargerStatus } from '../charger/enums/charger-status.enum';
-import { CreateWalkInBookingDto, CreatePreBookingDto, CheckInBookingDto } from './dto/booking-type.dto';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+  Logger,
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository, LessThan } from "typeorm";
+import { BookingEntity } from "./entities/booking.entity";
+import { CreateBookingDto } from "./dto/create-booking.dto";
+import { Charger } from "../charger/entities/charger.entity";
+import { ChargerSocket } from "../owner/entities/charger-socket.entity";
+import { Cron, CronExpression } from "@nestjs/schedule";
+import { NotificationsService } from "../notifications/notifications.service";
+import { SmsService } from "../auth/sms.service";
+import { BookingMode } from "../charger/enums/booking-mode.enum";
+import { BookingType } from "../charger/enums/booking-type.enum";
+import { ChargerStatus } from "../charger/enums/charger-status.enum";
+import {
+  CreateWalkInBookingDto,
+  CreatePreBookingDto,
+  CheckInBookingDto,
+} from "./dto/booking-type.dto";
 
 export interface BookingWarning {
-  type: 'no_occupancy_sensor' | 'requires_verification';
-  severity: 'low' | 'medium' | 'high';
+  type: "no_occupancy_sensor" | "requires_verification";
+  severity: "low" | "medium" | "high";
   message: string;
   recommendedAction?: string;
 }
@@ -46,7 +56,10 @@ export class BookingsService {
   /**
    * Create a booking with comprehensive access type checking and conflict prevention
    */
-  async create(createBookingDto: CreateBookingDto, userId: string): Promise<BookingResponse> {
+  async create(
+    createBookingDto: CreateBookingDto,
+    userId: string,
+  ): Promise<BookingResponse> {
     try {
       const { chargerId, startTime, endTime, price } = createBookingDto;
 
@@ -55,26 +68,28 @@ export class BookingsService {
       const end = new Date(endTime);
 
       if (start >= end) {
-        throw new BadRequestException('End time must be after start time');
+        throw new BadRequestException("End time must be after start time");
       }
 
       if (start < new Date()) {
-        throw new BadRequestException('Start time cannot be in the past');
+        throw new BadRequestException("Start time cannot be in the past");
       }
 
       // Fetch charger with owner relationship
-      const charger = await this.chargerRepository.findOne({ 
+      const charger = await this.chargerRepository.findOne({
         where: { id: chargerId },
-        relations: ['owner']
+        relations: ["owner"],
       });
-      
+
       if (!charger) {
         throw new NotFoundException(`Charger with ID ${chargerId} not found`);
       }
 
       // Check if charger is verified by admin
       if (!charger.verified) {
-        throw new BadRequestException('This charger is not yet verified by admin and cannot accept bookings');
+        throw new BadRequestException(
+          "This charger is not yet verified by admin and cannot accept bookings",
+        );
       }
 
       // Initialize warnings array
@@ -82,20 +97,26 @@ export class BookingsService {
 
       // Check for overlapping bookings (with grace period consideration)
       const gracePeriod = charger.bookingGracePeriod || 0;
-      const effectiveStartTime = new Date(start.getTime() - gracePeriod * 60 * 1000);
+      const effectiveStartTime = new Date(
+        start.getTime() - gracePeriod * 60 * 1000,
+      );
 
       const overlappingBooking = await this.bookingRepository
-        .createQueryBuilder('booking')
-        .where('booking.chargerId = :chargerId', { chargerId })
-        .andWhere('booking.status NOT IN (:...statuses)', { statuses: ['cancelled', 'completed'] })
+        .createQueryBuilder("booking")
+        .where("booking.chargerId = :chargerId", { chargerId })
+        .andWhere("booking.status NOT IN (:...statuses)", {
+          statuses: ["cancelled", "completed"],
+        })
         .andWhere(
-          '(booking.startTime < :endTime AND booking.endTime > :effectiveStartTime)',
-          { effectiveStartTime, endTime: end }
+          "(booking.startTime < :endTime AND booking.endTime > :effectiveStartTime)",
+          { effectiveStartTime, endTime: end },
         )
         .getOne();
 
       if (overlappingBooking) {
-        throw new BadRequestException('Charger is already booked for this time slot');
+        throw new BadRequestException(
+          "Charger is already booked for this time slot",
+        );
       }
 
       // Calculate price
@@ -115,7 +136,9 @@ export class BookingsService {
       // Validate price is not NaN or negative
       if (isNaN(finalPrice) || finalPrice < 0) {
         finalPrice = 0;
-        this.logger.warn(`Calculated price was invalid (${calculatedPrice}), falling back to 0 for booking`);
+        this.logger.warn(
+          `Calculated price was invalid (${calculatedPrice}), falling back to 0 for booking`,
+        );
       }
 
       // Create booking
@@ -125,24 +148,31 @@ export class BookingsService {
         startTime: start,
         endTime: end,
         price: finalPrice,
-        status: 'pending',
+        status: "pending",
       });
 
       const savedBooking = await this.bookingRepository.save(booking);
 
-      this.logger.log(`Booking created: ${savedBooking.id} for charger ${chargerId} by user ${userId}`);
+      this.logger.log(
+        `Booking created: ${savedBooking.id} for charger ${chargerId} by user ${userId}`,
+      );
 
       this.notifyOwnerAboutBookingRequest(charger, savedBooking);
 
       // Send booking confirmation notification (fire-and-forget to prevent blocking response)
-      this.notificationsService.sendBookingConfirmed(
-        userId,
-        savedBooking.id,
-        charger.name || 'charging station',
-        start,
-      ).catch((error) => {
-        this.logger.error(`Failed to send booking confirmation notification for booking ${savedBooking.id}:`, error);
-      });
+      this.notificationsService
+        .sendBookingConfirmed(
+          userId,
+          savedBooking.id,
+          charger.name || "charging station",
+          start,
+        )
+        .catch((error) => {
+          this.logger.error(
+            `Failed to send booking confirmation notification for booking ${savedBooking.id}:`,
+            error,
+          );
+        });
 
       // Return comprehensive response
       return {
@@ -154,31 +184,38 @@ export class BookingsService {
       };
     } catch (error) {
       this.logger.error(`Error creating booking for user ${userId}:`, error);
-      
+
       // Re-throw known exceptions
-      if (error instanceof BadRequestException || 
-          error instanceof NotFoundException || 
-          error instanceof ForbiddenException) {
+      if (
+        error instanceof BadRequestException ||
+        error instanceof NotFoundException ||
+        error instanceof ForbiddenException
+      ) {
         throw error;
       }
 
       // Log and rethrow unknown database/system errors
-      this.logger.error(`Unexpected error in booking creation: ${error.message}`, error.stack);
-      throw new BadRequestException(`Failed to create booking: ${error.message}`);
+      this.logger.error(
+        `Unexpected error in booking creation: ${error.message}`,
+        error.stack,
+      );
+      throw new BadRequestException(
+        `Failed to create booking: ${error.message}`,
+      );
     }
   }
 
   async findAll(): Promise<BookingEntity[]> {
     return this.bookingRepository.find({
-      relations: ['user', 'charger'],
-      order: { createdAt: 'DESC' },
+      relations: ["user", "charger"],
+      order: { createdAt: "DESC" },
     });
   }
 
   async findOne(id: string): Promise<BookingEntity> {
     const booking = await this.bookingRepository.findOne({
       where: { id },
-      relations: ['user', 'charger'],
+      relations: ["user", "charger"],
     });
 
     if (!booking) {
@@ -191,16 +228,16 @@ export class BookingsService {
   async findByUser(userId: string): Promise<BookingEntity[]> {
     return this.bookingRepository.find({
       where: { userId },
-      relations: ['charger'],
-      order: { createdAt: 'DESC' },
+      relations: ["charger"],
+      order: { createdAt: "DESC" },
     });
   }
 
   async findByCharger(chargerId: string): Promise<BookingEntity[]> {
     return this.bookingRepository.find({
       where: { chargerId },
-      relations: ['user'],
-      order: { createdAt: 'DESC' },
+      relations: ["user"],
+      order: { createdAt: "DESC" },
     });
   }
 
@@ -209,41 +246,46 @@ export class BookingsService {
 
     // Check if user owns the booking
     if (booking.userId !== userId) {
-      throw new ForbiddenException('You can only cancel your own bookings');
+      throw new ForbiddenException("You can only cancel your own bookings");
     }
 
     // Check if booking can be cancelled
-    if (booking.status === 'completed' || booking.status === 'cancelled') {
-      throw new BadRequestException(`Cannot cancel a ${booking.status} booking`);
+    if (booking.status === "completed" || booking.status === "cancelled") {
+      throw new BadRequestException(
+        `Cannot cancel a ${booking.status} booking`,
+      );
     }
 
     // Check if booking has already started
-    if (new Date() >= booking.startTime && booking.status === 'active') {
-      throw new BadRequestException('Cannot cancel an active booking');
+    if (new Date() >= booking.startTime && booking.status === "active") {
+      throw new BadRequestException("Cannot cancel an active booking");
     }
 
-    booking.status = 'cancelled';
+    booking.status = "cancelled";
     booking.cancelledAt = new Date();
     const saved = await this.bookingRepository.save(booking);
     await this._syncChargerAndSocketAvailability(saved.chargerId);
     return saved;
   }
 
-  async deleteForUser(id: string, userId: string): Promise<{ message: string }> {
+  async deleteForUser(
+    id: string,
+    userId: string,
+  ): Promise<{ message: string }> {
     const booking = await this.findOne(id);
 
     if (booking.userId !== userId) {
-      throw new ForbiddenException('You can only delete your own bookings');
+      throw new ForbiddenException("You can only delete your own bookings");
     }
 
-    if (booking.status != 'cancelled' && booking.status != 'completed') {
+    if (booking.status != "cancelled" && booking.status != "completed") {
       throw new BadRequestException(
-        'Only cancelled or completed bookings can be deleted',
+        "Only cancelled or completed bookings can be deleted",
       );
     }
 
     await this.bookingRepository.remove(booking);
-    return { message: 'Booking deleted successfully' };
+    return { message: "Booking deleted successfully" };
   }
 
   async updateStatus(id: string, status: string): Promise<BookingEntity> {
@@ -251,7 +293,7 @@ export class BookingsService {
     const normalizedStatus = status.toLowerCase();
     booking.status = normalizedStatus;
 
-    if (normalizedStatus === 'cancelled') {
+    if (normalizedStatus === "cancelled") {
       booking.cancelledAt = new Date();
     }
 
@@ -260,31 +302,35 @@ export class BookingsService {
     return saved;
   }
 
-  private async _syncChargerAndSocketAvailability(chargerId: string): Promise<void> {
-    const charger = await this.chargerRepository.findOne({ where: { id: chargerId } });
+  private async _syncChargerAndSocketAvailability(
+    chargerId: string,
+  ): Promise<void> {
+    const charger = await this.chargerRepository.findOne({
+      where: { id: chargerId },
+    });
     if (!charger) return;
 
     const now = new Date();
     const activeBookingCount = await this.bookingRepository
-      .createQueryBuilder('b')
-      .where('b.chargerId = :chargerId', { chargerId })
-      .andWhere('b.startTime <= :now', { now })
-      .andWhere('b.endTime > :now', { now })
+      .createQueryBuilder("b")
+      .where("b.chargerId = :chargerId", { chargerId })
+      .andWhere("b.startTime <= :now", { now })
+      .andWhere("b.endTime > :now", { now })
       .andWhere(
         `(b.status = :activeStatus OR (b.status = :confirmedStatus AND LOWER(COALESCE(b.paymentStatus, '')) = 'success'))`,
         {
-          activeStatus: 'active',
-          confirmedStatus: 'confirmed',
+          activeStatus: "active",
+          confirmedStatus: "confirmed",
         },
       )
       .getCount();
 
     const activeInUseCount = await this.bookingRepository
-      .createQueryBuilder('b')
-      .where('b.chargerId = :chargerId', { chargerId })
-      .andWhere('b.startTime <= :now', { now })
-      .andWhere('b.endTime > :now', { now })
-      .andWhere('b.status = :activeStatus', { activeStatus: 'active' })
+      .createQueryBuilder("b")
+      .where("b.chargerId = :chargerId", { chargerId })
+      .andWhere("b.startTime <= :now", { now })
+      .andWhere("b.endTime > :now", { now })
+      .andWhere("b.status = :activeStatus", { activeStatus: "active" })
       .getCount();
 
     const nextChargerStatus =
@@ -304,45 +350,50 @@ export class BookingsService {
     if (sockets.length == 0) return;
 
     const blockingRows = await this.bookingRepository
-      .createQueryBuilder('b')
-      .select('b.socketId', 'socketId')
-      .addSelect('b.status', 'status')
-      .addSelect('b.paymentStatus', 'paymentStatus')
-      .where('b.chargerId = :chargerId', { chargerId })
-      .andWhere('b.socket_id IS NOT NULL')
-      .andWhere('b.startTime <= :now', { now })
-      .andWhere('b.endTime > :now', { now })
+      .createQueryBuilder("b")
+      .select("b.socketId", "socketId")
+      .addSelect("b.status", "status")
+      .addSelect("b.paymentStatus", "paymentStatus")
+      .where("b.chargerId = :chargerId", { chargerId })
+      .andWhere("b.socket_id IS NOT NULL")
+      .andWhere("b.startTime <= :now", { now })
+      .andWhere("b.endTime > :now", { now })
       .andWhere(
         `(b.status = :activeStatus OR (b.status = :confirmedStatus AND LOWER(COALESCE(b.paymentStatus, '')) = 'success'))`,
         {
-          activeStatus: 'active',
-          confirmedStatus: 'confirmed',
+          activeStatus: "active",
+          confirmedStatus: "confirmed",
         },
       )
-      .getRawMany<{ socketId: string; status: string; paymentStatus: string | null }>();
+      .getRawMany<{
+        socketId: string;
+        status: string;
+        paymentStatus: string | null;
+      }>();
 
     const activeSocketIds = new Set<string>();
     const blockedSocketIds = new Set<string>();
     for (const row of blockingRows) {
       if (!row.socketId) continue;
       blockedSocketIds.add(row.socketId);
-      if ((row.status || '').toLowerCase() == 'active') {
+      if ((row.status || "").toLowerCase() == "active") {
         activeSocketIds.add(row.socketId);
       }
     }
 
     for (const socket of sockets) {
       const shouldBeInUse = activeSocketIds.has(socket.id);
-      const shouldBeReserved = blockedSocketIds.has(socket.id) && !shouldBeInUse;
+      const shouldBeReserved =
+        blockedSocketIds.has(socket.id) && !shouldBeInUse;
       const nextSocketStatus = shouldBeInUse
-        ? 'in_use'
+        ? "in_use"
         : shouldBeReserved
-          ? 'reserved'
-          : 'available';
+          ? "reserved"
+          : "available";
 
       if (socket.status !== nextSocketStatus) {
         socket.status = nextSocketStatus;
-        if (nextSocketStatus == 'available') {
+        if (nextSocketStatus == "available") {
           socket.occupiedBy = null as any;
         }
         await this.socketRepository.save(socket);
@@ -363,35 +414,41 @@ export class BookingsService {
       const reminderEnd = new Date(now.getTime() + 17 * 60 * 1000);
 
       const upcomingBookings = await this.bookingRepository
-        .createQueryBuilder('booking')
-        .leftJoinAndSelect('booking.charger', 'charger')
-        .where('booking.status IN (:...statuses)', { statuses: ['confirmed', 'pending'] })
-        .andWhere('booking.startTime >= :reminderStart', { reminderStart })
-        .andWhere('booking.startTime <= :reminderEnd', { reminderEnd })
+        .createQueryBuilder("booking")
+        .leftJoinAndSelect("booking.charger", "charger")
+        .where("booking.status IN (:...statuses)", {
+          statuses: ["confirmed", "pending"],
+        })
+        .andWhere("booking.startTime >= :reminderStart", { reminderStart })
+        .andWhere("booking.startTime <= :reminderEnd", { reminderEnd })
         .getMany();
 
       for (const booking of upcomingBookings) {
         const charger = booking.charger;
-        const minutesUntil = Math.round((booking.startTime.getTime() - now.getTime()) / 60000);
+        const minutesUntil = Math.round(
+          (booking.startTime.getTime() - now.getTime()) / 60000,
+        );
 
         // Send reminder notification
         await this.notificationsService.sendBookingReminder(
           booking.userId,
           booking.id,
-          charger.name || 'your charging station',
+          charger.name || "your charging station",
           minutesUntil,
         );
 
         this.logger.log(
-          `Sent booking reminder for booking ${booking.id} (${minutesUntil} minutes until start)`
+          `Sent booking reminder for booking ${booking.id} (${minutesUntil} minutes until start)`,
         );
       }
 
       if (upcomingBookings.length > 0) {
-        this.logger.log(`Processed ${upcomingBookings.length} booking reminders`);
+        this.logger.log(
+          `Processed ${upcomingBookings.length} booking reminders`,
+        );
       }
     } catch (error) {
-      this.logger.error('Error processing booking reminders', error);
+      this.logger.error("Error processing booking reminders", error);
     }
   }
 
@@ -402,13 +459,13 @@ export class BookingsService {
   @Cron(CronExpression.EVERY_5_MINUTES)
   async handleAutoCancelExpiredBookings() {
     const now = new Date();
-    
+
     // Find all pending bookings that have passed their auto-cancel threshold
     const expiredBookings = await this.bookingRepository
-      .createQueryBuilder('booking')
-      .leftJoinAndSelect('booking.charger', 'charger')
-      .where('booking.status = :status', { status: 'pending' })
-      .andWhere('booking.startTime < :now', { now })
+      .createQueryBuilder("booking")
+      .leftJoinAndSelect("booking.charger", "charger")
+      .where("booking.status = :status", { status: "pending" })
+      .andWhere("booking.startTime < :now", { now })
       .getMany();
 
     let cancelledCount = 0;
@@ -418,11 +475,13 @@ export class BookingsService {
       if (!charger) continue;
 
       const autoCancelMinutes = charger.autoCancelAfter || 15;
-      const autoCancelThreshold = new Date(booking.startTime.getTime() + autoCancelMinutes * 60 * 1000);
+      const autoCancelThreshold = new Date(
+        booking.startTime.getTime() + autoCancelMinutes * 60 * 1000,
+      );
 
       if (now >= autoCancelThreshold) {
         // Auto-cancel the booking
-        booking.status = 'cancelled';
+        booking.status = "cancelled";
         booking.noShow = true;
         await this.bookingRepository.save(booking);
         await this._syncChargerAndSocketAvailability(booking.chargerId);
@@ -430,20 +489,22 @@ export class BookingsService {
 
         this.logger.warn(
           `Auto-cancelled booking ${booking.id} for charger ${charger.id} - ` +
-          `User ${booking.userId} did not verify within ${autoCancelMinutes} minutes`
+            `User ${booking.userId} did not verify within ${autoCancelMinutes} minutes`,
         );
 
         // Send auto-cancel notification
         await this.notificationsService.sendBookingAutoCancelled(
           booking.userId,
           booking.id,
-          charger.name || 'charging station',
+          charger.name || "charging station",
         );
       }
     }
 
     if (cancelledCount > 0) {
-      this.logger.log(`Auto-cancel job completed: ${cancelledCount} bookings marked as no-show`);
+      this.logger.log(
+        `Auto-cancel job completed: ${cancelledCount} bookings marked as no-show`,
+      );
     }
   }
 
@@ -451,20 +512,27 @@ export class BookingsService {
    * Verify physical presence at charger location
    * Used for SEMI-PUBLIC chargers
    */
-  async verifyPhysicalPresence(bookingId: string, userId: string, lat: number, lng: number): Promise<BookingEntity> {
+  async verifyPhysicalPresence(
+    bookingId: string,
+    userId: string,
+    lat: number,
+    lng: number,
+  ): Promise<BookingEntity> {
     const booking = await this.findOne(bookingId);
 
     if (booking.userId !== userId) {
-      throw new ForbiddenException('You can only verify your own bookings');
+      throw new ForbiddenException("You can only verify your own bookings");
     }
 
-    if (booking.status !== 'pending') {
-      throw new BadRequestException('Only pending bookings can be verified');
+    if (booking.status !== "pending") {
+      throw new BadRequestException("Only pending bookings can be verified");
     }
 
-    const charger = await this.chargerRepository.findOne({ where: { id: booking.chargerId } });
+    const charger = await this.chargerRepository.findOne({
+      where: { id: booking.chargerId },
+    });
     if (!charger) {
-      throw new NotFoundException('Charger not found');
+      throw new NotFoundException("Charger not found");
     }
 
     // Calculate distance between user and charger (Haversine formula)
@@ -472,7 +540,9 @@ export class BookingsService {
 
     // User must be within 50 meters (0.05 km) of the charger
     if (distance > 0.05) {
-      throw new BadRequestException(`You must be within 50 meters of the charger. Current distance: ${(distance * 1000).toFixed(0)}m`);
+      throw new BadRequestException(
+        `You must be within 50 meters of the charger. Current distance: ${(distance * 1000).toFixed(0)}m`,
+      );
     }
 
     // Update charger's last physical check timestamp
@@ -480,10 +550,12 @@ export class BookingsService {
     await this.chargerRepository.save(charger);
 
     // Activate the booking
-    booking.status = 'active';
+    booking.status = "active";
     const activatedBooking = await this.bookingRepository.save(booking);
 
-    this.logger.log(`Physical verification successful for booking ${bookingId} at charger ${charger.id}`);
+    this.logger.log(
+      `Physical verification successful for booking ${bookingId} at charger ${charger.id}`,
+    );
 
     return activatedBooking;
   }
@@ -492,14 +564,21 @@ export class BookingsService {
    * Calculate distance between two coordinates using Haversine formula
    * Returns distance in kilometers
    */
-  private calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  private calculateDistance(
+    lat1: number,
+    lon1: number,
+    lat2: number,
+    lon2: number,
+  ): number {
     const R = 6371; // Radius of the Earth in km
     const dLat = this.toRadians(lat2 - lat1);
     const dLon = this.toRadians(lon2 - lon1);
     const a =
       Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(this.toRadians(lat1)) * Math.cos(this.toRadians(lat2)) *
-      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      Math.cos(this.toRadians(lat1)) *
+        Math.cos(this.toRadians(lat2)) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   }
@@ -512,13 +591,13 @@ export class BookingsService {
    * Get alternative chargers when booking conflict detected
    */
   async getAlternativeChargers(
-    originalChargerId: string, 
-    startTime: Date, 
-    endTime: Date, 
-    radiusKm: number = 5
+    originalChargerId: string,
+    startTime: Date,
+    endTime: Date,
+    radiusKm: number = 5,
   ): Promise<Charger[]> {
-    const originalCharger = await this.chargerRepository.findOne({ 
-      where: { id: originalChargerId } 
+    const originalCharger = await this.chargerRepository.findOne({
+      where: { id: originalChargerId },
     });
 
     if (!originalCharger) {
@@ -537,16 +616,21 @@ export class BookingsService {
         originalCharger.lat,
         originalCharger.lng,
         charger.lat,
-        charger.lng
+        charger.lng,
       );
 
       if (distance <= radiusKm) {
         // Check if this charger is available for the time slot
         const hasOverlap = await this.bookingRepository
-          .createQueryBuilder('booking')
-          .where('booking.chargerId = :chargerId', { chargerId: charger.id })
-          .andWhere('booking.status NOT IN (:...statuses)', { statuses: ['cancelled', 'completed'] })
-          .andWhere('(booking.startTime < :endTime AND booking.endTime > :startTime)', { startTime, endTime })
+          .createQueryBuilder("booking")
+          .where("booking.chargerId = :chargerId", { chargerId: charger.id })
+          .andWhere("booking.status NOT IN (:...statuses)", {
+            statuses: ["cancelled", "completed"],
+          })
+          .andWhere(
+            "(booking.startTime < :endTime AND booking.endTime > :startTime)",
+            { startTime, endTime },
+          )
           .getOne();
 
         if (!hasOverlap) {
@@ -557,9 +641,19 @@ export class BookingsService {
 
     // Sort by distance (closest first) and reliability
     alternativeChargers.sort((a, b) => {
-      const distA = this.calculateDistance(originalCharger.lat, originalCharger.lng, a.lat, a.lng);
-      const distB = this.calculateDistance(originalCharger.lat, originalCharger.lng, b.lat, b.lng);
-      
+      const distA = this.calculateDistance(
+        originalCharger.lat,
+        originalCharger.lng,
+        a.lat,
+        a.lng,
+      );
+      const distB = this.calculateDistance(
+        originalCharger.lat,
+        originalCharger.lng,
+        b.lat,
+        b.lng,
+      );
+
       return distA - distB;
     });
 
@@ -576,24 +670,24 @@ export class BookingsService {
     const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
     const bookings = await this.bookingRepository
-      .createQueryBuilder('booking')
-      .where('booking.chargerId = :chargerId', { chargerId })
-      .andWhere('booking.status IN (:...statuses)', { 
-        statuses: ['confirmed', 'active', 'pending'] 
+      .createQueryBuilder("booking")
+      .where("booking.chargerId = :chargerId", { chargerId })
+      .andWhere("booking.status IN (:...statuses)", {
+        statuses: ["confirmed", "active", "pending"],
       })
-      .andWhere('booking.endTime > :now', { now })
-      .andWhere('booking.startTime < :sevenDaysFromNow', { sevenDaysFromNow })
-      .orderBy('booking.startTime', 'ASC')
+      .andWhere("booking.endTime > :now", { now })
+      .andWhere("booking.startTime < :sevenDaysFromNow", { sevenDaysFromNow })
+      .orderBy("booking.startTime", "ASC")
       .getMany();
 
     // Return sanitized booking data (no personal info)
-    return bookings.map(booking => ({
+    return bookings.map((booking) => ({
       id: booking.id,
       startTime: booking.startTime,
       endTime: booking.endTime,
       status: booking.status,
       bookingType: booking.bookingType,
-      isActive: booking.status === 'active',
+      isActive: booking.status === "active",
     }));
   }
 
@@ -604,27 +698,29 @@ export class BookingsService {
    * @returns Created booking
    */
   async createWalkInBooking(
-    dto: CreateWalkInBookingDto, 
-    userId: string
+    dto: CreateWalkInBookingDto,
+    userId: string,
   ): Promise<BookingResponse> {
-    const charger = await this.chargerRepository.findOne({ 
+    const charger = await this.chargerRepository.findOne({
       where: { id: dto.chargerId },
-      relations: ['owner']
+      relations: ["owner"],
     });
-    
+
     if (!charger) {
       throw new NotFoundException(`Charger with ID ${dto.chargerId} not found`);
     }
 
     // Check if charger is verified by admin
     if (!charger.verified) {
-      throw new BadRequestException('This charger is not yet verified by admin and cannot accept bookings');
+      throw new BadRequestException(
+        "This charger is not yet verified by admin and cannot accept bookings",
+      );
     }
 
     // Validate booking mode allows walk-ins
     if (!this.validateBookingType(charger, BookingType.WALK_IN)) {
       throw new BadRequestException(
-        'This charger only accepts pre-bookings. Please make a reservation in advance.'
+        "This charger only accepts pre-bookings. Please make a reservation in advance.",
       );
     }
 
@@ -635,23 +731,27 @@ export class BookingsService {
         where: { id: dto.socketId, chargerId: dto.chargerId },
       });
       if (!socket) {
-        throw new NotFoundException(`Socket with ID ${dto.socketId} not found on this charger`);
+        throw new NotFoundException(
+          `Socket with ID ${dto.socketId} not found on this charger`,
+        );
       }
       // Validate socket-level booking mode
       if (socket.bookingMode === BookingMode.PRE_BOOKING) {
         throw new BadRequestException(
-          'This socket only accepts pre-bookings. Please select a different socket or make a reservation.'
+          "This socket only accepts pre-bookings. Please select a different socket or make a reservation.",
         );
       }
-      if (socket.status !== 'available') {
-        throw new BadRequestException(`Socket is currently ${socket.status}. Please try another socket.`);
+      if (socket.status !== "available") {
+        throw new BadRequestException(
+          `Socket is currently ${socket.status}. Please try another socket.`,
+        );
       }
     }
 
     // Check charger status
     if (charger.currentStatus !== ChargerStatus.AVAILABLE) {
       throw new BadRequestException(
-        `Charger is currently ${charger.currentStatus}. Please try again later.`
+        `Charger is currently ${charger.currentStatus}. Please try again later.`,
       );
     }
 
@@ -660,31 +760,39 @@ export class BookingsService {
     const endTime = new Date(dto.endTime);
 
     const overlapQuery = this.bookingRepository
-      .createQueryBuilder('booking')
-      .where('booking.chargerId = :chargerId', { chargerId: dto.chargerId })
-      .andWhere('booking.bookingType = :bookingType', { bookingType: BookingType.PRE_BOOKING })
-      .andWhere('booking.status IN (:...statuses)', { statuses: ['confirmed', 'pending'] })
-      .andWhere('booking.startTime <= :endTime', { endTime })
-      .andWhere('booking.endTime > :now', { now });
+      .createQueryBuilder("booking")
+      .where("booking.chargerId = :chargerId", { chargerId: dto.chargerId })
+      .andWhere("booking.bookingType = :bookingType", {
+        bookingType: BookingType.PRE_BOOKING,
+      })
+      .andWhere("booking.status IN (:...statuses)", {
+        statuses: ["confirmed", "pending"],
+      })
+      .andWhere("booking.startTime <= :endTime", { endTime })
+      .andWhere("booking.endTime > :now", { now });
 
     // Filter by socket if provided
     if (dto.socketId) {
-      overlapQuery.andWhere('booking.socket_id = :socketId', { socketId: dto.socketId });
+      overlapQuery.andWhere("booking.socket_id = :socketId", {
+        socketId: dto.socketId,
+      });
     }
 
     const activePreBooking = await overlapQuery.getOne();
 
     if (activePreBooking) {
       throw new BadRequestException(
-        'This charger has a pre-booking that conflicts with your requested time. ' +
-        'Pre-bookings have priority. Please select a different charger or time.'
+        "This charger has a pre-booking that conflicts with your requested time. " +
+          "Pre-bookings have priority. Please select a different charger or time.",
       );
     }
 
     // Calculate price
     const durationMs = endTime.getTime() - now.getTime();
     const durationHours = durationMs / (1000 * 60 * 60);
-    const price = Number((charger.powerKw * charger.pricePerKwh * durationHours).toFixed(2));
+    const price = Number(
+      (charger.powerKw * charger.pricePerKwh * durationHours).toFixed(2),
+    );
 
     // Create walk-in booking
     const booking = this.bookingRepository.create({
@@ -694,7 +802,7 @@ export class BookingsService {
       startTime: now,
       endTime,
       price,
-      status: 'active', // Walk-ins start immediately
+      status: "active", // Walk-ins start immediately
       bookingType: BookingType.WALK_IN,
       checkInTime: now,
     });
@@ -708,19 +816,21 @@ export class BookingsService {
 
     // Update socket status if applicable
     if (socket) {
-      socket.status = 'in_use';
+      socket.status = "in_use";
       socket.occupiedBy = userId;
       await this.socketRepository.save(socket);
     }
 
-    this.logger.log(`Walk-in booking created: ${savedBooking.id} for charger ${dto.chargerId}`);
+    this.logger.log(
+      `Walk-in booking created: ${savedBooking.id} for charger ${dto.chargerId}`,
+    );
 
     // Send notification without blocking booking creation flow.
     this.notificationsService
       .sendBookingConfirmed(
         userId,
         savedBooking.id,
-        charger.name || 'charging station',
+        charger.name || "charging station",
         now,
       )
       .catch((error) => {
@@ -746,27 +856,29 @@ export class BookingsService {
    * @returns Created booking with grace period info
    */
   async createPreBooking(
-    dto: CreatePreBookingDto, 
-    userId: string
+    dto: CreatePreBookingDto,
+    userId: string,
   ): Promise<BookingResponse> {
-    const charger = await this.chargerRepository.findOne({ 
+    const charger = await this.chargerRepository.findOne({
       where: { id: dto.chargerId },
-      relations: ['owner']
+      relations: ["owner"],
     });
-    
+
     if (!charger) {
       throw new NotFoundException(`Charger with ID ${dto.chargerId} not found`);
     }
 
     // Check if charger is verified by admin
     if (!charger.verified) {
-      throw new BadRequestException('This charger is not yet verified by admin and cannot accept bookings');
+      throw new BadRequestException(
+        "This charger is not yet verified by admin and cannot accept bookings",
+      );
     }
 
     // Validate booking mode allows pre-bookings
     if (!this.validateBookingType(charger, BookingType.PRE_BOOKING)) {
       throw new BadRequestException(
-        'This charger does not accept pre-bookings. Please use walk-in mode when you arrive.'
+        "This charger does not accept pre-bookings. Please use walk-in mode when you arrive.",
       );
     }
 
@@ -777,11 +889,13 @@ export class BookingsService {
         where: { id: dto.socketId, chargerId: dto.chargerId },
       });
       if (!socket) {
-        throw new NotFoundException(`Socket with ID ${dto.socketId} not found on this charger`);
+        throw new NotFoundException(
+          `Socket with ID ${dto.socketId} not found on this charger`,
+        );
       }
       if (socket.bookingMode === BookingMode.WALK_IN) {
         throw new BadRequestException(
-          'This socket only accepts walk-in charging. Please select a different socket.'
+          "This socket only accepts walk-in charging. Please select a different socket.",
         );
       }
     }
@@ -792,11 +906,11 @@ export class BookingsService {
 
     // Validate times
     if (startTime < now) {
-      throw new BadRequestException('Start time cannot be in the past');
+      throw new BadRequestException("Start time cannot be in the past");
     }
 
     if (endTime <= startTime) {
-      throw new BadRequestException('End time must be after start time');
+      throw new BadRequestException("End time must be after start time");
     }
 
     // Validate booking duration
@@ -805,52 +919,59 @@ export class BookingsService {
 
     if (durationMinutes < settings.minBookingMinutes) {
       throw new BadRequestException(
-        `Minimum booking duration is ${settings.minBookingMinutes} minutes`
+        `Minimum booking duration is ${settings.minBookingMinutes} minutes`,
       );
     }
 
     if (durationMinutes > settings.maxBookingMinutes) {
       throw new BadRequestException(
-        `Maximum booking duration is ${settings.maxBookingMinutes} minutes`
+        `Maximum booking duration is ${settings.maxBookingMinutes} minutes`,
       );
     }
 
     // Validate advance booking window
-    const daysInAdvance = (startTime.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
+    const daysInAdvance =
+      (startTime.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
     if (daysInAdvance > settings.advanceBookingDays) {
       throw new BadRequestException(
-        `You can only book up to ${settings.advanceBookingDays} days in advance`
+        `You can only book up to ${settings.advanceBookingDays} days in advance`,
       );
     }
 
     // Check for overlapping bookings
     const overlapQuery = this.bookingRepository
-      .createQueryBuilder('booking')
-      .where('booking.chargerId = :chargerId', { chargerId: dto.chargerId })
-      .andWhere('booking.status NOT IN (:...statuses)', { statuses: ['cancelled', 'completed'] })
-      .andWhere('booking.startTime < :endTime', { endTime })
-      .andWhere('booking.endTime > :startTime', { startTime });
+      .createQueryBuilder("booking")
+      .where("booking.chargerId = :chargerId", { chargerId: dto.chargerId })
+      .andWhere("booking.status NOT IN (:...statuses)", {
+        statuses: ["cancelled", "completed"],
+      })
+      .andWhere("booking.startTime < :endTime", { endTime })
+      .andWhere("booking.endTime > :startTime", { startTime });
 
     // Filter by socket if provided (allows parallel bookings on different sockets)
     if (dto.socketId) {
-      overlapQuery.andWhere('booking.socket_id = :socketId', { socketId: dto.socketId });
+      overlapQuery.andWhere("booking.socket_id = :socketId", {
+        socketId: dto.socketId,
+      });
     }
 
     const overlapping = await overlapQuery.getOne();
 
     if (overlapping) {
       throw new BadRequestException(
-        'This time slot is already booked. Please select a different time.'
+        "This time slot is already booked. Please select a different time.",
       );
     }
 
     // Calculate price
     const durationHours = durationMinutes / 60;
-    const price = Number((charger.powerKw * charger.pricePerKwh * durationHours).toFixed(2));
+    const price = Number(
+      (charger.powerKw * charger.pricePerKwh * durationHours).toFixed(2),
+    );
 
     // Calculate grace period expiration
     const gracePeriodExpiresAt = new Date(
-      startTime.getTime() + settings.gracePeriodMinutes * 60000
+      startTime.getTime() + settings.gracePeriodMinutes * 60000,
     );
 
     // Create pre-booking
@@ -862,14 +983,16 @@ export class BookingsService {
       endTime,
       price,
       // Owner must accept this request before payment/check-in can continue.
-      status: 'pending',
+      status: "pending",
       bookingType: BookingType.PRE_BOOKING,
       gracePeriodExpiresAt,
     });
 
     const savedBooking = await this.bookingRepository.save(booking);
 
-    this.logger.log(`Pre-booking created: ${savedBooking.id} for charger ${dto.chargerId}`);
+    this.logger.log(
+      `Pre-booking created: ${savedBooking.id} for charger ${dto.chargerId}`,
+    );
 
     this.notifyOwnerAboutBookingRequest(charger, savedBooking);
 
@@ -878,7 +1001,7 @@ export class BookingsService {
       .sendBookingConfirmed(
         userId,
         savedBooking.id,
-        charger.name || 'charging station',
+        charger.name || "charging station",
         startTime,
       )
       .catch((error) => {
@@ -888,12 +1011,15 @@ export class BookingsService {
         );
       });
 
-    const warnings: BookingWarning[] = [{
-      type: 'requires_verification',
-      severity: 'high',
-      message: `You must check in within ${settings.gracePeriodMinutes} minutes of your start time`,
-      recommendedAction: 'Arrive on time and tap "Check In" in the app when you reach the charger'
-    }];
+    const warnings: BookingWarning[] = [
+      {
+        type: "requires_verification",
+        severity: "high",
+        message: `You must check in within ${settings.gracePeriodMinutes} minutes of your start time`,
+        recommendedAction:
+          'Arrive on time and tap "Check In" in the app when you reach the charger',
+      },
+    ];
 
     return {
       booking: savedBooking,
@@ -904,8 +1030,11 @@ export class BookingsService {
     };
   }
 
-  private notifyOwnerAboutBookingRequest(charger: Charger, booking: BookingEntity): void {
-    if (booking.status !== 'pending') {
+  private notifyOwnerAboutBookingRequest(
+    charger: Charger,
+    booking: BookingEntity,
+  ): void {
+    if (booking.status !== "pending") {
       return;
     }
 
@@ -920,7 +1049,7 @@ export class BookingsService {
     this.smsService
       .sendBookingRequestSMS(ownerPhone, {
         ownerName: charger.owner?.name,
-        chargerName: charger.name || 'your charger',
+        chargerName: charger.name || "your charger",
         startTime: booking.startTime,
         endTime: booking.endTime,
       })
@@ -938,41 +1067,43 @@ export class BookingsService {
    * @returns Updated booking
    */
   async checkInBooking(
-    dto: CheckInBookingDto, 
-    userId: string
+    dto: CheckInBookingDto,
+    userId: string,
   ): Promise<BookingEntity> {
     const booking = await this.bookingRepository.findOne({
       where: { id: dto.bookingId },
-      relations: ['charger']
+      relations: ["charger"],
     });
 
     if (!booking) {
-      throw new NotFoundException('Booking not found');
+      throw new NotFoundException("Booking not found");
     }
 
     if (booking.userId !== userId) {
-      throw new ForbiddenException('You can only check in to your own bookings');
+      throw new ForbiddenException(
+        "You can only check in to your own bookings",
+      );
     }
 
     if (booking.bookingType !== BookingType.PRE_BOOKING) {
-      throw new BadRequestException('Only pre-bookings require check-in');
+      throw new BadRequestException("Only pre-bookings require check-in");
     }
 
-    if (booking.status !== 'confirmed') {
-      throw new BadRequestException('Booking must be confirmed to check in');
+    if (booking.status !== "confirmed") {
+      throw new BadRequestException("Booking must be confirmed to check in");
     }
 
     const now = new Date();
 
     // Check if within grace period
     if (booking.gracePeriodExpiresAt && now > booking.gracePeriodExpiresAt) {
-      booking.status = 'cancelled';
+      booking.status = "cancelled";
       booking.noShow = true;
       await this.bookingRepository.save(booking);
       await this._syncChargerAndSocketAvailability(booking.chargerId);
 
       throw new BadRequestException(
-        'Check-in window has expired. Your booking has been marked as a no-show.'
+        "Check-in window has expired. Your booking has been marked as a no-show.",
       );
     }
 
@@ -980,13 +1111,13 @@ export class BookingsService {
     const earliestCheckIn = new Date(booking.startTime.getTime() - 10 * 60000); // 10 min before
     if (now < earliestCheckIn) {
       throw new BadRequestException(
-        'You can only check in up to 10 minutes before your booking start time'
+        "You can only check in up to 10 minutes before your booking start time",
       );
     }
 
     // Update booking
     booking.checkInTime = now;
-    booking.status = 'active';
+    booking.status = "active";
     const updatedBooking = await this.bookingRepository.save(booking);
     await this._syncChargerAndSocketAvailability(booking.chargerId);
 
@@ -1008,7 +1139,7 @@ export class BookingsService {
   async handleNoShow(bookingId: string): Promise<void> {
     const booking = await this.bookingRepository.findOne({
       where: { id: bookingId },
-      relations: ['charger', 'user']
+      relations: ["charger", "user"],
     });
 
     if (!booking) {
@@ -1017,7 +1148,7 @@ export class BookingsService {
     }
 
     booking.noShow = true;
-    booking.status = 'cancelled';
+    booking.status = "cancelled";
     await this.bookingRepository.save(booking);
     await this._syncChargerAndSocketAvailability(booking.chargerId);
 
@@ -1029,7 +1160,7 @@ export class BookingsService {
     await this.notificationsService.sendBookingAutoCancelled(
       booking.userId,
       bookingId,
-      charger.name || 'charging station',
+      charger.name || "charging station",
     );
   }
 
@@ -1039,17 +1170,20 @@ export class BookingsService {
    * @param bookingType Requested booking type
    * @returns True if allowed
    */
-  private validateBookingType(charger: Charger, bookingType: BookingType): boolean {
+  private validateBookingType(
+    charger: Charger,
+    bookingType: BookingType,
+  ): boolean {
     switch (charger.bookingMode) {
       case BookingMode.PRE_BOOKING:
         return bookingType === BookingType.PRE_BOOKING;
-      
+
       case BookingMode.WALK_IN:
         return bookingType === BookingType.WALK_IN;
-      
+
       case BookingMode.HYBRID:
         return true; // Both types allowed
-      
+
       default:
         return false;
     }
@@ -1059,29 +1193,33 @@ export class BookingsService {
    * Cron job to handle expired grace periods for pre-bookings
    * Runs every 2 minutes
    */
-  @Cron('*/2 * * * *')
+  @Cron("*/2 * * * *")
   async handleExpiredGracePeriods() {
     try {
       const now = new Date();
 
       const expiredBookings = await this.bookingRepository
-        .createQueryBuilder('booking')
-        .where('booking.bookingType = :bookingType', { bookingType: BookingType.PRE_BOOKING })
-        .andWhere('booking.status = :status', { status: 'confirmed' })
-        .andWhere('booking.gracePeriodExpiresAt < :now', { now })
-        .andWhere('booking.checkInTime IS NULL')
+        .createQueryBuilder("booking")
+        .where("booking.bookingType = :bookingType", {
+          bookingType: BookingType.PRE_BOOKING,
+        })
+        .andWhere("booking.status = :status", { status: "confirmed" })
+        .andWhere("booking.gracePeriodExpiresAt < :now", { now })
+        .andWhere("booking.checkInTime IS NULL")
         .getMany();
 
-      this.logger.log(`Processing ${expiredBookings.length} expired grace periods`);
+      this.logger.log(
+        `Processing ${expiredBookings.length} expired grace periods`,
+      );
 
       for (const booking of expiredBookings) {
         await this.handleNoShow(booking.id);
       }
     } catch (error) {
       const code = (error as { code?: string }).code;
-      if (code === '42703') {
+      if (code === "42703") {
         this.logger.error(
-          'Bookings schema is missing expected columns. Run pending TypeORM migrations (npm run migration:run).',
+          "Bookings schema is missing expected columns. Run pending TypeORM migrations (npm run migration:run).",
         );
         return;
       }

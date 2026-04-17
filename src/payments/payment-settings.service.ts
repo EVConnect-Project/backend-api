@@ -1,9 +1,13 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import * as bcrypt from 'bcrypt';
-import { UserPaymentSettingsEntity } from './entities/user-payment-settings.entity';
-import { UpdatePaymentSettingsDto } from './dto/update-payment-settings.dto';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import * as bcrypt from "bcrypt";
+import { UserPaymentSettingsEntity } from "./entities/user-payment-settings.entity";
+import { UpdatePaymentSettingsDto } from "./dto/update-payment-settings.dto";
 
 @Injectable()
 export class PaymentSettingsService {
@@ -40,21 +44,24 @@ export class PaymentSettingsService {
 
     // Validate PIN format
     if (!pin || pin.length < 4 || pin.length > 6) {
-      throw new BadRequestException('PIN must be between 4 and 6 digits');
+      throw new BadRequestException("PIN must be between 4 and 6 digits");
     }
 
     if (!/^\d+$/.test(pin)) {
-      throw new BadRequestException('PIN must contain only numbers');
+      throw new BadRequestException("PIN must contain only numbers");
     }
 
     const hashedPin = await bcrypt.hash(pin, 10);
-    
+
     settings.paymentPinHash = hashedPin;
     settings.requirePinForPayments = true;
     await this.settingsRepository.save(settings);
   }
 
-  async verifyPaymentPin(userId: string, pin: string): Promise<{ success: boolean }> {
+  async verifyPaymentPin(
+    userId: string,
+    pin: string,
+  ): Promise<{ success: boolean }> {
     const settings = await this.findOrCreate(userId);
 
     if (!settings.paymentPinHash) {
@@ -65,32 +72,38 @@ export class PaymentSettingsService {
     return { success: isValid };
   }
 
-  async changePaymentPin(userId: string, oldPin: string, newPin: string): Promise<void> {
+  async changePaymentPin(
+    userId: string,
+    oldPin: string,
+    newPin: string,
+  ): Promise<void> {
     const settings = await this.findOrCreate(userId);
 
     if (!settings.paymentPinHash) {
-      throw new BadRequestException('No PIN is currently set');
+      throw new BadRequestException("No PIN is currently set");
     }
 
     // Verify old PIN is correct
     const isOldPinValid = await bcrypt.compare(oldPin, settings.paymentPinHash);
     if (!isOldPinValid) {
-      throw new BadRequestException('Current PIN is incorrect');
+      throw new BadRequestException("Current PIN is incorrect");
     }
 
     // Validate new PIN format
     if (!newPin || newPin.length < 4 || newPin.length > 6) {
-      throw new BadRequestException('PIN must be between 4 and 6 digits');
+      throw new BadRequestException("PIN must be between 4 and 6 digits");
     }
 
     if (!/^\d+$/.test(newPin)) {
-      throw new BadRequestException('PIN must contain only numbers');
+      throw new BadRequestException("PIN must contain only numbers");
     }
 
     // Cannot reuse the same PIN
     const isSamePin = await bcrypt.compare(newPin, settings.paymentPinHash);
     if (isSamePin) {
-      throw new BadRequestException('New PIN cannot be the same as the current PIN');
+      throw new BadRequestException(
+        "New PIN cannot be the same as the current PIN",
+      );
     }
 
     const hashedPin = await bcrypt.hash(newPin, 10);
@@ -105,7 +118,7 @@ export class PaymentSettingsService {
 
   async removePaymentPin(userId: string): Promise<void> {
     const settings = await this.findOrCreate(userId);
-    
+
     settings.paymentPinHash = null;
     settings.requirePinForPayments = false;
     await this.settingsRepository.save(settings);

@@ -1,5 +1,5 @@
-import { IsEnum, IsOptional, IsString, IsNumber } from 'class-validator';
-import { BreakdownStatus } from '../entities/breakdown-request.entity';
+import { IsEnum, IsOptional, IsString, IsNumber } from "class-validator";
+import { BreakdownStatus } from "../entities/breakdown-request.entity";
 
 export class UpdateBreakdownStatusDto {
   @IsEnum(BreakdownStatus)

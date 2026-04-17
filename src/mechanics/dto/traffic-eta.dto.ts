@@ -1,4 +1,4 @@
-import { IsNumber, IsString, IsOptional } from 'class-validator';
+import { IsNumber, IsString, IsOptional } from "class-validator";
 
 export class TrafficETADto {
   @IsNumber()
@@ -15,14 +15,14 @@ export class TrafficETADto {
 
   @IsOptional()
   @IsString()
-  travelMode?: 'driving' | 'walking' | 'bicycling' | 'transit';
+  travelMode?: "driving" | "walking" | "bicycling" | "transit";
 }
 
 export interface TrafficETAResponse {
   distanceKm: number;
   durationMinutes: number;
   durationInTrafficMinutes: number;
-  trafficLevel: 'low' | 'moderate' | 'heavy' | 'severe';
+  trafficLevel: "low" | "moderate" | "heavy" | "severe";
   estimatedArrival: string;
   routeSummary: string;
 }

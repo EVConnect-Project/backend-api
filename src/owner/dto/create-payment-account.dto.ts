@@ -1,5 +1,13 @@
-import { IsString, IsNotEmpty, IsEnum, IsOptional, MaxLength, MinLength, Matches } from 'class-validator';
-import { AccountType } from '../entities/owner-payment-account.entity';
+import {
+  IsString,
+  IsNotEmpty,
+  IsEnum,
+  IsOptional,
+  MaxLength,
+  MinLength,
+  Matches,
+} from "class-validator";
+import { AccountType } from "../entities/owner-payment-account.entity";
 
 export class CreatePaymentAccountDto {
   @IsString()
@@ -22,7 +30,7 @@ export class CreatePaymentAccountDto {
   @IsString()
   @MaxLength(34)
   @Matches(/^[A-Z]{2}[0-9]{2}[A-Z0-9]+$/, {
-    message: 'IBAN must be in valid format (e.g., GB82WEST12345698765432)'
+    message: "IBAN must be in valid format (e.g., GB82WEST12345698765432)",
   })
   iban?: string;
 
@@ -31,7 +39,7 @@ export class CreatePaymentAccountDto {
   @MinLength(8)
   @MaxLength(11)
   @Matches(/^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$/, {
-    message: 'SWIFT code must be in valid format (e.g., AAAABBCCXXX)'
+    message: "SWIFT code must be in valid format (e.g., AAAABBCCXXX)",
   })
   swiftCode?: string;
 

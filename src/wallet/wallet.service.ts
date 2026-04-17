@@ -3,27 +3,32 @@ import {
   Injectable,
   Logger,
   NotFoundException,
-} from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { InjectRepository } from '@nestjs/typeorm';
-import { createHash, randomUUID, timingSafeEqual } from 'crypto';
-import { DataSource, EntityManager, FindOptionsWhere, Repository } from 'typeorm';
-import { ChargingService } from '../charging/charging.service';
-import { Charger } from '../charger/entities/charger.entity';
-import { UserEntity } from '../users/entities/user.entity';
-import { StartChargingDto } from './dto/start-charging.dto';
-import { StopChargingDto } from './dto/stop-charging.dto';
-import { WalletTopupDto } from './dto/wallet-topup.dto';
+} from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { InjectRepository } from "@nestjs/typeorm";
+import { createHash, randomUUID, timingSafeEqual } from "crypto";
+import {
+  DataSource,
+  EntityManager,
+  FindOptionsWhere,
+  Repository,
+} from "typeorm";
+import { ChargingService } from "../charging/charging.service";
+import { Charger } from "../charger/entities/charger.entity";
+import { UserEntity } from "../users/entities/user.entity";
+import { StartChargingDto } from "./dto/start-charging.dto";
+import { StopChargingDto } from "./dto/stop-charging.dto";
+import { WalletTopupDto } from "./dto/wallet-topup.dto";
 import {
   ChargingSessionEntity,
   ChargingSessionStatus,
-} from './entities/charging-session.entity';
+} from "./entities/charging-session.entity";
 import {
   WalletTransactionEntity,
   WalletTransactionStatus,
   WalletTransactionType,
-} from './entities/wallet-transaction.entity';
-import { WalletEntity } from './entities/wallet.entity';
+} from "./entities/wallet-transaction.entity";
+import { WalletEntity } from "./entities/wallet.entity";
 
 @Injectable()
 export class WalletService {
@@ -57,38 +62,48 @@ export class WalletService {
     private readonly chargingService: ChargingService,
   ) {
     this.minimumWalletBalance = Number(
-      this.configService.get<string>('WALLET_MINIMUM_BALANCE') || '500',
+      this.configService.get<string>("WALLET_MINIMUM_BALANCE") || "500",
     );
     this.minimumTopupAmount = Number(
-      this.configService.get<string>('WALLET_MIN_TOPUP_AMOUNT') || '100',
+      this.configService.get<string>("WALLET_MIN_TOPUP_AMOUNT") || "100",
     );
     this.maximumTopupAmount = Number(
-      this.configService.get<string>('WALLET_MAX_TOPUP_AMOUNT') || '500000',
+      this.configService.get<string>("WALLET_MAX_TOPUP_AMOUNT") || "500000",
     );
     this.maximumHoldAmount = Number(
-      this.configService.get<string>('WALLET_MAX_HOLD_AMOUNT') || '10000',
+      this.configService.get<string>("WALLET_MAX_HOLD_AMOUNT") || "10000",
     );
 
-    this.payhereBaseUrl =
-      (this.configService.get<string>('PAYHERE_BASE_URL') ||
-        'https://sandbox.payhere.lk').trim();
-    this.payhereMerchantId =
-      (this.configService.get<string>('PAYHERE_MERCHANT_ID') || 'MERCHANT_ID').trim();
-    this.payhereMerchantSecret =
-      (this.configService.get<string>('PAYHERE_MERCHANT_SECRET') || 'MERCHANT_SECRET').trim();
-    this.payhereNotifyUrl =
-      (this.configService.get<string>('PAYHERE_NOTIFY_URL') ||
-        'http://localhost:4000/api/payment/webhook').trim();
-    this.payhereReturnUrl =
-      (this.configService.get<string>('PAYHERE_RETURN_URL') ||
-        'http://localhost:3000/payment/success').trim();
-    this.payhereCancelUrl =
-      (this.configService.get<string>('PAYHERE_CANCEL_URL') ||
-        'http://localhost:3000/payment/cancel').trim();
+    this.payhereBaseUrl = (
+      this.configService.get<string>("PAYHERE_BASE_URL") ||
+      "https://sandbox.payhere.lk"
+    ).trim();
+    this.payhereMerchantId = (
+      this.configService.get<string>("PAYHERE_MERCHANT_ID") || "MERCHANT_ID"
+    ).trim();
+    this.payhereMerchantSecret = (
+      this.configService.get<string>("PAYHERE_MERCHANT_SECRET") ||
+      "MERCHANT_SECRET"
+    ).trim();
+    this.payhereNotifyUrl = (
+      this.configService.get<string>("PAYHERE_NOTIFY_URL") ||
+      "http://localhost:4000/api/payment/webhook"
+    ).trim();
+    this.payhereReturnUrl = (
+      this.configService.get<string>("PAYHERE_RETURN_URL") ||
+      "http://localhost:3000/payment/success"
+    ).trim();
+    this.payhereCancelUrl = (
+      this.configService.get<string>("PAYHERE_CANCEL_URL") ||
+      "http://localhost:3000/payment/cancel"
+    ).trim();
     this.allowUnsafeReturnConfirmation =
-      String(this.configService.get<string>('PAYHERE_ALLOW_RETURN_FALLBACK') || 'false')
+      String(
+        this.configService.get<string>("PAYHERE_ALLOW_RETURN_FALLBACK") ||
+          "false",
+      )
         .trim()
-        .toLowerCase() === 'true';
+        .toLowerCase() === "true";
   }
 
   async getWallet(userId: string) {
@@ -108,29 +123,37 @@ export class WalletService {
     const safeLimit = Math.min(Math.max(limit || 50, 1), 100);
     const safeOffset = Math.max(offset || 0, 0);
 
-    const [transactions, total] = await this.walletTransactionRepository.findAndCount({
-      where: { userId },
-      order: { createdAt: 'DESC' },
-      take: safeLimit,
-      skip: safeOffset,
-    });
+    const [transactions, total] =
+      await this.walletTransactionRepository.findAndCount({
+        where: { userId },
+        order: { createdAt: "DESC" },
+        take: safeLimit,
+        skip: safeOffset,
+      });
 
     return { transactions, total, limit: safeLimit, offset: safeOffset };
   }
 
-  async listSessions(userId: string, status?: ChargingSessionStatus, limit = 50, offset = 0) {
+  async listSessions(
+    userId: string,
+    status?: ChargingSessionStatus,
+    limit = 50,
+    offset = 0,
+  ) {
     const safeLimit = Math.min(Math.max(limit || 50, 1), 100);
     const safeOffset = Math.max(offset || 0, 0);
 
     const whereClause: FindOptionsWhere<ChargingSessionEntity> = { userId };
     if (status) whereClause.status = status;
 
-    const [sessions, total] = await this.chargingSessionRepository.findAndCount({
-      where: whereClause,
-      order: { createdAt: 'DESC' },
-      take: safeLimit,
-      skip: safeOffset,
-    });
+    const [sessions, total] = await this.chargingSessionRepository.findAndCount(
+      {
+        where: whereClause,
+        order: { createdAt: "DESC" },
+        take: safeLimit,
+        skip: safeOffset,
+      },
+    );
 
     return { sessions, total, limit: safeLimit, offset: safeOffset };
   }
@@ -157,19 +180,21 @@ export class WalletService {
     ]);
 
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException("User not found");
     }
 
     const orderId = randomUUID();
-    const customerName = (user.name || 'EVRS Customer').trim();
+    const customerName = (user.name || "EVRS Customer").trim();
     const [firstName, ...restNames] = customerName.split(/\s+/);
-    const lastName = restNames.join(' ');
-    const rawPhone = String(user.phoneNumber || '').trim();
+    const lastName = restNames.join(" ");
+    const rawPhone = String(user.phoneNumber || "").trim();
     const sanitizedPhone = this.normalizeSriLankanPhone(rawPhone);
     const rawEmail =
-      typeof (user as any).email === 'string' ? String((user as any).email).trim() : '';
-    const hasUsableEmail = rawEmail.includes('@') && rawEmail.includes('.');
-    const userEmail = hasUsableEmail ? rawEmail : 'no-reply@evrs.lk';
+      typeof (user as any).email === "string"
+        ? String((user as any).email).trim()
+        : "";
+    const hasUsableEmail = rawEmail.includes("@") && rawEmail.includes(".");
+    const userEmail = hasUsableEmail ? rawEmail : "no-reply@evrs.lk";
 
     const transaction = await this.walletTransactionRepository.save(
       this.walletTransactionRepository.create({
@@ -179,13 +204,13 @@ export class WalletService {
         status: WalletTransactionStatus.PENDING,
         referenceId: orderId,
         metadata: {
-          provider: 'payhere',
+          provider: "payhere",
           callbackContext: dto.callbackContext || null,
         },
       }),
     );
 
-    const currency = String(wallet.currency || 'LKR').toUpperCase();
+    const currency = String(wallet.currency || "LKR").toUpperCase();
 
     const payhereData = {
       merchant_id: this.payhereMerchantId,
@@ -196,13 +221,13 @@ export class WalletService {
       items: `EVRS Wallet Top-up (${userId.slice(0, 8)})`,
       currency,
       amount: amount.toFixed(2),
-      first_name: firstName || 'EVRS',
-      last_name: lastName || 'Customer',
+      first_name: firstName || "EVRS",
+      last_name: lastName || "Customer",
       email: userEmail,
-      phone: sanitizedPhone || '0770000000',
-      address: 'Sri Lanka',
-      city: 'Colombo',
-      country: 'Sri Lanka',
+      phone: sanitizedPhone || "0770000000",
+      address: "Sri Lanka",
+      city: "Colombo",
+      country: "Sri Lanka",
       hash: this.generatePayHereCheckoutHash(orderId, amount, currency),
       custom_1: userId,
       custom_2: transaction.transactionId,
@@ -229,12 +254,19 @@ export class WalletService {
       payment_id,
     } = payload;
 
-    if (!merchant_id || !order_id || !payhere_amount || !payhere_currency || !status_code || !md5sig) {
-      throw new BadRequestException('Invalid webhook payload');
+    if (
+      !merchant_id ||
+      !order_id ||
+      !payhere_amount ||
+      !payhere_currency ||
+      !status_code ||
+      !md5sig
+    ) {
+      throw new BadRequestException("Invalid webhook payload");
     }
 
     if (merchant_id !== this.payhereMerchantId) {
-      throw new BadRequestException('Invalid merchant id');
+      throw new BadRequestException("Invalid merchant id");
     }
 
     this.verifyPayHereWebhookHash(
@@ -267,22 +299,32 @@ export class WalletService {
     }
 
     if (this.toMoney(payhere_amount) !== this.toMoney(transaction.amount)) {
-      throw new BadRequestException('Webhook amount does not match transaction amount');
+      throw new BadRequestException(
+        "Webhook amount does not match transaction amount",
+      );
     }
 
     const wallet = await this.getOrCreateWallet(transaction.userId);
-    if (String(payhere_currency).toUpperCase() !== String(wallet.currency).toUpperCase()) {
-      throw new BadRequestException('Webhook currency does not match wallet currency');
+    if (
+      String(payhere_currency).toUpperCase() !==
+      String(wallet.currency).toUpperCase()
+    ) {
+      throw new BadRequestException(
+        "Webhook currency does not match wallet currency",
+      );
     }
 
     const statusCode = Number(status_code);
 
     if (statusCode === 2) {
-      const result = await this.creditWalletForTopup(transaction.transactionId, {
-        paymentId: payment_id,
-        payhereAmount: payhere_amount,
-        payhereCurrency: payhere_currency,
-      });
+      const result = await this.creditWalletForTopup(
+        transaction.transactionId,
+        {
+          paymentId: payment_id,
+          payhereAmount: payhere_amount,
+          payhereCurrency: payhere_currency,
+        },
+      );
       return {
         received: true,
         ...result,
@@ -297,16 +339,22 @@ export class WalletService {
       },
     });
 
-    return { received: true, failed: true, transactionId: transaction.transactionId };
+    return {
+      received: true,
+      failed: true,
+      transactionId: transaction.transactionId,
+    };
   }
 
   async confirmTopupFromReturn(userId: string, payload: Record<string, any>) {
-    const orderId = String(payload?.order_id || payload?.orderId || '').trim();
-    const rawStatusCode = String(payload?.status_code || payload?.statusCode || '').trim();
+    const orderId = String(payload?.order_id || payload?.orderId || "").trim();
+    const rawStatusCode = String(
+      payload?.status_code || payload?.statusCode || "",
+    ).trim();
     const statusCode = Number(rawStatusCode);
 
     if (!orderId) {
-      throw new BadRequestException('Missing order_id in callback payload');
+      throw new BadRequestException("Missing order_id in callback payload");
     }
 
     const transaction = await this.walletTransactionRepository.findOne({
@@ -318,7 +366,7 @@ export class WalletService {
     });
 
     if (!transaction) {
-      throw new NotFoundException('Top-up transaction not found for this user');
+      throw new NotFoundException("Top-up transaction not found for this user");
     }
 
     if (transaction.status === WalletTransactionStatus.SUCCESS) {
@@ -354,17 +402,19 @@ export class WalletService {
       };
     }
 
-    const merchantId = String(payload?.merchant_id || '').trim();
-    const incomingHash = String(payload?.md5sig || '').trim();
-    const payhereAmount = String(payload?.payhere_amount || transaction.amount).trim();
-    const payhereCurrency = String(payload?.payhere_currency || 'LKR').trim();
+    const merchantId = String(payload?.merchant_id || "").trim();
+    const incomingHash = String(payload?.md5sig || "").trim();
+    const payhereAmount = String(
+      payload?.payhere_amount || transaction.amount,
+    ).trim();
+    const payhereCurrency = String(payload?.payhere_currency || "LKR").trim();
 
     const hasSignaturePayload =
       !!merchantId && !!incomingHash && !!payhereAmount && !!payhereCurrency;
 
     if (hasSignaturePayload) {
       if (merchantId !== this.payhereMerchantId) {
-        throw new BadRequestException('Invalid merchant id');
+        throw new BadRequestException("Invalid merchant id");
       }
 
       this.verifyPayHereWebhookHash(
@@ -391,14 +441,18 @@ export class WalletService {
       paymentId: payload?.payment_id,
       payhereAmount,
       payhereCurrency,
-      confirmedVia: hasSignaturePayload ? 'return_signature' : 'return_fallback',
+      confirmedVia: hasSignaturePayload
+        ? "return_signature"
+        : "return_fallback",
     });
 
     return {
       received: true,
       transactionId: result.transactionId,
       walletBalance: result.walletBalance,
-      confirmedVia: hasSignaturePayload ? 'return_signature' : 'return_fallback',
+      confirmedVia: hasSignaturePayload
+        ? "return_signature"
+        : "return_fallback",
     };
   }
 
@@ -408,15 +462,19 @@ export class WalletService {
     });
 
     if (!charger) {
-      throw new NotFoundException('Charger not found');
+      throw new NotFoundException("Charger not found");
     }
 
-    if (charger.isBanned || charger.status === 'offline') {
-      throw new BadRequestException('Selected charger is not available for charging');
+    if (charger.isBanned || charger.status === "offline") {
+      throw new BadRequestException(
+        "Selected charger is not available for charging",
+      );
     }
 
     const lockAmount = dto.lockAmount ?? true;
-    const holdAmount = this.toMoney(dto.holdAmount ?? this.minimumWalletBalance);
+    const holdAmount = this.toMoney(
+      dto.holdAmount ?? this.minimumWalletBalance,
+    );
 
     if (lockAmount && holdAmount > this.maximumHoldAmount) {
       throw new BadRequestException(
@@ -430,16 +488,18 @@ export class WalletService {
 
       const activeSession = await sessionRepo.findOne({
         where: { userId, status: ChargingSessionStatus.ACTIVE },
-        lock: { mode: 'pessimistic_read' },
+        lock: { mode: "pessimistic_read" },
       });
 
       if (activeSession) {
-        throw new BadRequestException('User already has an active charging session');
+        throw new BadRequestException(
+          "User already has an active charging session",
+        );
       }
 
       let wallet = await walletRepo.findOne({
         where: { userId },
-        lock: { mode: 'pessimistic_write' },
+        lock: { mode: "pessimistic_write" },
       });
 
       if (!wallet) {
@@ -447,7 +507,7 @@ export class WalletService {
           userId,
           balance: 0,
           heldBalance: 0,
-          currency: 'LKR',
+          currency: "LKR",
         });
       }
 
@@ -466,7 +526,9 @@ export class WalletService {
       }
 
       if (lockAmount) {
-        wallet.heldBalance = this.toMoney(this.toMoney(wallet.heldBalance) + holdAmount);
+        wallet.heldBalance = this.toMoney(
+          this.toMoney(wallet.heldBalance) + holdAmount,
+        );
       }
 
       await walletRepo.save(wallet);
@@ -500,7 +562,10 @@ export class WalletService {
       );
 
       const externalSessionId =
-        externalSession?.sessionId || externalSession?.id || externalSession?.data?.id || null;
+        externalSession?.sessionId ||
+        externalSession?.id ||
+        externalSession?.data?.id ||
+        null;
 
       if (externalSessionId) {
         await this.chargingService.startCharging(externalSessionId);
@@ -513,7 +578,7 @@ export class WalletService {
         `Charging start failed for wallet session ${session.sessionId}: ${error.message}`,
       );
       await this.failSessionAndReleaseHold(session.sessionId, error.message);
-      throw new BadRequestException('Unable to start charging session');
+      throw new BadRequestException("Unable to start charging session");
     }
 
     const updatedSession = await this.chargingSessionRepository.findOne({
@@ -537,7 +602,7 @@ export class WalletService {
     });
 
     if (!session) {
-      throw new NotFoundException('Charging session not found');
+      throw new NotFoundException("Charging session not found");
     }
 
     if (session.status === ChargingSessionStatus.COMPLETED) {
@@ -550,13 +615,15 @@ export class WalletService {
     }
 
     if (session.status !== ChargingSessionStatus.ACTIVE) {
-      throw new BadRequestException('Only active sessions can be stopped');
+      throw new BadRequestException("Only active sessions can be stopped");
     }
 
     let externalUnits: number | undefined;
     if (session.externalSessionId) {
       try {
-        const stopResult = await this.chargingService.stopCharging(session.externalSessionId);
+        const stopResult = await this.chargingService.stopCharging(
+          session.externalSessionId,
+        );
         externalUnits = this.extractUnitsConsumed(stopResult);
       } catch (error) {
         this.logger.warn(
@@ -571,10 +638,14 @@ export class WalletService {
     );
 
     if (unitsConsumed <= 0) {
-      throw new BadRequestException('Unable to determine consumed units for the session');
+      throw new BadRequestException(
+        "Unable to determine consumed units for the session",
+      );
     }
 
-    const totalCost = this.toMoney(unitsConsumed * this.toMoney(session.pricePerKwh));
+    const totalCost = this.toMoney(
+      unitsConsumed * this.toMoney(session.pricePerKwh),
+    );
 
     await this.dataSource.transaction(async (manager) => {
       const walletRepo = manager.getRepository(WalletEntity);
@@ -583,31 +654,40 @@ export class WalletService {
 
       const lockedSession = await sessionRepo.findOne({
         where: { sessionId: session.sessionId },
-        lock: { mode: 'pessimistic_write' },
+        lock: { mode: "pessimistic_write" },
       });
 
-      if (!lockedSession || lockedSession.status !== ChargingSessionStatus.ACTIVE) {
-        throw new BadRequestException('Charging session is not active');
+      if (
+        !lockedSession ||
+        lockedSession.status !== ChargingSessionStatus.ACTIVE
+      ) {
+        throw new BadRequestException("Charging session is not active");
       }
 
       const wallet = await walletRepo.findOne({
         where: { userId },
-        lock: { mode: 'pessimistic_write' },
+        lock: { mode: "pessimistic_write" },
       });
 
       if (!wallet) {
-        throw new BadRequestException('Wallet not found for user');
+        throw new BadRequestException("Wallet not found for user");
       }
 
       if (this.toMoney(lockedSession.heldAmount) > 0) {
         wallet.heldBalance = this.toMoney(
-          Math.max(0, this.toMoney(wallet.heldBalance) - this.toMoney(lockedSession.heldAmount)),
+          Math.max(
+            0,
+            this.toMoney(wallet.heldBalance) -
+              this.toMoney(lockedSession.heldAmount),
+          ),
         );
       }
 
       const availableAfterHoldRelease = this.availableBalance(wallet);
       if (availableAfterHoldRelease < totalCost) {
-        throw new BadRequestException('Insufficient wallet balance to settle charging session');
+        throw new BadRequestException(
+          "Insufficient wallet balance to settle charging session",
+        );
       }
 
       wallet.balance = this.toMoney(this.toMoney(wallet.balance) - totalCost);
@@ -619,7 +699,7 @@ export class WalletService {
       lockedSession.status = ChargingSessionStatus.COMPLETED;
       lockedSession.metadata = {
         ...(lockedSession.metadata || {}),
-        stopSource: externalUnits !== undefined ? 'external' : 'api',
+        stopSource: externalUnits !== undefined ? "external" : "api",
       };
       await sessionRepo.save(lockedSession);
 
@@ -640,7 +720,9 @@ export class WalletService {
     });
 
     const [updatedSession, wallet] = await Promise.all([
-      this.chargingSessionRepository.findOne({ where: { sessionId: session.sessionId } }),
+      this.chargingSessionRepository.findOne({
+        where: { sessionId: session.sessionId },
+      }),
       this.getWallet(userId),
     ]);
 
@@ -658,7 +740,7 @@ export class WalletService {
 
       const session = await sessionRepo.findOne({
         where: { sessionId },
-        lock: { mode: 'pessimistic_write' },
+        lock: { mode: "pessimistic_write" },
       });
 
       if (!session || session.status !== ChargingSessionStatus.ACTIVE) {
@@ -670,7 +752,7 @@ export class WalletService {
       if (holdAmount > 0) {
         const wallet = await walletRepo.findOne({
           where: { userId: session.userId },
-          lock: { mode: 'pessimistic_write' },
+          lock: { mode: "pessimistic_write" },
         });
 
         if (wallet) {
@@ -720,11 +802,11 @@ export class WalletService {
 
       const transaction = await txRepo.findOne({
         where: { transactionId },
-        lock: { mode: 'pessimistic_write' },
+        lock: { mode: "pessimistic_write" },
       });
 
       if (!transaction) {
-        throw new NotFoundException('Wallet transaction not found');
+        throw new NotFoundException("Wallet transaction not found");
       }
 
       if (transaction.status === WalletTransactionStatus.SUCCESS) {
@@ -734,7 +816,11 @@ export class WalletService {
         };
       }
 
-      const wallet = await this.getOrCreateWallet(transaction.userId, manager, true);
+      const wallet = await this.getOrCreateWallet(
+        transaction.userId,
+        manager,
+        true,
+      );
       const topupAmount = this.toMoney(transaction.amount);
 
       wallet.balance = this.toMoney(this.toMoney(wallet.balance) + topupAmount);
@@ -746,7 +832,7 @@ export class WalletService {
         paymentId: webhookData.paymentId,
         payhereAmount: webhookData.payhereAmount,
         payhereCurrency: webhookData.payhereCurrency,
-        confirmedVia: webhookData.confirmedVia || 'webhook',
+        confirmedVia: webhookData.confirmedVia || "webhook",
         processedAt: new Date().toISOString(),
       };
       await txRepo.save(transaction);
@@ -766,23 +852,26 @@ export class WalletService {
     statusCode: string,
     incomingHash: string,
   ) {
-    const merchantSecretHash = createHash('md5')
+    const merchantSecretHash = createHash("md5")
       .update(this.payhereMerchantSecret)
-      .digest('hex')
+      .digest("hex")
       .toUpperCase();
 
-    const localHash = createHash('md5')
+    const localHash = createHash("md5")
       .update(
         `${merchantId}${orderId}${amount}${currency}${statusCode}${merchantSecretHash}`,
       )
-      .digest('hex')
+      .digest("hex")
       .toUpperCase();
 
     const incoming = Buffer.from(String(incomingHash).toUpperCase());
     const expected = Buffer.from(localHash);
 
-    if (incoming.length !== expected.length || !timingSafeEqual(incoming, expected)) {
-      throw new BadRequestException('Invalid webhook signature');
+    if (
+      incoming.length !== expected.length ||
+      !timingSafeEqual(incoming, expected)
+    ) {
+      throw new BadRequestException("Invalid webhook signature");
     }
   }
 
@@ -791,17 +880,17 @@ export class WalletService {
     amount: number,
     currency: string,
   ) {
-    const currencyCode = String(currency || 'LKR').toUpperCase();
-    const merchantSecretHash = createHash('md5')
+    const currencyCode = String(currency || "LKR").toUpperCase();
+    const merchantSecretHash = createHash("md5")
       .update(this.payhereMerchantSecret)
-      .digest('hex')
+      .digest("hex")
       .toUpperCase();
 
-    return createHash('md5')
+    return createHash("md5")
       .update(
         `${this.payhereMerchantId}${orderId}${amount.toFixed(2)}${currencyCode}${merchantSecretHash}`,
       )
-      .digest('hex')
+      .digest("hex")
       .toUpperCase();
   }
 
@@ -810,30 +899,30 @@ export class WalletService {
     const merchantSecret = this.payhereMerchantSecret.trim();
 
     const invalidMerchantId =
-      !merchantId || merchantId.toUpperCase() === 'MERCHANT_ID';
+      !merchantId || merchantId.toUpperCase() === "MERCHANT_ID";
     const invalidMerchantSecret =
-      !merchantSecret || merchantSecret.toUpperCase() === 'MERCHANT_SECRET';
+      !merchantSecret || merchantSecret.toUpperCase() === "MERCHANT_SECRET";
 
     if (invalidMerchantId || invalidMerchantSecret) {
       throw new BadRequestException(
-        'PayHere sandbox is not configured. Set PAYHERE_MERCHANT_ID and PAYHERE_MERCHANT_SECRET in backend environment.',
+        "PayHere sandbox is not configured. Set PAYHERE_MERCHANT_ID and PAYHERE_MERCHANT_SECRET in backend environment.",
       );
     }
   }
 
   private normalizeSriLankanPhone(phone: string): string {
-    const digits = String(phone || '').replace(/\D/g, '');
-    if (!digits) return '';
+    const digits = String(phone || "").replace(/\D/g, "");
+    if (!digits) return "";
 
-    if (digits.startsWith('0') && digits.length === 10) {
+    if (digits.startsWith("0") && digits.length === 10) {
       return digits;
     }
 
-    if (digits.startsWith('94') && digits.length === 11) {
+    if (digits.startsWith("94") && digits.length === 11) {
       return `0${digits.substring(2)}`;
     }
 
-    if (digits.length === 9 && digits.startsWith('7')) {
+    if (digits.length === 9 && digits.startsWith("7")) {
       return `0${digits}`;
     }
 
@@ -851,7 +940,9 @@ export class WalletService {
 
     let wallet = await repository.findOne({
       where: { userId },
-      ...(manager && lock ? { lock: { mode: 'pessimistic_write' as const } } : {}),
+      ...(manager && lock
+        ? { lock: { mode: "pessimistic_write" as const } }
+        : {}),
     });
 
     if (!wallet) {
@@ -859,7 +950,7 @@ export class WalletService {
         userId,
         balance: 0,
         heldBalance: 0,
-        currency: 'LKR',
+        currency: "LKR",
       });
       wallet = await repository.save(wallet);
     }
@@ -891,10 +982,15 @@ export class WalletService {
   }
 
   private availableBalance(wallet: WalletEntity): number {
-    return this.toMoney(this.toMoney(wallet.balance) - this.toMoney(wallet.heldBalance));
+    return this.toMoney(
+      this.toMoney(wallet.balance) - this.toMoney(wallet.heldBalance),
+    );
   }
 
-  private toMoney(value: number | string | null | undefined, scale = 2): number {
+  private toMoney(
+    value: number | string | null | undefined,
+    scale = 2,
+  ): number {
     const numeric = Number(value || 0);
     if (!Number.isFinite(numeric)) {
       return 0;

@@ -1,4 +1,4 @@
-import { IsString, IsUUID, IsNotEmpty } from 'class-validator';
+import { IsString, IsUUID, IsNotEmpty } from "class-validator";
 
 export class SendMessageDto {
   @IsUUID()

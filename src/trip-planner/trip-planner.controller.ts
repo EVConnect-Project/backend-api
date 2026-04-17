@@ -1,18 +1,35 @@
-import { Controller, Post, Get, Patch, Body, Param, Query, UseGuards, ValidationPipe, Request, NotFoundException, BadRequestException } from '@nestjs/common';
-import { TripPlannerService } from './trip-planner.service';
-import { SmartTripPlannerService } from './services/smart-trip-planner.service';
-import { PlanRouteDto } from './dto/plan-route.dto';
-import { RouteResponseDto } from './dto/route-response.dto';
-import { SmartTripPlanDto, DrivingMode, RouteObjective } from './dto/smart-trip-plan.dto';
-import { RouteAlternativeDto } from './dto/route-alternative.dto';
-import { RoutesResponseDto } from './dto/routes-response.dto';
-import { SaveTripDto } from './dto/save-trip.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { TripPlanEntity } from './entities/trip-plan.entity';
+import {
+  Controller,
+  Post,
+  Get,
+  Patch,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+  ValidationPipe,
+  Request,
+  NotFoundException,
+  BadRequestException,
+} from "@nestjs/common";
+import { TripPlannerService } from "./trip-planner.service";
+import { SmartTripPlannerService } from "./services/smart-trip-planner.service";
+import { PlanRouteDto } from "./dto/plan-route.dto";
+import { RouteResponseDto } from "./dto/route-response.dto";
+import {
+  SmartTripPlanDto,
+  DrivingMode,
+  RouteObjective,
+} from "./dto/smart-trip-plan.dto";
+import { RouteAlternativeDto } from "./dto/route-alternative.dto";
+import { RoutesResponseDto } from "./dto/routes-response.dto";
+import { SaveTripDto } from "./dto/save-trip.dto";
+import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { TripPlanEntity } from "./entities/trip-plan.entity";
 
-@Controller('trip-planner')
+@Controller("trip-planner")
 @UseGuards(JwtAuthGuard)
 export class TripPlannerController {
   constructor(
@@ -22,7 +39,7 @@ export class TripPlannerController {
     private readonly tripPlanRepository: Repository<TripPlanEntity>,
   ) {}
 
-  @Post('route')
+  @Post("route")
   async planRoute(
     @Body() planRouteDto: PlanRouteDto,
     @Request() req,
@@ -30,7 +47,7 @@ export class TripPlannerController {
     return this.tripPlannerService.planRoute(planRouteDto, req.user.userId);
   }
 
-  @Post('smart-route')
+  @Post("smart-route")
   async planSmartRoute(
     @Body(ValidationPipe) smartTripPlanDto: SmartTripPlanDto,
     @Request() req,
@@ -41,39 +58,45 @@ export class TripPlannerController {
     );
   }
 
-  @Get('routes')
+  @Get("routes")
   async getRoutes(
-    @Query('origin') origin: string,
-    @Query('destination') destination: string,
-    @Query('vehicleId') vehicleId: string | undefined,
-    @Query('currentBatteryPercent') currentBatteryPercent: string | undefined,
-    @Query('waypoints') waypoints: string | undefined,
-    @Query('preferredNetworks') preferredNetworks: string | undefined,
-    @Query('excludedNetworks') excludedNetworks: string | undefined,
-    @Query('ambientTemperatureC') ambientTemperatureC: string | undefined,
-    @Query('windSpeedKph') windSpeedKph: string | undefined,
-    @Query('elevationDeltaM') elevationDeltaM: string | undefined,
-    @Query('hvacLoadKw') hvacLoadKw: string | undefined,
-    @Query('drivingMode') drivingMode: string | undefined,
-    @Query('routeObjective') routeObjective: string | undefined,
-    @Query('minChargeAtChargingStationPercent') minChargeAtChargingStationPercent: string | undefined,
-    @Query('targetBatteryPercent') targetBatteryPercent: string | undefined,
-    @Query('startAddress') startAddress: string | undefined,
-    @Query('destAddress') destAddress: string | undefined,
+    @Query("origin") origin: string,
+    @Query("destination") destination: string,
+    @Query("vehicleId") vehicleId: string | undefined,
+    @Query("currentBatteryPercent") currentBatteryPercent: string | undefined,
+    @Query("waypoints") waypoints: string | undefined,
+    @Query("preferredNetworks") preferredNetworks: string | undefined,
+    @Query("excludedNetworks") excludedNetworks: string | undefined,
+    @Query("ambientTemperatureC") ambientTemperatureC: string | undefined,
+    @Query("windSpeedKph") windSpeedKph: string | undefined,
+    @Query("elevationDeltaM") elevationDeltaM: string | undefined,
+    @Query("hvacLoadKw") hvacLoadKw: string | undefined,
+    @Query("drivingMode") drivingMode: string | undefined,
+    @Query("routeObjective") routeObjective: string | undefined,
+    @Query("minChargeAtChargingStationPercent")
+    minChargeAtChargingStationPercent: string | undefined,
+    @Query("targetBatteryPercent") targetBatteryPercent: string | undefined,
+    @Query("startAddress") startAddress: string | undefined,
+    @Query("destAddress") destAddress: string | undefined,
     @Request() req,
   ): Promise<RoutesResponseDto> {
-    const parseLatLng = (value: string, field: string): { lat: number; lng: number } => {
-      const [latRaw, lngRaw] = (value || '').split(',');
+    const parseLatLng = (
+      value: string,
+      field: string,
+    ): { lat: number; lng: number } => {
+      const [latRaw, lngRaw] = (value || "").split(",");
       const lat = Number(latRaw);
       const lng = Number(lngRaw);
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-        throw new BadRequestException(`Invalid ${field}. Expected format: lat,lng`);
+        throw new BadRequestException(
+          `Invalid ${field}. Expected format: lat,lng`,
+        );
       }
       return { lat, lng };
     };
 
-    const originPoint = parseLatLng(origin, 'origin');
-    const destinationPoint = parseLatLng(destination, 'destination');
+    const originPoint = parseLatLng(origin, "origin");
+    const destinationPoint = parseLatLng(destination, "destination");
     const parseOptionalNumber = (value?: string): number | undefined => {
       if (value == null || value.trim().length === 0) return undefined;
       const parsed = Number(value);
@@ -82,26 +105,30 @@ export class TripPlannerController {
     const parseCsv = (value?: string): string[] | undefined => {
       if (!value || value.trim().length === 0) return undefined;
       const items = value
-        .split(',')
+        .split(",")
         .map((item) => item.trim())
         .filter((item) => item.length > 0);
       return items.length > 0 ? items : undefined;
     };
-    const parseWaypoints = (value?: string): Array<{ lat: number; lng: number; address?: string }> | undefined => {
+    const parseWaypoints = (
+      value?: string,
+    ): Array<{ lat: number; lng: number; address?: string }> | undefined => {
       if (!value || value.trim().length === 0) return undefined;
 
       const parsed = value
-        .split('|')
+        .split("|")
         .map((token) => token.trim())
         .filter((token) => token.length > 0)
         .map((token) => {
-          const [latRaw, lngRaw] = token.split(',');
+          const [latRaw, lngRaw] = token.split(",");
           const lat = Number(latRaw);
           const lng = Number(lngRaw);
           if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
           return { lat, lng };
         })
-        .filter((point): point is { lat: number; lng: number } => point != null);
+        .filter(
+          (point): point is { lat: number; lng: number } => point != null,
+        );
 
       return parsed.length > 0 ? parsed : undefined;
     };
@@ -116,14 +143,16 @@ export class TripPlannerController {
       if (!value) return RouteObjective.BALANCED;
       const normalized = value.toLowerCase();
       if (normalized === RouteObjective.FASTEST) return RouteObjective.FASTEST;
-      if (normalized === RouteObjective.CHEAPEST) return RouteObjective.CHEAPEST;
+      if (normalized === RouteObjective.CHEAPEST)
+        return RouteObjective.CHEAPEST;
       return RouteObjective.BALANCED;
     };
 
-    const resolvedVehicleId = await this.smartTripPlannerService.resolveVehicleIdForUser(
-      req.user.userId,
-      vehicleId,
-    );
+    const resolvedVehicleId =
+      await this.smartTripPlannerService.resolveVehicleIdForUser(
+        req.user.userId,
+        vehicleId,
+      );
 
     const battery = parseOptionalNumber(currentBatteryPercent);
     const smartTripRequest: SmartTripPlanDto = {
@@ -144,7 +173,8 @@ export class TripPlannerController {
       hvacLoadKw: parseOptionalNumber(hvacLoadKw),
       drivingMode: parseDrivingMode(drivingMode),
       routeObjective: parseRouteObjective(routeObjective),
-      minChargeAtChargingStationPercent: parseOptionalNumber(minChargeAtChargingStationPercent) ?? 15,
+      minChargeAtChargingStationPercent:
+        parseOptionalNumber(minChargeAtChargingStationPercent) ?? 15,
       targetBatteryPercent: parseOptionalNumber(targetBatteryPercent) ?? 70,
     };
 
@@ -153,7 +183,8 @@ export class TripPlannerController {
       req.user.userId,
     );
 
-    const best = alternatives.find((route) => route.isRecommended) ?? alternatives[0];
+    const best =
+      alternatives.find((route) => route.isRecommended) ?? alternatives[0];
     const bestRouteId = best ? String(best.routeNumber) : null;
 
     return {
@@ -191,7 +222,7 @@ export class TripPlannerController {
   /**
    * Save a selected route as a trip plan
    */
-  @Post('trips')
+  @Post("trips")
   async saveTrip(
     @Body(ValidationPipe) saveTripDto: SaveTripDto,
     @Request() req,
@@ -208,24 +239,25 @@ export class TripPlannerController {
       waypoints: saveTripDto.waypoints || [],
       totalDistanceKm: saveTripDto.totalDistanceKm,
       totalDurationMinutes: saveTripDto.totalDurationMinutes,
-      drivingDurationMinutes: saveTripDto.drivingDurationMinutes || saveTripDto.totalDurationMinutes,
+      drivingDurationMinutes:
+        saveTripDto.drivingDurationMinutes || saveTripDto.totalDurationMinutes,
       totalChargingTimeMinutes: saveTripDto.totalChargingTimeMinutes || 0,
       totalChargingCostLkr: saveTripDto.totalChargingCostLkr || 0,
       routeScore: saveTripDto.routeScore || 0,
       routePolyline: saveTripDto.routePolyline,
       routeSummary: saveTripDto.routeSummary,
-      drivingMode: saveTripDto.drivingMode || 'normal',
+      drivingMode: saveTripDto.drivingMode || "normal",
       startBatteryPercent: saveTripDto.startBatteryPercent || 80,
       arrivalBatteryPercent: saveTripDto.arrivalBatteryPercent || 0,
       chargingStops: saveTripDto.chargingStops || [],
       safetyWarnings: saveTripDto.safetyWarnings || [],
-      status: 'planned',
+      status: "planned",
     });
 
     return this.tripPlanRepository.save(trip);
   }
 
-  @Post('create')
+  @Post("create")
   async createTrip(
     @Body(ValidationPipe) saveTripDto: SaveTripDto,
     @Request() req,
@@ -236,15 +268,15 @@ export class TripPlannerController {
   /**
    * Get user's trip history
    */
-  @Get('trips')
+  @Get("trips")
   async getUserTrips(
     @Request() req,
-    @Query('limit') limit?: number,
-    @Query('offset') offset?: number,
+    @Query("limit") limit?: number,
+    @Query("offset") offset?: number,
   ): Promise<{ trips: TripPlanEntity[]; total: number }> {
     const [trips, total] = await this.tripPlanRepository.findAndCount({
       where: { userId: req.user.userId },
-      order: { createdAt: 'DESC' },
+      order: { createdAt: "DESC" },
       take: limit || 20,
       skip: offset || 0,
     });
@@ -255,9 +287,9 @@ export class TripPlannerController {
   /**
    * Get a specific trip by ID
    */
-  @Get('trips/:id')
+  @Get("trips/:id")
   async getTripById(
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Request() req,
   ): Promise<TripPlanEntity> {
     const trip = await this.tripPlanRepository.findOne({
@@ -265,19 +297,19 @@ export class TripPlannerController {
     });
 
     if (!trip) {
-      throw new NotFoundException('Trip not found');
+      throw new NotFoundException("Trip not found");
     }
 
     return trip;
   }
 
-  @Get('trips/:id/live')
+  @Get("trips/:id/live")
   async getTripLiveState(
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Request() req,
   ): Promise<{
     tripId: string;
-    status: TripPlanEntity['status'];
+    status: TripPlanEntity["status"];
     currentLat: number | null;
     currentLng: number | null;
     currentHeading: number | null;
@@ -288,28 +320,36 @@ export class TripPlannerController {
   }> {
     const trip = await this.getTripById(id, req);
     const now = Date.now();
-    const lastLocationMs = trip.lastLocationAt ? trip.lastLocationAt.getTime() : null;
-    const heartbeatAgeSeconds = lastLocationMs != null
-      ? Math.max(0, Math.floor((now - lastLocationMs) / 1000))
+    const lastLocationMs = trip.lastLocationAt
+      ? trip.lastLocationAt.getTime()
       : null;
-    const isStale = heartbeatAgeSeconds != null ? heartbeatAgeSeconds > 45 : true;
+    const heartbeatAgeSeconds =
+      lastLocationMs != null
+        ? Math.max(0, Math.floor((now - lastLocationMs) / 1000))
+        : null;
+    const isStale =
+      heartbeatAgeSeconds != null ? heartbeatAgeSeconds > 45 : true;
 
     return {
       tripId: trip.id,
       status: trip.status,
       currentLat: trip.currentLat != null ? Number(trip.currentLat) : null,
       currentLng: trip.currentLng != null ? Number(trip.currentLng) : null,
-      currentHeading: trip.currentHeading != null ? Number(trip.currentHeading) : null,
-      currentSpeedKph: trip.currentSpeedKph != null ? Number(trip.currentSpeedKph) : null,
-      lastLocationAt: trip.lastLocationAt ? trip.lastLocationAt.toISOString() : null,
+      currentHeading:
+        trip.currentHeading != null ? Number(trip.currentHeading) : null,
+      currentSpeedKph:
+        trip.currentSpeedKph != null ? Number(trip.currentSpeedKph) : null,
+      lastLocationAt: trip.lastLocationAt
+        ? trip.lastLocationAt.toISOString()
+        : null,
       isStale,
       heartbeatAgeSeconds,
     };
   }
 
-  @Get(':id')
+  @Get(":id")
   async getTripByIdAlias(
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Request() req,
   ): Promise<TripPlanEntity> {
     return this.getTripById(id, req);
@@ -318,10 +358,10 @@ export class TripPlannerController {
   /**
    * Update trip status (e.g., active, completed, cancelled)
    */
-  @Patch('trips/:id/status')
+  @Patch("trips/:id/status")
   async updateTripStatus(
-    @Param('id') id: string,
-    @Body() body: { status: 'planned' | 'active' | 'completed' | 'cancelled' },
+    @Param("id") id: string,
+    @Body() body: { status: "planned" | "active" | "completed" | "cancelled" },
     @Request() req,
   ): Promise<TripPlanEntity> {
     const trip = await this.tripPlanRepository.findOne({
@@ -329,34 +369,26 @@ export class TripPlannerController {
     });
 
     if (!trip) {
-      throw new NotFoundException('Trip not found');
+      throw new NotFoundException("Trip not found");
     }
 
     trip.status = body.status;
     return this.tripPlanRepository.save(trip);
   }
 
-  @Post('start')
+  @Post("start")
   async startTrip(
     @Body() body: { tripId: string },
     @Request() req,
   ): Promise<TripPlanEntity> {
-    return this.updateTripStatus(
-      body.tripId,
-      { status: 'active' },
-      req,
-    );
+    return this.updateTripStatus(body.tripId, { status: "active" }, req);
   }
 
-  @Post('end')
+  @Post("end")
   async endTrip(
     @Body() body: { tripId: string },
     @Request() req,
   ): Promise<TripPlanEntity> {
-    return this.updateTripStatus(
-      body.tripId,
-      { status: 'completed' },
-      req,
-    );
+    return this.updateTripStatus(body.tripId, { status: "completed" }, req);
   }
 }

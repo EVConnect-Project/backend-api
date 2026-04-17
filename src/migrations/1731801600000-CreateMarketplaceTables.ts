@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from 'typeorm';
+import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class CreateMarketplaceTables1731801600000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
@@ -52,10 +52,18 @@ export class CreateMarketplaceTables1731801600000 implements MigrationInterface 
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     // Drop indexes
-    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_marketplace_images_listing"`);
-    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_marketplace_listings_category"`);
-    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_marketplace_listings_status"`);
-    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_marketplace_listings_seller"`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_marketplace_images_listing"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_marketplace_listings_category"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_marketplace_listings_status"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_marketplace_listings_seller"`,
+    );
 
     // Drop tables
     await queryRunner.query(`DROP TABLE IF EXISTS marketplace_images`);

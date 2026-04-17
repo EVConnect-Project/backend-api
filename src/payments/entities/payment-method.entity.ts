@@ -1,26 +1,34 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
-import { UserEntity } from '../../users/entities/user.entity';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  ManyToOne,
+  JoinColumn,
+} from "typeorm";
+import { UserEntity } from "../../users/entities/user.entity";
 
 export enum PaymentMethodType {
-  CARD = 'card',
-  WALLET = 'wallet',
-  BANK = 'bank',
+  CARD = "card",
+  WALLET = "wallet",
+  BANK = "bank",
 }
 
-@Entity('payment_methods')
+@Entity("payment_methods")
 export class PaymentMethodEntity {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn("uuid")
   id: string;
 
-  @Column({ type: 'uuid' })
+  @Column({ type: "uuid" })
   userId: string;
 
   @ManyToOne(() => UserEntity)
-  @JoinColumn({ name: 'userId' })
+  @JoinColumn({ name: "userId" })
   user: UserEntity;
 
   @Column({
-    type: 'enum',
+    type: "enum",
     enum: PaymentMethodType,
     default: PaymentMethodType.CARD,
   })
@@ -38,10 +46,10 @@ export class PaymentMethodEntity {
   @Column({ nullable: true })
   lastFour: string; // Last 4 digits of card
 
-  @Column({ type: 'integer', nullable: true })
+  @Column({ type: "integer", nullable: true })
   expiryMonth: number;
 
-  @Column({ type: 'integer', nullable: true })
+  @Column({ type: "integer", nullable: true })
   expiryYear: number;
 
   @Column({ nullable: true })
@@ -50,10 +58,10 @@ export class PaymentMethodEntity {
   @Column({ nullable: true })
   token: string; // Payment gateway token (PayHere, Stripe)
 
-  @Column({ type: 'boolean', default: false })
+  @Column({ type: "boolean", default: false })
   isDefault: boolean;
 
-  @Column({ type: 'jsonb', nullable: true })
+  @Column({ type: "jsonb", nullable: true })
   billingAddress: {
     line1?: string;
     line2?: string;
@@ -63,7 +71,7 @@ export class PaymentMethodEntity {
     country?: string;
   };
 
-  @Column({ type: 'jsonb', nullable: true })
+  @Column({ type: "jsonb", nullable: true })
   metadata: any; // Additional details as JSON (can store billing address here)
 
   @CreateDateColumn()

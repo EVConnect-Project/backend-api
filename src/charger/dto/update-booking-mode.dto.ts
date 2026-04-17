@@ -1,7 +1,16 @@
-import { IsEnum, IsNotEmpty, IsOptional, ValidateNested, IsNumber, IsBoolean, Min, Max } from 'class-validator';
-import { Type } from 'class-transformer';
-import { BookingMode } from '../enums/booking-mode.enum';
-import { BookingSettings } from '../interfaces/booking-settings.interface';
+import {
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  ValidateNested,
+  IsNumber,
+  IsBoolean,
+  Min,
+  Max,
+} from "class-validator";
+import { Type } from "class-transformer";
+import { BookingMode } from "../enums/booking-mode.enum";
+import { BookingSettings } from "../interfaces/booking-settings.interface";
 
 export class BookingSettingsDto implements BookingSettings {
   @IsNumber()

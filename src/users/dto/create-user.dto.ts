@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsEnum } from 'class-validator';
+import { IsString, IsOptional, IsEnum } from "class-validator";
 
 export class CreateUserDto {
   @IsString()
@@ -9,6 +9,6 @@ export class CreateUserDto {
   phone?: string;
 
   @IsOptional()
-  @IsEnum(['user', 'admin', 'host'])
+  @IsEnum(["user", "admin", "host"])
   role?: string;
 }

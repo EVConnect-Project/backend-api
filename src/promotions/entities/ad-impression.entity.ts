@@ -1,19 +1,25 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index } from 'typeorm';
-import { AdPlacement } from './promotion.entity';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  Index,
+} from "typeorm";
+import { AdPlacement } from "./promotion.entity";
 
 export enum AdEventType {
-  IMPRESSION = 'impression',
-  CLICK = 'click',
-  CONVERSION = 'conversion',
-  DISMISS = 'dismiss',
+  IMPRESSION = "impression",
+  CLICK = "click",
+  CONVERSION = "conversion",
+  DISMISS = "dismiss",
 }
 
-@Entity('ad_impressions')
-@Index(['userId', 'promotionId', 'eventType'])
-@Index(['promotionId', 'eventType', 'createdAt'])
-@Index(['userId', 'promotionId', 'createdAt'])
+@Entity("ad_impressions")
+@Index(["userId", "promotionId", "eventType"])
+@Index(["promotionId", "eventType", "createdAt"])
+@Index(["userId", "promotionId", "createdAt"])
 export class AdImpressionEntity {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn("uuid")
   id: string;
 
   @Column()
@@ -23,19 +29,19 @@ export class AdImpressionEntity {
   promotionId: string;
 
   @Column({
-    type: 'enum',
+    type: "enum",
     enum: AdEventType,
   })
   eventType: AdEventType;
 
   @Column({
-    type: 'enum',
+    type: "enum",
     enum: AdPlacement,
     nullable: true,
   })
   placement: AdPlacement;
 
-  @Column({ type: 'jsonb', nullable: true })
+  @Column({ type: "jsonb", nullable: true })
   metadata: Record<string, any>;
 
   @CreateDateColumn()

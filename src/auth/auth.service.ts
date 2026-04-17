@@ -1,39 +1,53 @@
-import { Injectable, UnauthorizedException, ConflictException, BadRequestException, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { ConfigService } from '@nestjs/config';
-import { JwtService } from '@nestjs/jwt';
-import * as bcrypt from 'bcryptjs';
-import { UserEntity } from '../users/entities/user.entity';
-import { RegisterDto } from './dto/register.dto';
-import { LoginDto } from './dto/login.dto';
-import { OtpService } from './otp.service';
-import { SmsService } from './sms.service';
-import { Charger } from '../charger/entities/charger.entity';
-import { MechanicEntity } from '../mechanics/entities/mechanic.entity';
+import {
+  Injectable,
+  UnauthorizedException,
+  ConflictException,
+  BadRequestException,
+  Logger,
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { ConfigService } from "@nestjs/config";
+import { JwtService } from "@nestjs/jwt";
+import * as bcrypt from "bcryptjs";
+import { UserEntity } from "../users/entities/user.entity";
+import { RegisterDto } from "./dto/register.dto";
+import { LoginDto } from "./dto/login.dto";
+import { OtpService } from "./otp.service";
+import { SmsService } from "./sms.service";
+import { Charger } from "../charger/entities/charger.entity";
+import { MechanicEntity } from "../mechanics/entities/mechanic.entity";
 
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
 
-    async updateUserProfile(userId: string, data: Partial<{ name: string; phoneNumber: string; countryCode: string; gender: string }>) {
-      const user = await this.userRepository.findOne({ where: { id: userId } });
-      if (!user) {
-        throw new UnauthorizedException('User not found');
-      }
-      if (data.name) user.name = data.name;
-      if (data.phoneNumber) user.phoneNumber = data.phoneNumber;
-      if (data.countryCode) user.countryCode = data.countryCode;
-      if (data.gender) {
-        const normalizedGender = data.gender.toLowerCase();
-        if (normalizedGender !== 'male' && normalizedGender !== 'female') {
-          throw new BadRequestException('Gender must be male or female');
-        }
-        user.gender = normalizedGender;
-      }
-      await this.userRepository.save(user);
-      return user;
+  async updateUserProfile(
+    userId: string,
+    data: Partial<{
+      name: string;
+      phoneNumber: string;
+      countryCode: string;
+      gender: string;
+    }>,
+  ) {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new UnauthorizedException("User not found");
     }
+    if (data.name) user.name = data.name;
+    if (data.phoneNumber) user.phoneNumber = data.phoneNumber;
+    if (data.countryCode) user.countryCode = data.countryCode;
+    if (data.gender) {
+      const normalizedGender = data.gender.toLowerCase();
+      if (normalizedGender !== "male" && normalizedGender !== "female") {
+        throw new BadRequestException("Gender must be male or female");
+      }
+      user.gender = normalizedGender;
+    }
+    await this.userRepository.save(user);
+    return user;
+  }
   constructor(
     @InjectRepository(UserEntity)
     private userRepository: Repository<UserEntity>,
@@ -56,31 +70,38 @@ export class AuthService {
       phoneNumber: user.phoneNumber,
       role: user.role,
       tokenVersion,
-      type: 'access',
+      type: "access",
     };
     return this.jwtService.sign(payload, {
-      expiresIn: (this.configService.get<string>('JWT_EXPIRES_IN') || '24h') as any,
+      expiresIn: (this.configService.get<string>("JWT_EXPIRES_IN") ||
+        "24h") as any,
     });
   }
 
   private generateRefreshToken(user: UserEntity): string {
-    const refreshSecret = this.configService.get<string>('JWT_REFRESH_SECRET');
-    if (!refreshSecret) throw new Error('JWT_REFRESH_SECRET environment variable is not set');
+    const refreshSecret = this.configService.get<string>("JWT_REFRESH_SECRET");
+    if (!refreshSecret)
+      throw new Error("JWT_REFRESH_SECRET environment variable is not set");
     const tokenVersion = user.tokenVersion ?? 0;
     const payload = {
       sub: user.id,
       tokenVersion,
-      type: 'refresh',
+      type: "refresh",
     };
     return this.jwtService.sign(payload, {
       secret: refreshSecret,
-      expiresIn: (this.configService.get<string>('JWT_REFRESH_EXPIRES_IN') || '30d') as any,
+      expiresIn: (this.configService.get<string>("JWT_REFRESH_EXPIRES_IN") ||
+        "30d") as any,
     });
   }
 
   private async buildUserResponse(user: UserEntity) {
-    const chargerCount = await this.chargerRepository.count({ where: { ownerId: user.id } });
-    const mechanicProfile = await this.mechanicRepository.findOne({ where: { userId: user.id } });
+    const chargerCount = await this.chargerRepository.count({
+      where: { ownerId: user.id },
+    });
+    const mechanicProfile = await this.mechanicRepository.findOne({
+      where: { userId: user.id },
+    });
     const hasChargers = chargerCount > 0;
     const hasMechanicProfile = mechanicProfile !== null;
     return {
@@ -92,9 +113,10 @@ export class AuthService {
       role: user.role,
       countryCode: user.countryCode,
       isVerified: user.isVerified,
-      isOwner: user.role === 'owner' || user.role === 'admin' || hasChargers,
-      isMechanic: user.role === 'mechanic' || hasMechanicProfile || user.role === 'admin',
-      isAdmin: user.role === 'admin',
+      isOwner: user.role === "owner" || user.role === "admin" || hasChargers,
+      isMechanic:
+        user.role === "mechanic" || hasMechanicProfile || user.role === "admin",
+      isAdmin: user.role === "admin",
     };
   }
 
@@ -102,9 +124,11 @@ export class AuthService {
     const { phoneNumber, password, name, gender } = registerDto;
 
     // Check if user already exists
-    const existingUser = await this.userRepository.findOne({ where: { phoneNumber } });
+    const existingUser = await this.userRepository.findOne({
+      where: { phoneNumber },
+    });
     if (existingUser) {
-      throw new ConflictException('Phone number already registered');
+      throw new ConflictException("Phone number already registered");
     }
 
     // Hash password
@@ -130,27 +154,34 @@ export class AuthService {
   async login(loginDto: LoginDto) {
     try {
       const { phoneNumber, password } = loginDto;
-      console.log('[AUTH SERVICE] Login attempt for phoneNumber:', phoneNumber);
+      console.log("[AUTH SERVICE] Login attempt for phoneNumber:", phoneNumber);
 
-      const user = await this.userRepository.findOne({ where: { phoneNumber } });
-      console.log('[AUTH SERVICE] User found:', user ? `YES (ID: ${user.id})` : 'NO');
+      const user = await this.userRepository.findOne({
+        where: { phoneNumber },
+      });
+      console.log(
+        "[AUTH SERVICE] User found:",
+        user ? `YES (ID: ${user.id})` : "NO",
+      );
 
-      if (!user) throw new UnauthorizedException('Invalid credentials');
+      if (!user) throw new UnauthorizedException("Invalid credentials");
 
-      if (user.isBanned) throw new UnauthorizedException('Your account has been banned');
+      if (user.isBanned)
+        throw new UnauthorizedException("Your account has been banned");
 
       const isPasswordValid = await bcrypt.compare(password, user.password);
-      console.log('[AUTH SERVICE] Password valid:', isPasswordValid);
-      if (!isPasswordValid) throw new UnauthorizedException('Invalid credentials');
+      console.log("[AUTH SERVICE] Password valid:", isPasswordValid);
+      if (!isPasswordValid)
+        throw new UnauthorizedException("Invalid credentials");
 
-      console.log('[AUTH SERVICE] Login successful for:', phoneNumber);
+      console.log("[AUTH SERVICE] Login successful for:", phoneNumber);
       return {
         access_token: this.generateAccessToken(user),
         refresh_token: this.generateRefreshToken(user),
         user: await this.buildUserResponse(user),
       };
     } catch (error) {
-      console.error('[AUTH SERVICE] Login error:', error.message, error.stack);
+      console.error("[AUTH SERVICE] Login error:", error.message, error.stack);
       throw error;
     }
   }
@@ -163,17 +194,24 @@ export class AuthService {
     const { phoneNumber, password } = loginDto;
 
     const user = await this.userRepository.findOne({ where: { phoneNumber } });
-    console.log('Admin login attempt:', { phoneNumber, userFound: !!user });
-    if (!user) throw new UnauthorizedException('Invalid credentials');
+    console.log("Admin login attempt:", { phoneNumber, userFound: !!user });
+    if (!user) throw new UnauthorizedException("Invalid credentials");
 
-    console.log('User details:', { id: user.id, role: user.role, hasPassword: !!user.password });
+    console.log("User details:", {
+      id: user.id,
+      role: user.role,
+      hasPassword: !!user.password,
+    });
 
-    if (user.role !== 'admin') throw new UnauthorizedException('Access denied. Admin role required.');
-    if (user.isBanned) throw new UnauthorizedException('Your account has been banned');
+    if (user.role !== "admin")
+      throw new UnauthorizedException("Access denied. Admin role required.");
+    if (user.isBanned)
+      throw new UnauthorizedException("Your account has been banned");
 
     const isPasswordValid = await bcrypt.compare(password, user.password);
-    console.log('Password validation:', { isPasswordValid });
-    if (!isPasswordValid) throw new UnauthorizedException('Invalid credentials');
+    console.log("Password validation:", { isPasswordValid });
+    if (!isPasswordValid)
+      throw new UnauthorizedException("Invalid credentials");
 
     return {
       access_token: this.generateAccessToken(user),
@@ -183,32 +221,39 @@ export class AuthService {
   }
 
   async refreshToken(refreshTokenStr: string) {
-    const refreshSecret = this.configService.get<string>('JWT_REFRESH_SECRET');
-    if (!refreshSecret) throw new Error('JWT_REFRESH_SECRET is not set');
+    const refreshSecret = this.configService.get<string>("JWT_REFRESH_SECRET");
+    if (!refreshSecret) throw new Error("JWT_REFRESH_SECRET is not set");
 
     let payload: any;
     try {
-      payload = this.jwtService.verify(refreshTokenStr, { secret: refreshSecret });
+      payload = this.jwtService.verify(refreshTokenStr, {
+        secret: refreshSecret,
+      });
     } catch (e) {
-      throw new UnauthorizedException('Invalid or expired refresh token');
+      throw new UnauthorizedException("Invalid or expired refresh token");
     }
 
-    if (payload.type !== 'refresh') {
-      throw new UnauthorizedException('Invalid token type');
+    if (payload.type !== "refresh") {
+      throw new UnauthorizedException("Invalid token type");
     }
 
-    const user = await this.userRepository.findOne({ where: { id: payload.sub } });
-    if (!user) throw new UnauthorizedException('User not found');
-    if (user.isBanned) throw new UnauthorizedException('User account is banned');
+    const user = await this.userRepository.findOne({
+      where: { id: payload.sub },
+    });
+    if (!user) throw new UnauthorizedException("User not found");
+    if (user.isBanned)
+      throw new UnauthorizedException("User account is banned");
 
     // Validate token version when supported by the current DB schema.
     // Some deployments may not yet have tokenVersion column.
     if (
-      typeof user.tokenVersion === 'number' &&
-      typeof payload.tokenVersion === 'number' &&
+      typeof user.tokenVersion === "number" &&
+      typeof payload.tokenVersion === "number" &&
       payload.tokenVersion !== user.tokenVersion
     ) {
-      throw new UnauthorizedException('Refresh token has been invalidated. Please login again.');
+      throw new UnauthorizedException(
+        "Refresh token has been invalidated. Please login again.",
+      );
     }
 
     return {
@@ -222,26 +267,33 @@ export class AuthService {
     // when tokenVersion exists in this deployment.
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) {
-      throw new UnauthorizedException('User not found');
+      throw new UnauthorizedException("User not found");
     }
 
-    if (typeof user.tokenVersion === 'number') {
-      await this.userRepository.increment({ id: userId }, 'tokenVersion', 1);
+    if (typeof user.tokenVersion === "number") {
+      await this.userRepository.increment({ id: userId }, "tokenVersion", 1);
     }
 
-    return { success: true, message: 'Logged out successfully' };
+    return { success: true, message: "Logged out successfully" };
   }
 
-  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ) {
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) {
-      throw new UnauthorizedException('User not found');
+      throw new UnauthorizedException("User not found");
     }
 
     // Verify current password
-    const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
+    const isPasswordValid = await bcrypt.compare(
+      currentPassword,
+      user.password,
+    );
     if (!isPasswordValid) {
-      throw new UnauthorizedException('Current password is incorrect');
+      throw new UnauthorizedException("Current password is incorrect");
     }
 
     // Hash new password
@@ -249,13 +301,13 @@ export class AuthService {
     user.password = hashedPassword;
     await this.userRepository.save(user);
 
-    return { message: 'Password changed successfully' };
+    return { message: "Password changed successfully" };
   }
 
   async deleteAccount(userId: string) {
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) {
-      throw new UnauthorizedException('User not found');
+      throw new UnauthorizedException("User not found");
     }
 
     const phoneNumber = user.phoneNumber;
@@ -273,7 +325,7 @@ export class AuthService {
       }
     }
 
-    return { message: 'Account deleted successfully' };
+    return { message: "Account deleted successfully" };
   }
 
   // ==================== PHONE AUTHENTICATION METHODS ====================
@@ -288,7 +340,7 @@ export class AuthService {
     });
 
     if (existingUser) {
-      throw new ConflictException('Phone number already registered');
+      throw new ConflictException("Phone number already registered");
     }
 
     // Generate OTP
@@ -302,7 +354,7 @@ export class AuthService {
 
     return {
       success: true,
-      message: 'OTP sent successfully',
+      message: "OTP sent successfully",
       expiresIn: 300, // 5 minutes in seconds
     };
   }
@@ -312,7 +364,10 @@ export class AuthService {
    */
   async verifyOTP(phoneNumber: string, otp: string) {
     // Validate OTP
-    const verificationToken = await this.otpService.validateOTP(phoneNumber, otp);
+    const verificationToken = await this.otpService.validateOTP(
+      phoneNumber,
+      otp,
+    );
 
     return {
       success: true,
@@ -332,9 +387,9 @@ export class AuthService {
   ) {
     // Verify the verification token
     const tokenData = this.otpService.verifyToken(verificationToken);
-    
+
     if (tokenData.phoneNumber !== phoneNumber) {
-      throw new BadRequestException('Phone number mismatch');
+      throw new BadRequestException("Phone number mismatch");
     }
 
     // Check if phone number is already registered
@@ -343,7 +398,7 @@ export class AuthService {
     });
 
     if (existingUser) {
-      throw new ConflictException('Phone number already registered');
+      throw new ConflictException("Phone number already registered");
     }
 
     // Hash password
@@ -354,9 +409,10 @@ export class AuthService {
     const user = this.userRepository.create({
       phoneNumber,
       password: hashedPassword,
-      name: normalizedName && normalizedName.length > 0
-        ? normalizedName
-        : `User ${phoneNumber.slice(-4)}`,
+      name:
+        normalizedName && normalizedName.length > 0
+          ? normalizedName
+          : `User ${phoneNumber.slice(-4)}`,
       isVerified: true, // Phone is verified via OTP
     });
 
@@ -377,42 +433,45 @@ export class AuthService {
    */
   async loginWithPhone(phoneNumber: string, password: string) {
     try {
-      console.log('[loginWithPhone] Starting login with phoneNumber:', phoneNumber);
-      
+      console.log(
+        "[loginWithPhone] Starting login with phoneNumber:",
+        phoneNumber,
+      );
+
       // Find user by phone number
       const user = await this.userRepository.findOne({
         where: { phoneNumber },
       });
 
-      console.log('[loginWithPhone] User found:', user ? 'YES' : 'NO');
-      
+      console.log("[loginWithPhone] User found:", user ? "YES" : "NO");
+
       if (!user) {
-        throw new UnauthorizedException('Invalid credentials');
+        throw new UnauthorizedException("Invalid credentials");
       }
 
       // Check if user is banned
       if (user.isBanned) {
-        throw new UnauthorizedException('Your account has been banned');
+        throw new UnauthorizedException("Your account has been banned");
       }
 
-      console.log('[loginWithPhone] Comparing password...');
+      console.log("[loginWithPhone] Comparing password...");
       // Verify password
       const isPasswordValid = await bcrypt.compare(password, user.password);
-      console.log('[loginWithPhone] Password valid:', isPasswordValid);
-      
+      console.log("[loginWithPhone] Password valid:", isPasswordValid);
+
       if (!isPasswordValid) {
-        throw new UnauthorizedException('Invalid credentials');
+        throw new UnauthorizedException("Invalid credentials");
       }
 
-      console.log('[loginWithPhone] Generating tokens...');
-      console.log('[loginWithPhone] Login successful');
+      console.log("[loginWithPhone] Generating tokens...");
+      console.log("[loginWithPhone] Login successful");
       return {
         access_token: this.generateAccessToken(user),
         refresh_token: this.generateRefreshToken(user),
         user: await this.buildUserResponse(user),
       };
     } catch (error) {
-      console.error('[loginWithPhone] Error:', error.message, error.stack);
+      console.error("[loginWithPhone] Error:", error.message, error.stack);
       throw error;
     }
   }
@@ -427,7 +486,7 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new UnauthorizedException('Phone number not registered');
+      throw new UnauthorizedException("Phone number not registered");
     }
 
     // Generate OTP
@@ -441,7 +500,7 @@ export class AuthService {
 
     return {
       success: true,
-      message: 'Password reset OTP sent successfully',
+      message: "Password reset OTP sent successfully",
       expiresIn: 300, // 5 minutes in seconds
     };
   }
@@ -456,9 +515,9 @@ export class AuthService {
   ) {
     // Verify the verification token
     const tokenData = this.otpService.verifyToken(verificationToken);
-    
+
     if (tokenData.phoneNumber !== phoneNumber) {
-      throw new BadRequestException('Phone number mismatch');
+      throw new BadRequestException("Phone number mismatch");
     }
 
     // Find user
@@ -467,7 +526,7 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new UnauthorizedException('User not found');
+      throw new UnauthorizedException("User not found");
     }
 
     // Hash new password
@@ -477,7 +536,7 @@ export class AuthService {
 
     return {
       success: true,
-      message: 'Password reset successfully',
+      message: "Password reset successfully",
     };
   }
 }

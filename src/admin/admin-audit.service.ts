@@ -1,7 +1,7 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { AdminAction } from './entities/admin-action.entity';
+import { Injectable } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { AdminAction } from "./entities/admin-action.entity";
 
 @Injectable()
 export class AdminAuditService {
@@ -45,32 +45,42 @@ export class AdminAuditService {
     limit: number = 50,
   ) {
     const query = this.adminActionRepo
-      .createQueryBuilder('action')
-      .leftJoinAndSelect('action.admin', 'admin')
-      .orderBy('action.createdAt', 'DESC');
+      .createQueryBuilder("action")
+      .leftJoinAndSelect("action.admin", "admin")
+      .orderBy("action.createdAt", "DESC");
 
     if (filters?.adminId) {
-      query.andWhere('action.adminId = :adminId', { adminId: filters.adminId });
+      query.andWhere("action.adminId = :adminId", { adminId: filters.adminId });
     }
 
     if (filters?.targetType) {
-      query.andWhere('action.targetType = :targetType', { targetType: filters.targetType });
+      query.andWhere("action.targetType = :targetType", {
+        targetType: filters.targetType,
+      });
     }
 
     if (filters?.targetId) {
-      query.andWhere('action.targetId = :targetId', { targetId: filters.targetId });
+      query.andWhere("action.targetId = :targetId", {
+        targetId: filters.targetId,
+      });
     }
 
     if (filters?.actionType) {
-      query.andWhere('action.actionType = :actionType', { actionType: filters.actionType });
+      query.andWhere("action.actionType = :actionType", {
+        actionType: filters.actionType,
+      });
     }
 
     if (filters?.startDate) {
-      query.andWhere('action.createdAt >= :startDate', { startDate: filters.startDate });
+      query.andWhere("action.createdAt >= :startDate", {
+        startDate: filters.startDate,
+      });
     }
 
     if (filters?.endDate) {
-      query.andWhere('action.createdAt <= :endDate', { endDate: filters.endDate });
+      query.andWhere("action.createdAt <= :endDate", {
+        endDate: filters.endDate,
+      });
     }
 
     const [actions, total] = await query

@@ -1,4 +1,12 @@
-import { IsNotEmpty, IsString, IsNumber, IsEnum, IsOptional, Min, IsArray } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsString,
+  IsNumber,
+  IsEnum,
+  IsOptional,
+  Min,
+  IsArray,
+} from "class-validator";
 
 export class CreateMarketplaceListingDto {
   @IsString()
@@ -14,7 +22,7 @@ export class CreateMarketplaceListingDto {
   @Min(0)
   price: number;
 
-  @IsEnum(['new', 'used', 'refurbished'])
+  @IsEnum(["new", "used", "refurbished"])
   @IsOptional()
   condition?: string;
 

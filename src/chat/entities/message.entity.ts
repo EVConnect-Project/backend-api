@@ -5,67 +5,72 @@ import {
   CreateDateColumn,
   ManyToOne,
   JoinColumn,
-} from 'typeorm';
-import { UserEntity } from '../../users/entities/user.entity';
-import { Conversation } from './conversation.entity';
+} from "typeorm";
+import { UserEntity } from "../../users/entities/user.entity";
+import { Conversation } from "./conversation.entity";
 
 export enum MessageType {
-  TEXT = 'text',
-  IMAGE = 'image',
-  LOCATION = 'location',
-  SYSTEM = 'system',
+  TEXT = "text",
+  IMAGE = "image",
+  LOCATION = "location",
+  SYSTEM = "system",
 }
 
-@Entity('messages')
+@Entity("messages")
 export class Message {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn("uuid")
   id: string;
 
-  @Column({ name: 'conversation_id' })
+  @Column({ name: "conversation_id" })
   conversationId: string;
 
   @ManyToOne(() => Conversation, (conversation) => conversation.messages)
-  @JoinColumn({ name: 'conversation_id' })
+  @JoinColumn({ name: "conversation_id" })
   conversation: Conversation;
 
-  @Column({ name: 'sender_id' })
+  @Column({ name: "sender_id" })
   senderId: string;
 
   @ManyToOne(() => UserEntity)
-  @JoinColumn({ name: 'sender_id' })
+  @JoinColumn({ name: "sender_id" })
   sender: UserEntity;
 
   @Column({
-    type: 'varchar',
+    type: "varchar",
     length: 20,
     default: MessageType.TEXT,
   })
   type: MessageType;
 
-  @Column({ type: 'text' })
+  @Column({ type: "text" })
   content: string;
 
-  @Column({ name: 'image_url', nullable: true })
+  @Column({ name: "image_url", nullable: true })
   imageUrl: string;
 
-  @Column({ type: 'decimal', precision: 10, scale: 8, nullable: true })
+  @Column({ type: "decimal", precision: 10, scale: 8, nullable: true })
   latitude: number;
 
-  @Column({ type: 'decimal', precision: 11, scale: 8, nullable: true })
+  @Column({ type: "decimal", precision: 11, scale: 8, nullable: true })
   longitude: number;
 
-  @Column({ name: 'is_read', default: false })
+  @Column({ name: "is_read", default: false })
   isRead: boolean;
 
-  @Column({ name: 'read_at', type: 'timestamp', nullable: true })
+  @Column({ name: "read_at", type: "timestamp", nullable: true })
   readAt: Date;
 
-  @Column({ name: 'is_admin_message', default: false })
+  @Column({ name: "is_admin_message", default: false })
   isAdminMessage: boolean;
 
-  @Column({ name: 'priority_level', type: 'varchar', length: 20, default: 'normal' })
+  @Column({
+    name: "priority_level",
+    type: "varchar",
+    length: 20,
+    default: "normal",
+  })
   priorityLevel: string;
 
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn({ name: "created_at" })
   createdAt: Date;
 }

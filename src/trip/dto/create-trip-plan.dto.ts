@@ -1,5 +1,14 @@
-import { IsString, IsNumber, IsOptional, IsEnum, IsArray, ValidateNested, Min, Max } from 'class-validator';
-import { Type } from 'class-transformer';
+import {
+  IsString,
+  IsNumber,
+  IsOptional,
+  IsEnum,
+  IsArray,
+  ValidateNested,
+  Min,
+  Max,
+} from "class-validator";
+import { Type } from "class-transformer";
 
 class LocationDto {
   @IsNumber()
@@ -10,9 +19,9 @@ class LocationDto {
 }
 
 export enum DrivingMode {
-  ECO = 'eco',
-  NORMAL = 'normal',
-  SPORT = 'sport',
+  ECO = "eco",
+  NORMAL = "normal",
+  SPORT = "sport",
 }
 
 export class CreateTripPlanDto {

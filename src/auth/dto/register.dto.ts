@@ -1,4 +1,10 @@
-import { IsNotEmpty, IsString, MinLength, IsOptional, IsIn } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsString,
+  MinLength,
+  IsOptional,
+  IsIn,
+} from "class-validator";
 
 export class RegisterDto {
   @IsString()
@@ -16,6 +22,6 @@ export class RegisterDto {
 
   @IsString()
   @IsOptional()
-  @IsIn(['male', 'female'])
+  @IsIn(["male", "female"])
   gender?: string;
 }

@@ -1,5 +1,5 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import * as admin from 'firebase-admin';
+import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
+import * as admin from "firebase-admin";
 
 export interface NotificationPayload {
   title: string;
@@ -12,7 +12,13 @@ export interface EmergencyNotificationData {
   emergencyId: string;
   mechanicId: string;
   mechanicName: string;
-  status: 'en_route' | 'arrived' | 'working' | 'completed' | 'delayed' | 'cancelled';
+  status:
+    | "en_route"
+    | "arrived"
+    | "working"
+    | "completed"
+    | "delayed"
+    | "cancelled";
   eta?: number;
   location?: { lat: number; lng: number };
   problemType?: string;
@@ -28,20 +34,27 @@ export class FirebaseNotificationService implements OnModuleInit {
       // If Firebase is already initialized by another service, reuse it
       if (admin.apps.length) {
         this.firebaseApp = admin.app();
-        this.logger.log('Firebase Admin SDK reused from existing instance');
+        this.logger.log("Firebase Admin SDK reused from existing instance");
         return;
       }
 
       // Try individual credentials first (recommended approach)
       const projectId = process.env.FIREBASE_PROJECT_ID;
-      const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+      const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(
+        /\\n/g,
+        "\n",
+      );
       const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
 
       if (projectId && privateKey && clientEmail) {
         this.firebaseApp = admin.initializeApp({
-          credential: admin.credential.cert({ projectId, privateKey, clientEmail }),
+          credential: admin.credential.cert({
+            projectId,
+            privateKey,
+            clientEmail,
+          }),
         });
-        this.logger.log('Firebase Admin SDK initialized successfully');
+        this.logger.log("Firebase Admin SDK initialized successfully");
         return;
       }
 
@@ -51,22 +64,29 @@ export class FirebaseNotificationService implements OnModuleInit {
         this.firebaseApp = admin.initializeApp({
           credential: admin.credential.cert(serviceAccountPath),
         });
-        this.logger.log('Firebase Admin SDK initialized via service account file');
+        this.logger.log(
+          "Firebase Admin SDK initialized via service account file",
+        );
         return;
       }
 
-      this.logger.warn('Firebase credentials not configured. Push notifications will be disabled.');
+      this.logger.warn(
+        "Firebase credentials not configured. Push notifications will be disabled.",
+      );
     } catch (error) {
-      this.logger.error('Failed to initialize Firebase Admin SDK', error);
+      this.logger.error("Failed to initialize Firebase Admin SDK", error);
     }
   }
 
   /**
    * Send notification to a single device
    */
-  async sendToDevice(fcmToken: string, payload: NotificationPayload): Promise<boolean> {
+  async sendToDevice(
+    fcmToken: string,
+    payload: NotificationPayload,
+  ): Promise<boolean> {
     if (!this.firebaseApp) {
-      this.logger.warn('Firebase not initialized, skipping notification');
+      this.logger.warn("Firebase not initialized, skipping notification");
       return false;
     }
 
@@ -80,16 +100,16 @@ export class FirebaseNotificationService implements OnModuleInit {
         },
         data: payload.data || {},
         android: {
-          priority: 'high',
+          priority: "high",
           notification: {
-            sound: 'default',
-            channelId: 'emergency_channel',
+            sound: "default",
+            channelId: "emergency_channel",
           },
         },
         apns: {
           payload: {
             aps: {
-              sound: 'default',
+              sound: "default",
               badge: 1,
             },
           },
@@ -101,7 +121,7 @@ export class FirebaseNotificationService implements OnModuleInit {
       return true;
     } catch (error) {
       this.logger.error(
-        `Failed to send notification to device: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        `Failed to send notification to device: ${error instanceof Error ? error.message : "Unknown error"}`,
         error,
       );
       return false;
@@ -111,14 +131,21 @@ export class FirebaseNotificationService implements OnModuleInit {
   /**
    * Send notification to multiple devices
    */
-  async sendToDevices(fcmTokens: string[], payload: NotificationPayload): Promise<{
+  async sendToDevices(
+    fcmTokens: string[],
+    payload: NotificationPayload,
+  ): Promise<{
     successCount: number;
     failureCount: number;
     invalidTokens: string[];
   }> {
     if (!this.firebaseApp) {
-      this.logger.warn('Firebase not initialized, skipping notifications');
-      return { successCount: 0, failureCount: fcmTokens.length, invalidTokens: [] };
+      this.logger.warn("Firebase not initialized, skipping notifications");
+      return {
+        successCount: 0,
+        failureCount: fcmTokens.length,
+        invalidTokens: [],
+      };
     }
 
     try {
@@ -131,16 +158,16 @@ export class FirebaseNotificationService implements OnModuleInit {
         },
         data: payload.data || {},
         android: {
-          priority: 'high',
+          priority: "high",
           notification: {
-            sound: 'default',
-            channelId: 'emergency_channel',
+            sound: "default",
+            channelId: "emergency_channel",
           },
         },
         apns: {
           payload: {
             aps: {
-              sound: 'default',
+              sound: "default",
               badge: 1,
             },
           },
@@ -148,10 +175,13 @@ export class FirebaseNotificationService implements OnModuleInit {
       };
 
       const response = await admin.messaging().sendEachForMulticast(message);
-      
+
       const invalidTokens: string[] = [];
       response.responses.forEach((resp, idx) => {
-        if (!resp.success && resp.error?.code === 'messaging/invalid-registration-token') {
+        if (
+          !resp.success &&
+          resp.error?.code === "messaging/invalid-registration-token"
+        ) {
           invalidTokens.push(fcmTokens[idx]);
         }
       });
@@ -167,10 +197,14 @@ export class FirebaseNotificationService implements OnModuleInit {
       };
     } catch (error) {
       this.logger.error(
-        `Failed to send multicast notification: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        `Failed to send multicast notification: ${error instanceof Error ? error.message : "Unknown error"}`,
         error,
       );
-      return { successCount: 0, failureCount: fcmTokens.length, invalidTokens: [] };
+      return {
+        successCount: 0,
+        failureCount: fcmTokens.length,
+        invalidTokens: [],
+      };
     }
   }
 
@@ -186,7 +220,7 @@ export class FirebaseNotificationService implements OnModuleInit {
       title: template.title,
       body: template.body,
       data: {
-        type: 'emergency_update',
+        type: "emergency_update",
         emergencyId: data.emergencyId,
         mechanicId: data.mechanicId,
         status: data.status,
@@ -205,10 +239,10 @@ export class FirebaseNotificationService implements OnModuleInit {
     eta: number,
   ): Promise<boolean> {
     return this.sendToDevice(fcmToken, {
-      title: '🔧 Mechanic Assigned',
+      title: "🔧 Mechanic Assigned",
       body: `${mechanicName} will arrive in approximately ${eta} minutes`,
       data: {
-        type: 'mechanic_assigned',
+        type: "mechanic_assigned",
         emergencyId,
         eta: eta.toString(),
       },
@@ -226,10 +260,10 @@ export class FirebaseNotificationService implements OnModuleInit {
     distance: number,
   ): Promise<void> {
     await this.sendToDevices(mechanicTokens, {
-      title: '🚨 Emergency Request Nearby',
+      title: "🚨 Emergency Request Nearby",
       body: `${problemType} - ${distance.toFixed(1)}km away at ${location}`,
       data: {
-        type: 'emergency_alert',
+        type: "emergency_alert",
         emergencyId,
         problemType,
       },
@@ -246,49 +280,49 @@ export class FirebaseNotificationService implements OnModuleInit {
     const mechanicName = data.mechanicName;
 
     switch (data.status) {
-      case 'en_route':
+      case "en_route":
         return {
-          title: '🚗 Mechanic On The Way',
+          title: "🚗 Mechanic On The Way",
           body: data.eta
             ? `${mechanicName} is on the way! ETA: ${data.eta} minutes`
             : `${mechanicName} is on the way to your location`,
         };
 
-      case 'arrived':
+      case "arrived":
         return {
-          title: '📍 Mechanic Arrived',
+          title: "📍 Mechanic Arrived",
           body: `${mechanicName} has arrived at your location`,
         };
 
-      case 'working':
+      case "working":
         return {
-          title: '🔧 Service Started',
+          title: "🔧 Service Started",
           body: `${mechanicName} has started working on your vehicle`,
         };
 
-      case 'completed':
+      case "completed":
         return {
-          title: '✅ Service Completed',
+          title: "✅ Service Completed",
           body: `${mechanicName} has completed the service. Tap to review.`,
         };
 
-      case 'delayed':
+      case "delayed":
         return {
-          title: '⏱️ Slight Delay',
+          title: "⏱️ Slight Delay",
           body: data.eta
             ? `${mechanicName} is running late. New ETA: ${data.eta} minutes`
             : `${mechanicName} is experiencing a delay`,
         };
 
-      case 'cancelled':
+      case "cancelled":
         return {
-          title: '❌ Service Cancelled',
+          title: "❌ Service Cancelled",
           body: `Your emergency request has been cancelled`,
         };
 
       default:
         return {
-          title: '🔔 Emergency Update',
+          title: "🔔 Emergency Update",
           body: `Update from ${mechanicName}`,
         };
     }
@@ -304,25 +338,38 @@ export class FirebaseNotificationService implements OnModuleInit {
 
     try {
       await admin.messaging().subscribeToTopic(fcmTokens, topic);
-      this.logger.log(`Subscribed ${fcmTokens.length} devices to topic: ${topic}`);
+      this.logger.log(
+        `Subscribed ${fcmTokens.length} devices to topic: ${topic}`,
+      );
     } catch (error) {
-      this.logger.error(`Failed to subscribe to topic: ${error.message}`, error);
+      this.logger.error(
+        `Failed to subscribe to topic: ${error.message}`,
+        error,
+      );
     }
   }
 
   /**
    * Unsubscribe from topic
    */
-  async unsubscribeFromTopic(fcmTokens: string[], topic: string): Promise<void> {
+  async unsubscribeFromTopic(
+    fcmTokens: string[],
+    topic: string,
+  ): Promise<void> {
     if (!this.firebaseApp) {
       return;
     }
 
     try {
       await admin.messaging().unsubscribeFromTopic(fcmTokens, topic);
-      this.logger.log(`Unsubscribed ${fcmTokens.length} devices from topic: ${topic}`);
+      this.logger.log(
+        `Unsubscribed ${fcmTokens.length} devices from topic: ${topic}`,
+      );
     } catch (error) {
-      this.logger.error(`Failed to unsubscribe from topic: ${error.message}`, error);
+      this.logger.error(
+        `Failed to unsubscribe from topic: ${error.message}`,
+        error,
+      );
     }
   }
 
@@ -336,10 +383,13 @@ export class FirebaseNotificationService implements OnModuleInit {
 
     try {
       // Try sending a dry-run message to validate token
-      await admin.messaging().send({
-        token: fcmToken,
-        data: { test: 'validation' },
-      }, true);
+      await admin.messaging().send(
+        {
+          token: fcmToken,
+          data: { test: "validation" },
+        },
+        true,
+      );
       return true;
     } catch (error) {
       return false;

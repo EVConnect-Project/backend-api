@@ -5,27 +5,27 @@ import {
   ManyToOne,
   CreateDateColumn,
   JoinColumn,
-} from 'typeorm';
-import { UserEntity } from '../../users/entities/user.entity';
-import { Charger } from '../../charger/entities/charger.entity';
+} from "typeorm";
+import { UserEntity } from "../../users/entities/user.entity";
+import { Charger } from "../../charger/entities/charger.entity";
 
-@Entity('favorite_chargers')
+@Entity("favorite_chargers")
 export class FavoriteCharger {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn("uuid")
   id: string;
 
-  @Column('uuid')
+  @Column("uuid")
   userId: string;
 
-  @ManyToOne(() => UserEntity, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'userId' })
+  @ManyToOne(() => UserEntity, { onDelete: "CASCADE" })
+  @JoinColumn({ name: "userId" })
   user: UserEntity;
 
-  @Column('uuid')
+  @Column("uuid")
   chargerId: string;
 
-  @ManyToOne(() => Charger, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'chargerId' })
+  @ManyToOne(() => Charger, { onDelete: "CASCADE" })
+  @JoinColumn({ name: "chargerId" })
   charger: Charger;
 
   @CreateDateColumn()

@@ -1,18 +1,29 @@
-import { Controller, Post, Delete, Get, Body, Param, UseGuards, Request, Patch, Query } from '@nestjs/common';
-import { NotificationsService } from './notifications.service';
-import { FirebaseNotificationService } from './services/firebase-notification.service';
-import { SaveFcmTokenDto } from './dto/save-fcm-token.dto';
-import { SendNotificationDto } from './dto/send-notification.dto';
-import { 
-  UpdateFcmTokenDto, 
+import {
+  Controller,
+  Post,
+  Delete,
+  Get,
+  Body,
+  Param,
+  UseGuards,
+  Request,
+  Patch,
+  Query,
+} from "@nestjs/common";
+import { NotificationsService } from "./notifications.service";
+import { FirebaseNotificationService } from "./services/firebase-notification.service";
+import { SaveFcmTokenDto } from "./dto/save-fcm-token.dto";
+import { SendNotificationDto } from "./dto/send-notification.dto";
+import {
+  UpdateFcmTokenDto,
   NotificationPreferencesDto,
   SendTestNotificationDto,
   SendEmergencyNotificationDto,
   NotificationResponse,
-} from './dto/notification.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+} from "./dto/notification.dto";
+import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 
-@Controller('notifications')
+@Controller("notifications")
 @UseGuards(JwtAuthGuard)
 export class NotificationsController {
   constructor(
@@ -20,11 +31,8 @@ export class NotificationsController {
     private readonly firebaseNotificationService: FirebaseNotificationService,
   ) {}
 
-  @Post('token')
-  async saveFcmToken(
-    @Body() saveTokenDto: SaveFcmTokenDto,
-    @Request() req,
-  ) {
+  @Post("token")
+  async saveFcmToken(@Body() saveTokenDto: SaveFcmTokenDto, @Request() req) {
     const userId = req.user.userId;
     await this.notificationsService.saveFcmToken(
       userId,
@@ -35,24 +43,24 @@ export class NotificationsController {
 
     return {
       success: true,
-      message: 'FCM token saved successfully',
+      message: "FCM token saved successfully",
     };
   }
 
-  @Delete('token/:token')
-  async removeFcmToken(@Param('token') token: string) {
+  @Delete("token/:token")
+  async removeFcmToken(@Param("token") token: string) {
     await this.notificationsService.removeFcmToken(token);
     return {
       success: true,
-      message: 'FCM token removed successfully',
+      message: "FCM token removed successfully",
     };
   }
 
-  @Get('history')
+  @Get("history")
   async getNotificationHistory(
     @Request() req,
-    @Query('limit') limit?: string,
-    @Query('offset') offset?: string,
+    @Query("limit") limit?: string,
+    @Query("offset") offset?: string,
   ) {
     const userId = req.user.userId;
     const result = await this.notificationsService.getNotificationHistory(
@@ -68,7 +76,7 @@ export class NotificationsController {
     };
   }
 
-  @Get('unread-count')
+  @Get("unread-count")
   async getUnreadCount(@Request() req) {
     const userId = req.user.userId;
     const count = await this.notificationsService.getUnreadCount(userId);
@@ -78,7 +86,7 @@ export class NotificationsController {
     };
   }
 
-  @Patch('mark-all-read')
+  @Patch("mark-all-read")
   async markAllAsRead(@Request() req) {
     const userId = req.user.userId;
     const count = await this.notificationsService.markAllAsRead(userId);
@@ -89,7 +97,7 @@ export class NotificationsController {
     };
   }
 
-  @Delete('clear-all')
+  @Delete("clear-all")
   async clearAll(@Request() req) {
     const userId = req.user.userId;
     const count = await this.notificationsService.clearAllNotifications(userId);
@@ -100,34 +108,39 @@ export class NotificationsController {
     };
   }
 
-  @Delete(':id')
-  async deleteNotification(@Param('id') id: string, @Request() req) {
+  @Delete(":id")
+  async deleteNotification(@Param("id") id: string, @Request() req) {
     const userId = req.user.userId;
-    const deleted = await this.notificationsService.deleteNotification(userId, id);
+    const deleted = await this.notificationsService.deleteNotification(
+      userId,
+      id,
+    );
     return {
       success: deleted,
-      message: deleted ? 'Notification deleted' : 'Notification not found',
+      message: deleted ? "Notification deleted" : "Notification not found",
     };
   }
 
-  @Patch(':id/read')
-  async markAsRead(@Param('id') id: string, @Request() req) {
+  @Patch(":id/read")
+  async markAsRead(@Param("id") id: string, @Request() req) {
     const userId = req.user.userId;
     const marked = await this.notificationsService.markAsRead(userId, id);
     return {
       success: marked,
-      message: marked ? 'Notification marked as read' : 'Notification not found',
+      message: marked
+        ? "Notification marked as read"
+        : "Notification not found",
     };
   }
 
-  @Post('test')
+  @Post("test")
   async sendTestNotification(
     @Body() sendNotificationDto: SendNotificationDto,
     @Request() req,
   ) {
     // Only allow sending test to own user for security
     const userId = req.user.userId;
-    
+
     await this.notificationsService.sendToUser(
       userId,
       sendNotificationDto.type as any,
@@ -140,14 +153,15 @@ export class NotificationsController {
 
     return {
       success: true,
-      message: 'Test notification sent',
+      message: "Test notification sent",
     };
   }
 
-  @Get('preferences')
+  @Get("preferences")
   async getPreferences(@Request() req) {
     const userId = req.user.userId;
-    const preferences = await this.notificationsService.getUserPreferences(userId);
+    const preferences =
+      await this.notificationsService.getUserPreferences(userId);
 
     return {
       success: true,
@@ -155,7 +169,7 @@ export class NotificationsController {
     };
   }
 
-  @Patch('preferences')
+  @Patch("preferences")
   async updatePreferences(@Request() req, @Body() body: any) {
     const userId = req.user.userId;
     const preferences = await this.notificationsService.updateUserPreferences(
@@ -165,95 +179,109 @@ export class NotificationsController {
 
     return {
       success: true,
-      message: 'Notification preferences updated',
+      message: "Notification preferences updated",
       data: preferences,
     };
   }
 
   // New Firebase notification endpoints
 
-  @Post('fcm-token')
+  @Post("fcm-token")
   async updateFcmToken(
     @Body() updateFcmTokenDto: UpdateFcmTokenDto,
     @Request() req,
   ): Promise<NotificationResponse> {
     const userId = req.user.userId;
     // Save FCM token to user record
-    await this.notificationsService.updateUserFcmToken(userId, updateFcmTokenDto.fcmToken);
+    await this.notificationsService.updateUserFcmToken(
+      userId,
+      updateFcmTokenDto.fcmToken,
+    );
 
     return {
       success: true,
-      message: 'FCM token updated successfully',
+      message: "FCM token updated successfully",
     };
   }
 
-  @Post('emergency/send')
+  @Post("emergency/send")
   async sendEmergencyNotification(
     @Body() sendEmergencyDto: SendEmergencyNotificationDto,
     @Request() req,
   ): Promise<NotificationResponse> {
     const userId = req.user.userId;
-    
+
     // Get user's FCM token
-    const userFcmToken = await this.notificationsService.getUserFcmToken(userId);
-    
+    const userFcmToken =
+      await this.notificationsService.getUserFcmToken(userId);
+
     if (!userFcmToken) {
       return {
         success: false,
-        message: 'User FCM token not found',
+        message: "User FCM token not found",
       };
     }
 
-    const success = await this.firebaseNotificationService.sendEmergencyStatusNotification(
-      userFcmToken,
-      {
-        emergencyId: sendEmergencyDto.emergencyId,
-        mechanicId: sendEmergencyDto.mechanicId,
-        mechanicName: sendEmergencyDto.mechanicName,
-        status: sendEmergencyDto.status,
-        eta: sendEmergencyDto.eta,
-        problemType: sendEmergencyDto.problemType,
-      },
-    );
+    const success =
+      await this.firebaseNotificationService.sendEmergencyStatusNotification(
+        userFcmToken,
+        {
+          emergencyId: sendEmergencyDto.emergencyId,
+          mechanicId: sendEmergencyDto.mechanicId,
+          mechanicName: sendEmergencyDto.mechanicName,
+          status: sendEmergencyDto.status,
+          eta: sendEmergencyDto.eta,
+          problemType: sendEmergencyDto.problemType,
+        },
+      );
 
     return {
       success,
-      message: success ? 'Emergency notification sent' : 'Failed to send notification',
+      message: success
+        ? "Emergency notification sent"
+        : "Failed to send notification",
     };
   }
 
-  @Post('test-notification')
+  @Post("test-notification")
   async sendTestNotificationFirebase(
     @Body() testDto: SendTestNotificationDto,
     @Request() req,
   ): Promise<NotificationResponse> {
     const userId = req.user.userId;
     const fcmToken = await this.notificationsService.getUserFcmToken(userId);
-    
+
     if (!fcmToken) {
       return {
         success: false,
-        message: 'FCM token not found',
+        message: "FCM token not found",
       };
     }
 
-    const success = await this.firebaseNotificationService.sendToDevice(fcmToken, {
-      title: testDto.title,
-      body: testDto.body,
-      data: testDto.data,
-    });
+    const success = await this.firebaseNotificationService.sendToDevice(
+      fcmToken,
+      {
+        title: testDto.title,
+        body: testDto.body,
+        data: testDto.data,
+      },
+    );
 
     return {
       success,
-      message: success ? 'Test notification sent' : 'Failed to send notification',
+      message: success
+        ? "Test notification sent"
+        : "Failed to send notification",
     };
   }
 
-  @Post('validate-token')
+  @Post("validate-token")
   async validateFcmToken(
     @Body() body: { fcmToken: string },
   ): Promise<{ valid: boolean }> {
-    const valid = await this.firebaseNotificationService.validateToken(body.fcmToken);
+    const valid = await this.firebaseNotificationService.validateToken(
+      body.fcmToken,
+    );
     return { valid };
   }
 }

@@ -1,4 +1,10 @@
-import { IsUUID, IsDateString, IsOptional, IsNumber, Min } from 'class-validator';
+import {
+  IsUUID,
+  IsDateString,
+  IsOptional,
+  IsNumber,
+  Min,
+} from "class-validator";
 
 export class CreateBookingDto {
   @IsUUID()

@@ -1,4 +1,14 @@
-import { IsString, IsOptional, IsBoolean, IsObject, IsEnum, IsNumber, Min, Max, IsUUID } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsBoolean,
+  IsObject,
+  IsEnum,
+  IsNumber,
+  Min,
+  Max,
+  IsUUID,
+} from "class-validator";
 
 export class UpdateFcmTokenDto {
   @IsString()
@@ -160,12 +170,12 @@ export class SendTestNotificationDto {
 }
 
 export enum EmergencyNotificationStatus {
-  EN_ROUTE = 'en_route',
-  ARRIVED = 'arrived',
-  WORKING = 'working',
-  COMPLETED = 'completed',
-  DELAYED = 'delayed',
-  CANCELLED = 'cancelled',
+  EN_ROUTE = "en_route",
+  ARRIVED = "arrived",
+  WORKING = "working",
+  COMPLETED = "completed",
+  DELAYED = "delayed",
+  CANCELLED = "cancelled",
 }
 
 export class SendEmergencyNotificationDto {

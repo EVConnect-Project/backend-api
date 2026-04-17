@@ -1,4 +1,4 @@
-import { ChargerStopDto, SafetyWarningDto } from './route-alternative.dto';
+import { ChargerStopDto, SafetyWarningDto } from "./route-alternative.dto";
 
 export class RouteOptionDto {
   id: string;

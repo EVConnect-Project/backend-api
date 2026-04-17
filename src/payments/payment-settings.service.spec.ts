@@ -1,18 +1,18 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import * as bcrypt from 'bcrypt';
-import { BadRequestException } from '@nestjs/common';
-import { PaymentSettingsService } from './payment-settings.service';
-import { UserPaymentSettingsEntity } from './entities/user-payment-settings.entity';
+import { Test, TestingModule } from "@nestjs/testing";
+import { getRepositoryToken } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import * as bcrypt from "bcrypt";
+import { BadRequestException } from "@nestjs/common";
+import { PaymentSettingsService } from "./payment-settings.service";
+import { UserPaymentSettingsEntity } from "./entities/user-payment-settings.entity";
 
-describe('PaymentSettingsService - PIN Management', () => {
+describe("PaymentSettingsService - PIN Management", () => {
   let service: PaymentSettingsService;
   let repository: Repository<UserPaymentSettingsEntity>;
 
-  const mockUserId = 'test-user-123';
-  const mockPin = '1234';
-  const mockNewPin = '5678';
+  const mockUserId = "test-user-123";
+  const mockPin = "1234";
+  const mockNewPin = "5678";
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -35,11 +35,17 @@ describe('PaymentSettingsService - PIN Management', () => {
     );
   });
 
-  describe('setPaymentPin', () => {
-    it('should set a new PIN with valid input', async () => {
-      const mockSettings = { userId: mockUserId, paymentPinHash: null, requirePinForPayments: false };
-      jest.spyOn(service, 'findOrCreate').mockResolvedValue(mockSettings as any);
-      jest.spyOn(repository, 'save').mockResolvedValue(mockSettings as any);
+  describe("setPaymentPin", () => {
+    it("should set a new PIN with valid input", async () => {
+      const mockSettings = {
+        userId: mockUserId,
+        paymentPinHash: null,
+        requirePinForPayments: false,
+      };
+      jest
+        .spyOn(service, "findOrCreate")
+        .mockResolvedValue(mockSettings as any);
+      jest.spyOn(repository, "save").mockResolvedValue(mockSettings as any);
 
       await service.setPaymentPin(mockUserId, mockPin);
 
@@ -48,58 +54,70 @@ describe('PaymentSettingsService - PIN Management', () => {
       expect(repository.save).toHaveBeenCalled();
     });
 
-    it('should throw error if PIN is less than 4 digits', async () => {
+    it("should throw error if PIN is less than 4 digits", async () => {
       const mockSettings = { userId: mockUserId };
-      jest.spyOn(service, 'findOrCreate').mockResolvedValue(mockSettings as any);
+      jest
+        .spyOn(service, "findOrCreate")
+        .mockResolvedValue(mockSettings as any);
 
-      await expect(service.setPaymentPin(mockUserId, '123')).rejects.toThrow(
+      await expect(service.setPaymentPin(mockUserId, "123")).rejects.toThrow(
         BadRequestException,
       );
     });
 
-    it('should throw error if PIN is more than 6 digits', async () => {
+    it("should throw error if PIN is more than 6 digits", async () => {
       const mockSettings = { userId: mockUserId };
-      jest.spyOn(service, 'findOrCreate').mockResolvedValue(mockSettings as any);
+      jest
+        .spyOn(service, "findOrCreate")
+        .mockResolvedValue(mockSettings as any);
 
-      await expect(service.setPaymentPin(mockUserId, '1234567')).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(
+        service.setPaymentPin(mockUserId, "1234567"),
+      ).rejects.toThrow(BadRequestException);
     });
 
-    it('should throw error if PIN contains non-numeric characters', async () => {
+    it("should throw error if PIN contains non-numeric characters", async () => {
       const mockSettings = { userId: mockUserId };
-      jest.spyOn(service, 'findOrCreate').mockResolvedValue(mockSettings as any);
+      jest
+        .spyOn(service, "findOrCreate")
+        .mockResolvedValue(mockSettings as any);
 
-      await expect(service.setPaymentPin(mockUserId, 'abcd')).rejects.toThrow(
+      await expect(service.setPaymentPin(mockUserId, "abcd")).rejects.toThrow(
         BadRequestException,
       );
     });
   });
 
-  describe('verifyPaymentPin', () => {
-    it('should return true for correct PIN', async () => {
+  describe("verifyPaymentPin", () => {
+    it("should return true for correct PIN", async () => {
       const hashedPin = await bcrypt.hash(mockPin, 10);
       const mockSettings = { userId: mockUserId, paymentPinHash: hashedPin };
-      jest.spyOn(service, 'findOrCreate').mockResolvedValue(mockSettings as any);
+      jest
+        .spyOn(service, "findOrCreate")
+        .mockResolvedValue(mockSettings as any);
 
       const result = await service.verifyPaymentPin(mockUserId, mockPin);
 
       expect(result).toEqual({ success: true });
     });
 
-    it('should return false for incorrect PIN', async () => {
+    it("should return false for incorrect PIN", async () => {
       const hashedPin = await bcrypt.hash(mockPin, 10);
       const mockSettings = { userId: mockUserId, paymentPinHash: hashedPin };
-      jest.spyOn(service, 'findOrCreate').mockResolvedValue(mockSettings as any);
+      jest
+        .spyOn(service, "findOrCreate")
+        .mockResolvedValue(mockSettings as any);
 
-      const result = await service.verifyPaymentPin(mockUserId, '9999');
+      const result = await service.verifyPaymentPin(mockUserId, "9999");
 
       expect(result).toEqual({ success: false });
     });
 
-    it('should return false if no PIN is set', async () => {
+    it("should return false if no PIN is set", async () => {
       const mockSettings = { userId: mockUserId, paymentPinHash: null };
-      jest.spyOn(service, 'findOrCreate').mockResolvedValue(mockSettings as any);
+      jest
+        .spyOn(service, "findOrCreate")
+        .mockResolvedValue(mockSettings as any);
 
       const result = await service.verifyPaymentPin(mockUserId, mockPin);
 
@@ -107,16 +125,18 @@ describe('PaymentSettingsService - PIN Management', () => {
     });
   });
 
-  describe('changePaymentPin', () => {
-    it('should change PIN when old PIN is correct', async () => {
+  describe("changePaymentPin", () => {
+    it("should change PIN when old PIN is correct", async () => {
       const oldHashedPin = await bcrypt.hash(mockPin, 10);
       const mockSettings = {
         userId: mockUserId,
         paymentPinHash: oldHashedPin,
       };
 
-      jest.spyOn(service, 'findOrCreate').mockResolvedValue(mockSettings as any);
-      jest.spyOn(repository, 'save').mockResolvedValue(mockSettings as any);
+      jest
+        .spyOn(service, "findOrCreate")
+        .mockResolvedValue(mockSettings as any);
+      jest.spyOn(repository, "save").mockResolvedValue(mockSettings as any);
 
       await service.changePaymentPin(mockUserId, mockPin, mockNewPin);
 
@@ -124,72 +144,84 @@ describe('PaymentSettingsService - PIN Management', () => {
       expect(repository.save).toHaveBeenCalled();
     });
 
-    it('should throw error if old PIN is incorrect', async () => {
+    it("should throw error if old PIN is incorrect", async () => {
       const oldHashedPin = await bcrypt.hash(mockPin, 10);
       const mockSettings = {
         userId: mockUserId,
         paymentPinHash: oldHashedPin,
       };
 
-      jest.spyOn(service, 'findOrCreate').mockResolvedValue(mockSettings as any);
+      jest
+        .spyOn(service, "findOrCreate")
+        .mockResolvedValue(mockSettings as any);
 
-      await expect(service.changePaymentPin(mockUserId, '9999', mockNewPin)).rejects.toThrow(
-        'Current PIN is incorrect',
-      );
+      await expect(
+        service.changePaymentPin(mockUserId, "9999", mockNewPin),
+      ).rejects.toThrow("Current PIN is incorrect");
     });
 
-    it('should throw error if new PIN is invalid format', async () => {
+    it("should throw error if new PIN is invalid format", async () => {
       const oldHashedPin = await bcrypt.hash(mockPin, 10);
       const mockSettings = {
         userId: mockUserId,
         paymentPinHash: oldHashedPin,
       };
 
-      jest.spyOn(service, 'findOrCreate').mockResolvedValue(mockSettings as any);
+      jest
+        .spyOn(service, "findOrCreate")
+        .mockResolvedValue(mockSettings as any);
 
-      await expect(service.changePaymentPin(mockUserId, mockPin, 'abc')).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(
+        service.changePaymentPin(mockUserId, mockPin, "abc"),
+      ).rejects.toThrow(BadRequestException);
     });
 
-    it('should throw error if new PIN is same as old PIN', async () => {
+    it("should throw error if new PIN is same as old PIN", async () => {
       const oldHashedPin = await bcrypt.hash(mockPin, 10);
       const mockSettings = {
         userId: mockUserId,
         paymentPinHash: oldHashedPin,
       };
 
-      jest.spyOn(service, 'findOrCreate').mockResolvedValue(mockSettings as any);
+      jest
+        .spyOn(service, "findOrCreate")
+        .mockResolvedValue(mockSettings as any);
 
-      await expect(service.changePaymentPin(mockUserId, mockPin, mockPin)).rejects.toThrow(
-        'New PIN cannot be the same as the current PIN',
-      );
+      await expect(
+        service.changePaymentPin(mockUserId, mockPin, mockPin),
+      ).rejects.toThrow("New PIN cannot be the same as the current PIN");
     });
 
-    it('should throw error if no PIN is set', async () => {
+    it("should throw error if no PIN is set", async () => {
       const mockSettings = { userId: mockUserId, paymentPinHash: null };
-      jest.spyOn(service, 'findOrCreate').mockResolvedValue(mockSettings as any);
+      jest
+        .spyOn(service, "findOrCreate")
+        .mockResolvedValue(mockSettings as any);
 
-      await expect(service.changePaymentPin(mockUserId, mockPin, mockNewPin)).rejects.toThrow(
-        'No PIN is currently set',
-      );
+      await expect(
+        service.changePaymentPin(mockUserId, mockPin, mockNewPin),
+      ).rejects.toThrow("No PIN is currently set");
     });
   });
 
-  describe('getPinStatus', () => {
-    it('should return true if PIN is set', async () => {
+  describe("getPinStatus", () => {
+    it("should return true if PIN is set", async () => {
       const hashedPin = await bcrypt.hash(mockPin, 10);
       const mockSettings = { userId: mockUserId, paymentPinHash: hashedPin };
-      jest.spyOn(service, 'findOrCreate').mockResolvedValue(mockSettings as any);
+      jest
+        .spyOn(service, "findOrCreate")
+        .mockResolvedValue(mockSettings as any);
 
       const result = await service.getPinStatus(mockUserId);
 
       expect(result).toEqual({ isPinSet: true });
     });
 
-    it('should return false if PIN is not set', async () => {
+    it("should return false if PIN is not set", async () => {
       const mockSettings = { userId: mockUserId, paymentPinHash: null };
-      jest.spyOn(service, 'findOrCreate').mockResolvedValue(mockSettings as any);
+      jest
+        .spyOn(service, "findOrCreate")
+        .mockResolvedValue(mockSettings as any);
 
       const result = await service.getPinStatus(mockUserId);
 
@@ -197,8 +229,8 @@ describe('PaymentSettingsService - PIN Management', () => {
     });
   });
 
-  describe('removePaymentPin', () => {
-    it('should remove PIN successfully', async () => {
+  describe("removePaymentPin", () => {
+    it("should remove PIN successfully", async () => {
       const hashedPin = await bcrypt.hash(mockPin, 10);
       const mockSettings = {
         userId: mockUserId,
@@ -206,8 +238,10 @@ describe('PaymentSettingsService - PIN Management', () => {
         requirePinForPayments: true,
       };
 
-      jest.spyOn(service, 'findOrCreate').mockResolvedValue(mockSettings as any);
-      jest.spyOn(repository, 'save').mockResolvedValue(mockSettings as any);
+      jest
+        .spyOn(service, "findOrCreate")
+        .mockResolvedValue(mockSettings as any);
+      jest.spyOn(repository, "save").mockResolvedValue(mockSettings as any);
 
       await service.removePaymentPin(mockUserId);
 

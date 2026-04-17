@@ -1,4 +1,4 @@
-import { IsUUID, IsNumber, Min, IsOptional, IsString } from 'class-validator';
+import { IsUUID, IsNumber, Min, IsOptional, IsString } from "class-validator";
 
 export class CreatePaymentDto {
   @IsUUID()

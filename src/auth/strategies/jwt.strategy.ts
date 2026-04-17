@@ -1,10 +1,10 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
-import { PassportStrategy } from '@nestjs/passport';
-import { ExtractJwt, Strategy } from 'passport-jwt';
-import { ConfigService } from '@nestjs/config';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { UserEntity } from '../../users/entities/user.entity';
+import { Injectable, UnauthorizedException } from "@nestjs/common";
+import { PassportStrategy } from "@nestjs/passport";
+import { ExtractJwt, Strategy } from "passport-jwt";
+import { ConfigService } from "@nestjs/config";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { UserEntity } from "../../users/entities/user.entity";
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -13,8 +13,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     @InjectRepository(UserEntity)
     private readonly userRepository: Repository<UserEntity>,
   ) {
-    const secret = configService.get<string>('JWT_SECRET');
-    if (!secret) throw new Error('JWT_SECRET environment variable is not set');
+    const secret = configService.get<string>("JWT_SECRET");
+    if (!secret) throw new Error("JWT_SECRET environment variable is not set");
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
@@ -24,8 +24,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
   async validate(payload: any) {
     // Reject refresh tokens being used as access tokens
-    if (payload.type === 'refresh') {
-      throw new UnauthorizedException('Refresh token cannot be used as access token');
+    if (payload.type === "refresh") {
+      throw new UnauthorizedException(
+        "Refresh token cannot be used as access token",
+      );
     }
 
     // Verify the user still exists in the database
@@ -34,24 +36,26 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
 
     if (!user) {
-      throw new UnauthorizedException('User not found or has been deleted');
+      throw new UnauthorizedException("User not found or has been deleted");
     }
 
     if (user.isBanned) {
-      throw new UnauthorizedException('User account is banned');
+      throw new UnauthorizedException("User account is banned");
     }
 
     // Validate token version when supported by the current schema.
     if (
-      typeof payload.tokenVersion === 'number' &&
-      typeof user.tokenVersion === 'number' &&
+      typeof payload.tokenVersion === "number" &&
+      typeof user.tokenVersion === "number" &&
       payload.tokenVersion !== user.tokenVersion
     ) {
-      throw new UnauthorizedException('Token has been invalidated. Please login again.');
+      throw new UnauthorizedException(
+        "Token has been invalidated. Please login again.",
+      );
     }
 
-    return { 
-      userId: user.id, 
+    return {
+      userId: user.id,
       phoneNumber: user.phoneNumber,
       role: user.role,
       isBanned: user.isBanned,

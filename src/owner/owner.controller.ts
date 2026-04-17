@@ -9,17 +9,17 @@ import {
   UseGuards,
   Request,
   Query,
-} from '@nestjs/common';
-import { OwnerService } from './owner.service';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
-import { IsChargerOwnerGuard } from './guards/is-charger-owner.guard';
-import { CreateChargerDto } from '../charger/dto/create-charger.dto';
-import { UpdateChargerDto } from '../charger/dto/update-charger.dto';
-import { CreateIndividualChargerDto } from './dto/create-individual-charger.dto';
-import { CreateStationDto } from './dto/create-station.dto';
-import { CreateServiceStationDto } from './dto/create-service-station.dto';
+} from "@nestjs/common";
+import { OwnerService } from "./owner.service";
+import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
+import { RolesGuard } from "../auth/guards/roles.guard";
+import { Roles } from "../auth/decorators/roles.decorator";
+import { IsChargerOwnerGuard } from "./guards/is-charger-owner.guard";
+import { CreateChargerDto } from "../charger/dto/create-charger.dto";
+import { UpdateChargerDto } from "../charger/dto/update-charger.dto";
+import { CreateIndividualChargerDto } from "./dto/create-individual-charger.dto";
+import { CreateStationDto } from "./dto/create-station.dto";
+import { CreateServiceStationDto } from "./dto/create-service-station.dto";
 
 /**
  * Owner Controller
@@ -30,10 +30,10 @@ import { CreateServiceStationDto } from './dto/create-service-station.dto';
  * - Update charger details
  * - Manage charger status
  * - Delete owned chargers (owner permission)
- * 
+ *
  * Note: Only admins can verify/approve chargers via /admin/chargers/:id/approve
  */
-@Controller('owner')
+@Controller("owner")
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class OwnerController {
   constructor(private readonly ownerService: OwnerService) {}
@@ -42,7 +42,7 @@ export class OwnerController {
    * Register an individual charger with sockets configuration
    * Supports complex socket-based configuration from mobile app
    */
-  @Post('chargers/individual')
+  @Post("chargers/individual")
   async registerIndividualCharger(
     @Body() createIndividualChargerDto: CreateIndividualChargerDto,
     @Request() req,
@@ -57,30 +57,42 @@ export class OwnerController {
    * Register a charging station with multiple chargers
    * Supports full station configuration with amenities from mobile app
    */
-  @Post('chargers/station')
+  @Post("chargers/station")
   async registerStation(
     @Body() createStationDto: CreateStationDto,
     @Request() req,
   ) {
     try {
-      console.log('🏢 [OwnerController] registerStation called for user:', req.user?.userId);
-      console.log('🔍 [OwnerController] req.user object:', JSON.stringify(req.user, null, 2));
-      console.log('📝 [OwnerController] Station DTO:', JSON.stringify(createStationDto, null, 2));
-      
+      console.log(
+        "🏢 [OwnerController] registerStation called for user:",
+        req.user?.userId,
+      );
+      console.log(
+        "🔍 [OwnerController] req.user object:",
+        JSON.stringify(req.user, null, 2),
+      );
+      console.log(
+        "📝 [OwnerController] Station DTO:",
+        JSON.stringify(createStationDto, null, 2),
+      );
+
       if (!req.user?.userId) {
-        console.error('❌ [OwnerController] No userId in request');
-        throw new Error('No user ID found in request');
+        console.error("❌ [OwnerController] No userId in request");
+        throw new Error("No user ID found in request");
       }
-      
+
       const result = await this.ownerService.registerStation(
         createStationDto,
         req.user.userId,
       );
-      console.log('✅ [OwnerController] Station registered successfully');
+      console.log("✅ [OwnerController] Station registered successfully");
       return result;
     } catch (error) {
-      console.error('❌ [OwnerController] Error in registerStation:', error.message);
-      console.error('❌ [OwnerController] Error stack:', error.stack);
+      console.error(
+        "❌ [OwnerController] Error in registerStation:",
+        error.message,
+      );
+      console.error("❌ [OwnerController] Error stack:", error.stack);
       throw error;
     }
   }
@@ -88,7 +100,7 @@ export class OwnerController {
   /**
    * Register a service station (listed in Vehicle Services, no charger config required)
    */
-  @Post('service-stations')
+  @Post("service-stations")
   async registerServiceStation(
     @Body() dto: CreateServiceStationDto,
     @Request() req,
@@ -99,7 +111,7 @@ export class OwnerController {
   /**
    * Get service stations registered by current user
    */
-  @Get('service-stations')
+  @Get("service-stations")
   async getMyServiceStations(@Request() req) {
     return this.ownerService.getMyServiceStations(req.user.userId);
   }
@@ -107,10 +119,11 @@ export class OwnerController {
   /**
    * Update details for a service station application owned by current user
    */
-  @Patch('service-stations/:id')
+  @Patch("service-stations/:id")
   async updateMyServiceStation(
-    @Param('id') id: string,
-    @Body() body: {
+    @Param("id") id: string,
+    @Body()
+    body: {
       stationName?: string;
       locationUrl?: string;
       city?: string;
@@ -134,9 +147,9 @@ export class OwnerController {
   /**
    * Toggle service station open/closed status manually (owner override)
    */
-  @Patch('service-stations/:id/open-status')
+  @Patch("service-stations/:id/open-status")
   async updateMyServiceStationOpenStatus(
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() body: { isOpen: boolean },
     @Request() req,
   ) {
@@ -150,11 +163,8 @@ export class OwnerController {
   /**
    * Delete a service station application and its approved station record (if exists)
    */
-  @Delete('service-stations/:id')
-  async deleteMyServiceStation(
-    @Param('id') id: string,
-    @Request() req,
-  ) {
+  @Delete("service-stations/:id")
+  async deleteMyServiceStation(@Param("id") id: string, @Request() req) {
     return this.ownerService.deleteMyServiceStation(id, req.user.userId);
   }
 
@@ -163,17 +173,27 @@ export class OwnerController {
    * Accessible to all authenticated users to check their charger status
    * Temporarily removed role restriction to debug 403 error
    */
-  @Get('chargers')
+  @Get("chargers")
   @UseGuards(JwtAuthGuard)
   async getMyChargers(@Request() req) {
     try {
-      console.log('✅ [OwnerController] Getting chargers for user:', req.user.userId);
+      console.log(
+        "✅ [OwnerController] Getting chargers for user:",
+        req.user.userId,
+      );
       const result = await this.ownerService.getMyChargers(req.user.userId);
-      console.log('✅ [OwnerController] Successfully got chargers:', result.length, 'chargers');
+      console.log(
+        "✅ [OwnerController] Successfully got chargers:",
+        result.length,
+        "chargers",
+      );
       return result;
     } catch (error) {
-      console.error('❌ [OwnerController] Error in getMyChargers:', error.message);
-      console.error('❌ [OwnerController] Error stack:', error.stack);
+      console.error(
+        "❌ [OwnerController] Error in getMyChargers:",
+        error.message,
+      );
+      console.error("❌ [OwnerController] Error stack:", error.stack);
       throw error;
     }
   }
@@ -181,23 +201,27 @@ export class OwnerController {
   /**
    * Get specific charger details (must be owned by user)
    */
-  @Get('chargers/:id')
+  @Get("chargers/:id")
   @UseGuards(IsChargerOwnerGuard)
-  async getChargerById(@Param('id') id: string, @Request() req) {
+  async getChargerById(@Param("id") id: string, @Request() req) {
     return this.ownerService.getChargerById(id, req.user.userId);
   }
 
   /**
    * Update charger details (must be owned by user)
    */
-  @Patch('chargers/:id')
+  @Patch("chargers/:id")
   @UseGuards(IsChargerOwnerGuard)
   async updateCharger(
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() updateChargerDto: UpdateChargerDto,
     @Request() req,
   ) {
-    return this.ownerService.updateCharger(id, updateChargerDto, req.user.userId);
+    return this.ownerService.updateCharger(
+      id,
+      updateChargerDto,
+      req.user.userId,
+    );
   }
 
   /**
@@ -205,11 +229,11 @@ export class OwnerController {
    * Owner can change operational status, but cannot verify/approve charger
    * Only admin can verify chargers via /admin/chargers/:id/approve
    */
-  @Patch('chargers/:id/status')
+  @Patch("chargers/:id/status")
   @UseGuards(IsChargerOwnerGuard)
   async updateChargerStatus(
-    @Param('id') id: string,
-    @Body('status') status: 'available' | 'in-use' | 'offline',
+    @Param("id") id: string,
+    @Body("status") status: "available" | "in-use" | "offline",
     @Request() req,
   ) {
     return this.ownerService.updateChargerStatus(id, status, req.user.userId);
@@ -219,21 +243,21 @@ export class OwnerController {
    * Delete charger permanently
    * Owner can delete their own charger if it has no active bookings
    */
-  @Delete('chargers/:id')
+  @Delete("chargers/:id")
   @UseGuards(IsChargerOwnerGuard)
-  async deleteCharger(@Param('id') id: string, @Request() req) {
+  async deleteCharger(@Param("id") id: string, @Request() req) {
     return this.ownerService.deleteCharger(id, req.user.userId);
   }
 
   /**
    * Get all bookings for chargers owned by current user
    */
-  @Get('bookings')
+  @Get("bookings")
   @UseGuards(IsChargerOwnerGuard)
   async getMyBookings(
     @Request() req,
-    @Query('status') status?: string,
-    @Query('chargerId') chargerId?: string,
+    @Query("status") status?: string,
+    @Query("chargerId") chargerId?: string,
   ) {
     return this.ownerService.getBookingsForMyChargers(
       req.user.userId,
@@ -245,29 +269,29 @@ export class OwnerController {
   /**
    * Get specific booking details (must be for owned charger)
    */
-  @Get('bookings/:id')
+  @Get("bookings/:id")
   @UseGuards(IsChargerOwnerGuard)
-  async getBookingById(@Param('id') id: string, @Request() req) {
+  async getBookingById(@Param("id") id: string, @Request() req) {
     return this.ownerService.getBookingById(id, req.user.userId);
   }
 
   /**
    * Delete a pending booking (must be for owned charger)
    */
-  @Delete('bookings/:id')
+  @Delete("bookings/:id")
   @UseGuards(IsChargerOwnerGuard)
-  async deletePendingBooking(@Param('id') id: string, @Request() req) {
+  async deletePendingBooking(@Param("id") id: string, @Request() req) {
     return this.ownerService.deletePendingBooking(id, req.user.userId);
   }
 
   /**
    * Approve or decline a pending booking request for an owned charger
    */
-  @Patch('bookings/:id/status')
+  @Patch("bookings/:id/status")
   @UseGuards(IsChargerOwnerGuard)
   async updateBookingStatus(
-    @Param('id') id: string,
-    @Body('status') status: 'confirmed' | 'cancelled',
+    @Param("id") id: string,
+    @Body("status") status: "confirmed" | "cancelled",
     @Request() req,
   ) {
     return this.ownerService.updateBookingStatusForOwner(
@@ -280,7 +304,7 @@ export class OwnerController {
   /**
    * Get booking statistics for owned chargers
    */
-  @Get('stats/bookings')
+  @Get("stats/bookings")
   @UseGuards(IsChargerOwnerGuard)
   async getBookingStats(@Request() req) {
     return this.ownerService.getBookingStats(req.user.userId);
@@ -289,12 +313,12 @@ export class OwnerController {
   /**
    * Get revenue statistics for owned chargers
    */
-  @Get('stats/revenue')
+  @Get("stats/revenue")
   @UseGuards(IsChargerOwnerGuard)
   async getRevenueStats(
     @Request() req,
-    @Query('startDate') startDate?: string,
-    @Query('endDate') endDate?: string,
+    @Query("startDate") startDate?: string,
+    @Query("endDate") endDate?: string,
   ) {
     return this.ownerService.getRevenueStats(
       req.user.userId,
@@ -306,7 +330,7 @@ export class OwnerController {
   /**
    * Get charger utilization statistics
    */
-  @Get('stats/utilization')
+  @Get("stats/utilization")
   @UseGuards(IsChargerOwnerGuard)
   async getUtilizationStats(@Request() req) {
     return this.ownerService.getUtilizationStats(req.user.userId);

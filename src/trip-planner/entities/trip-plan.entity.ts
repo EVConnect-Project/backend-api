@@ -7,104 +7,104 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   JoinColumn,
-} from 'typeorm';
-import { UserEntity } from '../../users/entities/user.entity';
-import { VehicleProfile } from '../../auth/entities/vehicle-profile.entity';
+} from "typeorm";
+import { UserEntity } from "../../users/entities/user.entity";
+import { VehicleProfile } from "../../auth/entities/vehicle-profile.entity";
 
-@Entity('trip_plans')
+@Entity("trip_plans")
 export class TripPlanEntity {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn("uuid")
   id: string;
 
-  @Column({ type: 'uuid' })
+  @Column({ type: "uuid" })
   userId: string;
 
-  @ManyToOne(() => UserEntity, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'userId' })
+  @ManyToOne(() => UserEntity, { onDelete: "CASCADE" })
+  @JoinColumn({ name: "userId" })
   user: UserEntity;
 
-  @Column({ type: 'uuid' })
+  @Column({ type: "uuid" })
   vehicleId: string;
 
-  @ManyToOne(() => VehicleProfile, { onDelete: 'SET NULL', nullable: true })
-  @JoinColumn({ name: 'vehicleId' })
+  @ManyToOne(() => VehicleProfile, { onDelete: "SET NULL", nullable: true })
+  @JoinColumn({ name: "vehicleId" })
   vehicle: VehicleProfile;
 
   // Start location
-  @Column({ type: 'decimal', precision: 10, scale: 7 })
+  @Column({ type: "decimal", precision: 10, scale: 7 })
   startLat: number;
 
-  @Column({ type: 'decimal', precision: 10, scale: 7 })
+  @Column({ type: "decimal", precision: 10, scale: 7 })
   startLng: number;
 
   @Column({ nullable: true })
   startAddress: string;
 
   // Destination
-  @Column({ type: 'decimal', precision: 10, scale: 7 })
+  @Column({ type: "decimal", precision: 10, scale: 7 })
   destLat: number;
 
-  @Column({ type: 'decimal', precision: 10, scale: 7 })
+  @Column({ type: "decimal", precision: 10, scale: 7 })
   destLng: number;
 
   @Column({ nullable: true })
   destAddress: string;
 
   // Waypoints (JSON array)
-  @Column({ type: 'jsonb', nullable: true, default: '[]' })
+  @Column({ type: "jsonb", nullable: true, default: "[]" })
   waypoints: { lat: number; lng: number; address?: string }[];
 
   // Route summary
-  @Column({ type: 'decimal', precision: 8, scale: 1 })
+  @Column({ type: "decimal", precision: 8, scale: 1 })
   totalDistanceKm: number;
 
-  @Column({ type: 'int' })
+  @Column({ type: "int" })
   totalDurationMinutes: number;
 
-  @Column({ type: 'int' })
+  @Column({ type: "int" })
   drivingDurationMinutes: number;
 
-  @Column({ type: 'int', default: 0 })
+  @Column({ type: "int", default: 0 })
   totalChargingTimeMinutes: number;
 
-  @Column({ type: 'int', default: 0 })
+  @Column({ type: "int", default: 0 })
   totalChargingCostLkr: number;
 
-  @Column({ type: 'int' })
+  @Column({ type: "int" })
   routeScore: number;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: "text", nullable: true })
   routePolyline: string;
 
   @Column({ nullable: true })
   routeSummary: string;
 
-  @Column({ type: 'varchar', length: 20, default: 'normal' })
+  @Column({ type: "varchar", length: 20, default: "normal" })
   drivingMode: string;
 
-  @Column({ type: 'int', default: 80 })
+  @Column({ type: "int", default: 80 })
   startBatteryPercent: number;
 
-  @Column({ type: 'int', default: 0 })
+  @Column({ type: "int", default: 0 })
   arrivalBatteryPercent: number;
 
-  @Column({ type: 'decimal', precision: 10, scale: 7, nullable: true })
+  @Column({ type: "decimal", precision: 10, scale: 7, nullable: true })
   currentLat?: number;
 
-  @Column({ type: 'decimal', precision: 10, scale: 7, nullable: true })
+  @Column({ type: "decimal", precision: 10, scale: 7, nullable: true })
   currentLng?: number;
 
-  @Column({ type: 'decimal', precision: 6, scale: 2, nullable: true })
+  @Column({ type: "decimal", precision: 6, scale: 2, nullable: true })
   currentHeading?: number;
 
-  @Column({ type: 'decimal', precision: 7, scale: 2, nullable: true })
+  @Column({ type: "decimal", precision: 7, scale: 2, nullable: true })
   currentSpeedKph?: number;
 
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({ type: "timestamp", nullable: true })
   lastLocationAt?: Date;
 
   // Charging stops (JSON array for simplicity)
-  @Column({ type: 'jsonb', default: '[]' })
+  @Column({ type: "jsonb", default: "[]" })
   chargingStops: {
     chargerId: string;
     chargerName: string;
@@ -122,7 +122,7 @@ export class TripPlanEntity {
   }[];
 
   // Safety warnings (JSON array)
-  @Column({ type: 'jsonb', default: '[]' })
+  @Column({ type: "jsonb", default: "[]" })
   safetyWarnings: {
     type: string;
     severity: string;
@@ -130,11 +130,11 @@ export class TripPlanEntity {
   }[];
 
   @Column({
-    type: 'varchar',
+    type: "varchar",
     length: 20,
-    default: 'planned',
+    default: "planned",
   })
-  status: 'planned' | 'active' | 'completed' | 'cancelled';
+  status: "planned" | "active" | "completed" | "cancelled";
 
   @CreateDateColumn()
   createdAt: Date;

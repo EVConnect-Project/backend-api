@@ -1,76 +1,76 @@
-import { MigrationInterface, QueryRunner, Table, TableColumn } from 'typeorm';
+import { MigrationInterface, QueryRunner, Table, TableColumn } from "typeorm";
 
 export class AddAdminControlFeatures1733572000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     // Create admin_actions table
     await queryRunner.createTable(
       new Table({
-        name: 'admin_actions',
+        name: "admin_actions",
         columns: [
           {
-            name: 'id',
-            type: 'uuid',
+            name: "id",
+            type: "uuid",
             isPrimary: true,
-            generationStrategy: 'uuid',
-            default: 'uuid_generate_v4()',
+            generationStrategy: "uuid",
+            default: "uuid_generate_v4()",
           },
           {
-            name: 'adminId',
-            type: 'uuid',
+            name: "adminId",
+            type: "uuid",
           },
           {
-            name: 'actionType',
-            type: 'varchar',
-            length: '50',
+            name: "actionType",
+            type: "varchar",
+            length: "50",
           },
           {
-            name: 'targetType',
-            type: 'varchar',
-            length: '50',
+            name: "targetType",
+            type: "varchar",
+            length: "50",
           },
           {
-            name: 'targetId',
-            type: 'uuid',
+            name: "targetId",
+            type: "uuid",
           },
           {
-            name: 'details',
-            type: 'jsonb',
+            name: "details",
+            type: "jsonb",
             isNullable: true,
           },
           {
-            name: 'reason',
-            type: 'text',
+            name: "reason",
+            type: "text",
             isNullable: true,
           },
           {
-            name: 'ipAddress',
-            type: 'varchar',
-            length: '45',
+            name: "ipAddress",
+            type: "varchar",
+            length: "45",
             isNullable: true,
           },
           {
-            name: 'createdAt',
-            type: 'timestamp',
-            default: 'CURRENT_TIMESTAMP',
+            name: "createdAt",
+            type: "timestamp",
+            default: "CURRENT_TIMESTAMP",
           },
         ],
         foreignKeys: [
           {
-            columnNames: ['adminId'],
-            referencedTableName: 'users',
-            referencedColumnNames: ['id'],
-            onDelete: 'CASCADE',
+            columnNames: ["adminId"],
+            referencedTableName: "users",
+            referencedColumnNames: ["id"],
+            onDelete: "CASCADE",
           },
         ],
         indices: [
           {
-            columnNames: ['adminId'],
+            columnNames: ["adminId"],
           },
           {
-            columnNames: ['targetType', 'targetId'],
+            columnNames: ["targetType", "targetId"],
           },
           {
-            columnNames: ['createdAt'],
+            columnNames: ["createdAt"],
           },
         ],
       }),
@@ -78,17 +78,21 @@ export class AddAdminControlFeatures1733572000000 implements MigrationInterface 
     );
 
     // Add admin message fields to messages table
-    const messagesTable = await queryRunner.getTable('messages');
+    const messagesTable = await queryRunner.getTable("messages");
     if (messagesTable) {
-      const hasIsAdminMessage = messagesTable.columns.find(col => col.name === 'is_admin_message');
-      const hasPriorityLevel = messagesTable.columns.find(col => col.name === 'priority_level');
+      const hasIsAdminMessage = messagesTable.columns.find(
+        (col) => col.name === "is_admin_message",
+      );
+      const hasPriorityLevel = messagesTable.columns.find(
+        (col) => col.name === "priority_level",
+      );
 
       if (!hasIsAdminMessage) {
         await queryRunner.addColumn(
-          'messages',
+          "messages",
           new TableColumn({
-            name: 'is_admin_message',
-            type: 'boolean',
+            name: "is_admin_message",
+            type: "boolean",
             default: false,
           }),
         );
@@ -96,11 +100,11 @@ export class AddAdminControlFeatures1733572000000 implements MigrationInterface 
 
       if (!hasPriorityLevel) {
         await queryRunner.addColumn(
-          'messages',
+          "messages",
           new TableColumn({
-            name: 'priority_level',
-            type: 'varchar',
-            length: '20',
+            name: "priority_level",
+            type: "varchar",
+            length: "20",
             default: "'normal'",
           }),
         );
@@ -108,16 +112,18 @@ export class AddAdminControlFeatures1733572000000 implements MigrationInterface 
     }
 
     // Add metadata column to chargers if not exists
-    const chargersTable = await queryRunner.getTable('chargers');
+    const chargersTable = await queryRunner.getTable("chargers");
     if (chargersTable) {
-      const hasMetadata = chargersTable.columns.find(col => col.name === 'metadata');
+      const hasMetadata = chargersTable.columns.find(
+        (col) => col.name === "metadata",
+      );
 
       if (!hasMetadata) {
         await queryRunner.addColumn(
-          'chargers',
+          "chargers",
           new TableColumn({
-            name: 'metadata',
-            type: 'jsonb',
+            name: "metadata",
+            type: "jsonb",
             isNullable: true,
           }),
         );
@@ -125,16 +131,18 @@ export class AddAdminControlFeatures1733572000000 implements MigrationInterface 
     }
 
     // Add metadata column to conversations if not exists
-    const conversationsTable = await queryRunner.getTable('conversations');
+    const conversationsTable = await queryRunner.getTable("conversations");
     if (conversationsTable) {
-      const hasMetadata = conversationsTable.columns.find(col => col.name === 'metadata');
+      const hasMetadata = conversationsTable.columns.find(
+        (col) => col.name === "metadata",
+      );
 
       if (!hasMetadata) {
         await queryRunner.addColumn(
-          'conversations',
+          "conversations",
           new TableColumn({
-            name: 'metadata',
-            type: 'jsonb',
+            name: "metadata",
+            type: "jsonb",
             isNullable: true,
           }),
         );
@@ -143,27 +151,31 @@ export class AddAdminControlFeatures1733572000000 implements MigrationInterface 
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.dropTable('admin_actions');
-    
-    const messagesTable = await queryRunner.getTable('messages');
+    await queryRunner.dropTable("admin_actions");
+
+    const messagesTable = await queryRunner.getTable("messages");
     if (messagesTable) {
-      await queryRunner.dropColumn('messages', 'is_admin_message');
-      await queryRunner.dropColumn('messages', 'priority_level');
+      await queryRunner.dropColumn("messages", "is_admin_message");
+      await queryRunner.dropColumn("messages", "priority_level");
     }
 
-    const chargersTable = await queryRunner.getTable('chargers');
+    const chargersTable = await queryRunner.getTable("chargers");
     if (chargersTable) {
-      const hasMetadata = chargersTable.columns.find(col => col.name === 'metadata');
+      const hasMetadata = chargersTable.columns.find(
+        (col) => col.name === "metadata",
+      );
       if (hasMetadata) {
-        await queryRunner.dropColumn('chargers', 'metadata');
+        await queryRunner.dropColumn("chargers", "metadata");
       }
     }
 
-    const conversationsTable = await queryRunner.getTable('conversations');
+    const conversationsTable = await queryRunner.getTable("conversations");
     if (conversationsTable) {
-      const hasMetadata = conversationsTable.columns.find(col => col.name === 'metadata');
+      const hasMetadata = conversationsTable.columns.find(
+        (col) => col.name === "metadata",
+      );
       if (hasMetadata) {
-        await queryRunner.dropColumn('conversations', 'metadata');
+        await queryRunner.dropColumn("conversations", "metadata");
       }
     }
   }

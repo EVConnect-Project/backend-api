@@ -1,21 +1,27 @@
-import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { ConfigService } from '@nestjs/config';
-import { createHash, randomUUID, timingSafeEqual } from 'crypto';
-import { PaymentEntity } from './entities/payment.entity';
-import { CreatePaymentDto } from './dto/create-payment.dto';
-import { BookingEntity } from '../bookings/entities/booking.entity';
-import { NotificationsService } from '../notifications/notifications.service';
-import { PaymentMethodsService } from './payment-methods.service';
-import { ConfirmCardSetupDto } from './dto/confirm-card-setup.dto';
-import { PaymentMethodType } from './entities/payment-method.entity';
-import { WalletEntity } from '../wallet/entities/wallet.entity';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  Logger,
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { ConfigService } from "@nestjs/config";
+import { createHash, randomUUID, timingSafeEqual } from "crypto";
+import { PaymentEntity } from "./entities/payment.entity";
+import { CreatePaymentDto } from "./dto/create-payment.dto";
+import { BookingEntity } from "../bookings/entities/booking.entity";
+import { NotificationsService } from "../notifications/notifications.service";
+import { SmsService } from "../auth/sms.service";
+import { PaymentMethodsService } from "./payment-methods.service";
+import { ConfirmCardSetupDto } from "./dto/confirm-card-setup.dto";
+import { PaymentMethodType } from "./entities/payment-method.entity";
+import { WalletEntity } from "../wallet/entities/wallet.entity";
 import {
   WalletTransactionEntity,
   WalletTransactionStatus,
   WalletTransactionType,
-} from '../wallet/entities/wallet-transaction.entity';
+} from "../wallet/entities/wallet-transaction.entity";
 
 @Injectable()
 export class PaymentsService {
@@ -38,20 +44,32 @@ export class PaymentsService {
     private walletTransactionRepository: Repository<WalletTransactionEntity>,
     private configService: ConfigService,
     private notificationsService: NotificationsService,
+    private smsService: SmsService,
     private paymentMethodsService: PaymentMethodsService,
   ) {
-    this.payhereBaseUrl =
-      (this.configService.get<string>('PAYHERE_BASE_URL') || 'https://sandbox.payhere.lk').trim();
-    this.payhereMerchantId =
-      (this.configService.get<string>('PAYHERE_MERCHANT_ID') || 'MERCHANT_ID').trim();
-    this.payhereMerchantSecret =
-      (this.configService.get<string>('PAYHERE_MERCHANT_SECRET') || 'MERCHANT_SECRET').trim();
-    this.payhereNotifyUrl =
-      (this.configService.get<string>('PAYHERE_NOTIFY_URL') || 'http://localhost:4000/api/payments/webhook').trim();
-    this.payhereReturnUrl =
-      (this.configService.get<string>('PAYHERE_RETURN_URL') || 'http://localhost:3000/payment/success').trim();
-    this.payhereCancelUrl =
-      (this.configService.get<string>('PAYHERE_CANCEL_URL') || 'http://localhost:3000/payment/cancel').trim();
+    this.payhereBaseUrl = (
+      this.configService.get<string>("PAYHERE_BASE_URL") ||
+      "https://sandbox.payhere.lk"
+    ).trim();
+    this.payhereMerchantId = (
+      this.configService.get<string>("PAYHERE_MERCHANT_ID") || "MERCHANT_ID"
+    ).trim();
+    this.payhereMerchantSecret = (
+      this.configService.get<string>("PAYHERE_MERCHANT_SECRET") ||
+      "MERCHANT_SECRET"
+    ).trim();
+    this.payhereNotifyUrl = (
+      this.configService.get<string>("PAYHERE_NOTIFY_URL") ||
+      "http://localhost:4000/api/payments/webhook"
+    ).trim();
+    this.payhereReturnUrl = (
+      this.configService.get<string>("PAYHERE_RETURN_URL") ||
+      "http://localhost:3000/payment/success"
+    ).trim();
+    this.payhereCancelUrl = (
+      this.configService.get<string>("PAYHERE_CANCEL_URL") ||
+      "http://localhost:3000/payment/cancel"
+    ).trim();
   }
 
   private toMoney(value: number | string): number {
@@ -68,25 +86,31 @@ export class PaymentsService {
     expiresAt: number,
   ): string {
     const payload = `${setupId}:${userId}:${expiresAt}:${this.payhereMerchantSecret}`;
-    return createHash('md5').update(payload).digest('hex').toUpperCase();
+    return createHash("md5").update(payload).digest("hex").toUpperCase();
   }
 
   async createCardSetupIntent(userId: string): Promise<{
     setupId: string;
     expiresAt: number;
     signature: string;
-    provider: 'payhere';
+    provider: "payhere";
     hostedUrl: string | null;
     callbackUrl: string;
   }> {
     const setupId = randomUUID();
     const expiresAt = Date.now() + 15 * 60 * 1000;
-    const signature = this.generateCardSetupSignature(setupId, userId, expiresAt);
+    const signature = this.generateCardSetupSignature(
+      setupId,
+      userId,
+      expiresAt,
+    );
     const callbackUrl =
-      this.configService.get<string>('MOBILE_CARD_SETUP_CALLBACK_URL') ||
-      'evrs://wallet/card-setup';
+      this.configService.get<string>("MOBILE_CARD_SETUP_CALLBACK_URL") ||
+      "evrs://wallet/card-setup";
 
-    const hostedSetupBaseUrl = this.configService.get<string>('PAYHERE_CARD_SETUP_URL');
+    const hostedSetupBaseUrl = this.configService.get<string>(
+      "PAYHERE_CARD_SETUP_URL",
+    );
     let hostedUrl: string | null = null;
     if (hostedSetupBaseUrl) {
       const params = new URLSearchParams({
@@ -102,24 +126,25 @@ export class PaymentsService {
       setupId,
       expiresAt,
       signature,
-      provider: 'payhere',
+      provider: "payhere",
       hostedUrl,
       callbackUrl,
     };
   }
 
-  async confirmCardSetup(
-    userId: string,
-    dto: ConfirmCardSetupDto,
-  ) {
+  async confirmCardSetup(userId: string, dto: ConfirmCardSetupDto) {
     const now = Date.now();
     if (dto.expiresAt <= now) {
-      throw new BadRequestException('Card setup session expired');
+      throw new BadRequestException("Card setup session expired");
     }
 
-    const expected = this.generateCardSetupSignature(dto.setupId, userId, dto.expiresAt);
+    const expected = this.generateCardSetupSignature(
+      dto.setupId,
+      userId,
+      dto.expiresAt,
+    );
     if (expected !== dto.signature) {
-      throw new BadRequestException('Invalid card setup signature');
+      throw new BadRequestException("Invalid card setup signature");
     }
 
     return this.paymentMethodsService.create(
@@ -145,149 +170,179 @@ export class PaymentsService {
   ): string {
     const amountFormatted = Number(amount).toFixed(2);
     const currencyCode = currency.toUpperCase();
-    const merchantSecretHash = createHash('md5')
+    const merchantSecretHash = createHash("md5")
       .update(this.payhereMerchantSecret)
-      .digest('hex')
+      .digest("hex")
       .toUpperCase();
 
-    const hash = createHash('md5')
-      .update(`${merchantId}${orderId}${amountFormatted}${currencyCode}${merchantSecretHash}`)
-      .digest('hex')
+    const hash = createHash("md5")
+      .update(
+        `${merchantId}${orderId}${amountFormatted}${currencyCode}${merchantSecretHash}`,
+      )
+      .digest("hex")
       .toUpperCase();
     return hash;
   }
 
-  async createPaymentIntent(createPaymentDto: CreatePaymentDto, userId: string): Promise<any> {
+  async createPaymentIntent(
+    createPaymentDto: CreatePaymentDto,
+    userId: string,
+  ): Promise<any> {
     const { bookingId, amount, paymentMethod } = createPaymentDto;
-    const normalizedMethod = (paymentMethod || 'payhere').toLowerCase();
+    const normalizedMethod = (paymentMethod || "payhere").toLowerCase();
 
     try {
-      if (normalizedMethod === 'payhere') {
+      if (normalizedMethod === "payhere") {
         this.assertPayHereConfigured();
       }
 
       if (amount <= 0) {
-        throw new BadRequestException('Payment amount must be greater than 0');
+        throw new BadRequestException("Payment amount must be greater than 0");
       }
 
       const booking = await this.bookingRepository.findOne({
         where: { id: bookingId },
-        relations: ['user', 'charger'],
+        relations: ["user", "charger"],
       });
 
       if (!booking) {
-        throw new NotFoundException('Booking not found');
+        throw new NotFoundException("Booking not found");
       }
 
-    if (booking.userId !== userId) {
-      throw new BadRequestException('Cannot create payment for another user booking');
-    }
+      if (booking.userId !== userId) {
+        throw new BadRequestException(
+          "Cannot create payment for another user booking",
+        );
+      }
 
-    if ((booking.paymentStatus || '').toLowerCase() === 'success') {
-      throw new BadRequestException('Booking payment is already completed');
-    }
+      if ((booking.paymentStatus || "").toLowerCase() === "success") {
+        throw new BadRequestException("Booking payment is already completed");
+      }
 
-    // Calculate commission: 6% system fee, 94% owner revenue
-    const systemCommission = Number((amount * 0.06).toFixed(2));
-    const ownerRevenue = Number((amount * 0.94).toFixed(2));
+      // Calculate commission: 6% system fee, 94% owner revenue
+      const systemCommission = Number((amount * 0.06).toFixed(2));
+      const ownerRevenue = Number((amount * 0.94).toFixed(2));
 
       const payment = this.paymentRepository.create({
         bookingId,
         amount,
         systemCommission,
         ownerRevenue,
-        status: 'pending',
+        status: "pending",
         paymentMethod: normalizedMethod,
         provider: normalizedMethod,
       });
 
       const savedPayment = await this.paymentRepository.save(payment);
 
-      if (normalizedMethod == 'wallet') {
-      let walletResult: {
-        transactionId: string;
-        availableBalance: number;
-        currency: string;
-      };
+      if (normalizedMethod == "wallet") {
+        let walletResult: {
+          transactionId: string;
+          availableBalance: number;
+          currency: string;
+        };
 
-      try {
-        walletResult = await this.paymentRepository.manager.transaction(async (manager) => {
-          const walletRepo = manager.getRepository(WalletEntity);
-          const walletTransactionRepo = manager.getRepository(WalletTransactionEntity);
-          const paymentRepo = manager.getRepository(PaymentEntity);
-          const bookingRepo = manager.getRepository(BookingEntity);
+        try {
+          walletResult = await this.paymentRepository.manager.transaction(
+            async (manager) => {
+              const walletRepo = manager.getRepository(WalletEntity);
+              const walletTransactionRepo = manager.getRepository(
+                WalletTransactionEntity,
+              );
+              const paymentRepo = manager.getRepository(PaymentEntity);
+              const bookingRepo = manager.getRepository(BookingEntity);
 
-          const wallet = await walletRepo.findOne({ where: { userId } });
-          if (!wallet) {
-            throw new BadRequestException('Wallet not found. Please top up your wallet first.');
-          }
+              const wallet = await walletRepo.findOne({ where: { userId } });
+              if (!wallet) {
+                throw new BadRequestException(
+                  "Wallet not found. Please top up your wallet first.",
+                );
+              }
 
-          const balance = this.toMoney(wallet.balance);
-          const held = this.toMoney(wallet.heldBalance || 0);
-          const available = this.toMoney(balance - held);
-          const payAmount = this.toMoney(amount);
+              const balance = this.toMoney(wallet.balance);
+              const held = this.toMoney(wallet.heldBalance || 0);
+              const available = this.toMoney(balance - held);
+              const payAmount = this.toMoney(amount);
 
-          if (available < payAmount) {
-            throw new BadRequestException(
-              `Insufficient wallet balance. Available: LKR ${available.toFixed(2)}`,
-            );
-          }
+              if (available < payAmount) {
+                throw new BadRequestException(
+                  `Insufficient wallet balance. Available: LKR ${available.toFixed(2)}`,
+                );
+              }
 
-          wallet.balance = this.toMoney(balance - payAmount);
-          await walletRepo.save(wallet);
+              wallet.balance = this.toMoney(balance - payAmount);
+              await walletRepo.save(wallet);
 
-          const walletTx = walletTransactionRepo.create({
-            userId,
-            type: WalletTransactionType.PAYMENT,
-            amount: payAmount,
-            status: WalletTransactionStatus.SUCCESS,
-            referenceId: savedPayment.id,
-            metadata: {
-              bookingId,
-              source: 'booking_wallet_payment',
+              const walletTx = walletTransactionRepo.create({
+                userId,
+                type: WalletTransactionType.PAYMENT,
+                amount: payAmount,
+                status: WalletTransactionStatus.SUCCESS,
+                referenceId: savedPayment.id,
+                metadata: {
+                  bookingId,
+                  source: "booking_wallet_payment",
+                },
+              });
+
+              const savedWalletTx = await walletTransactionRepo.save(walletTx);
+
+              await paymentRepo.update(savedPayment.id, {
+                status: "succeeded",
+                txnId: savedWalletTx.transactionId,
+              });
+
+              await bookingRepo.update(bookingId, {
+                status:
+                  booking.status === "pending" ? "confirmed" : booking.status,
+                paymentStatus: "success",
+              });
+
+              return {
+                transactionId: savedWalletTx.transactionId,
+                availableBalance: this.toMoney(
+                  wallet.balance - (wallet.heldBalance || 0),
+                ),
+                currency: wallet.currency || "LKR",
+              };
             },
-          });
-
-          const savedWalletTx = await walletTransactionRepo.save(walletTx);
-
-          await paymentRepo.update(savedPayment.id, {
-            status: 'succeeded',
-            txnId: savedWalletTx.transactionId,
-          });
-
-          await bookingRepo.update(bookingId, {
-            status: booking.status === 'pending' ? 'confirmed' : booking.status,
-            paymentStatus: 'success',
-          });
-
-          return {
-            transactionId: savedWalletTx.transactionId,
-            availableBalance: this.toMoney(wallet.balance - (wallet.heldBalance || 0)),
-            currency: wallet.currency || 'LKR',
-          };
-        });
-      } catch (error) {
-        if (error instanceof BadRequestException || error instanceof NotFoundException) {
-          throw error;
+          );
+        } catch (error) {
+          if (
+            error instanceof BadRequestException ||
+            error instanceof NotFoundException
+          ) {
+            throw error;
+          }
+          this.logger.error(
+            "Wallet payment transaction failed",
+            error as Error,
+          );
+          throw new BadRequestException(
+            "Unable to process wallet payment at the moment.",
+          );
         }
-        this.logger.error('Wallet payment transaction failed', error as Error);
-        throw new BadRequestException('Unable to process wallet payment at the moment.');
-      }
 
-      // Notification delivery should never fail a successful payment.
-      try {
-        await this.notificationsService.sendPaymentSuccess(userId, amount, savedPayment.id);
-      } catch (notificationError) {
-        this.logger.warn(
-          `Payment success notification failed for payment ${savedPayment.id}: ${String(notificationError)}`,
-        );
-      }
+        // Notification delivery should never fail a successful payment.
+        try {
+          await this.notificationsService.sendPaymentSuccess(
+            userId,
+            amount,
+            savedPayment.id,
+          );
+        } catch (notificationError) {
+          this.logger.warn(
+            `Payment success notification failed for payment ${savedPayment.id}: ${String(notificationError)}`,
+          );
+        }
+
+        await this.notifyOwnerBookingPaymentReceived(payment.bookingId);
 
         return {
           id: savedPayment.id,
-          status: 'succeeded',
+          status: "succeeded",
           amount: savedPayment.amount,
-          paymentMethod: 'wallet',
+          paymentMethod: "wallet",
           transactionId: walletResult.transactionId,
           wallet: {
             availableBalance: walletResult.availableBalance,
@@ -298,7 +353,7 @@ export class PaymentsService {
 
       try {
         const orderId = savedPayment.id;
-        const currency = 'LKR';
+        const currency = "LKR";
         const amountStr = Number(amount).toFixed(2);
 
         const hash = this.generatePayHereHash(
@@ -317,13 +372,15 @@ export class PaymentsService {
           items: `EV Charger Booking - ${bookingId.substring(0, 8)}`,
           currency: currency,
           amount: amountStr,
-          first_name: booking.user?.name?.split(' ')[0] || 'Customer',
-          last_name: booking.user?.name?.split(' ').slice(1).join(' ') || '',
-          email: 'customer@evrs.lk', // Default email for PayHere
-          phone: this.normalizeSriLankanPhone(booking.user?.phoneNumber || '') || '0771234567',
-          address: booking.charger?.address || 'Colombo',
-          city: 'Colombo',
-          country: 'Sri Lanka',
+          first_name: booking.user?.name?.split(" ")[0] || "Customer",
+          last_name: booking.user?.name?.split(" ").slice(1).join(" ") || "",
+          email: "customer@evrs.lk", // Default email for PayHere
+          phone:
+            this.normalizeSriLankanPhone(booking.user?.phoneNumber || "") ||
+            "0771234567",
+          address: booking.charger?.address || "Colombo",
+          city: "Colombo",
+          country: "Sri Lanka",
           hash: hash,
           custom_1: bookingId,
           custom_2: userId,
@@ -337,17 +394,26 @@ export class PaymentsService {
           checkoutUrl: `${this.payhereBaseUrl}/pay/checkout`,
         };
       } catch (error) {
-        await this.paymentRepository.update(savedPayment.id, { status: 'failed' });
-        throw new BadRequestException(`Payment creation failed: ${error.message}`);
+        await this.paymentRepository.update(savedPayment.id, {
+          status: "failed",
+        });
+        throw new BadRequestException(
+          `Payment creation failed: ${error.message}`,
+        );
       }
     } catch (error) {
-      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+      if (
+        error instanceof BadRequestException ||
+        error instanceof NotFoundException
+      ) {
         throw error;
       }
       this.logger.error(
         `Unexpected payment intent error for booking ${bookingId}: ${String(error)}`,
       );
-      throw new BadRequestException('Unable to process payment at the moment. Please try again.');
+      throw new BadRequestException(
+        "Unable to process payment at the moment. Please try again.",
+      );
     }
   }
 
@@ -363,24 +429,27 @@ export class PaymentsService {
         payment_id,
       } = payload;
 
-      const merchantSecretHash = createHash('md5')
+      const merchantSecretHash = createHash("md5")
         .update(this.payhereMerchantSecret)
-        .digest('hex')
+        .digest("hex")
         .toUpperCase();
 
-      const localHash = createHash('md5')
+      const localHash = createHash("md5")
         .update(
           `${merchant_id}${order_id}${payhere_amount}${String(payhere_currency).toUpperCase()}${status_code}${merchantSecretHash}`,
         )
-        .digest('hex')
+        .digest("hex")
         .toUpperCase();
 
       const incoming = Buffer.from(String(md5sig).toUpperCase());
       const expected = Buffer.from(localHash);
 
-      if (incoming.length !== expected.length || !timingSafeEqual(incoming, expected)) {
-        console.error('PayHere hash verification failed');
-        throw new BadRequestException('Invalid webhook signature');
+      if (
+        incoming.length !== expected.length ||
+        !timingSafeEqual(incoming, expected)
+      ) {
+        console.error("PayHere hash verification failed");
+        throw new BadRequestException("Invalid webhook signature");
       }
 
       const payment = await this.paymentRepository.findOne({
@@ -388,7 +457,7 @@ export class PaymentsService {
       });
 
       if (!payment) {
-        throw new NotFoundException('Payment not found');
+        throw new NotFoundException("Payment not found");
       }
 
       switch (parseInt(status_code)) {
@@ -397,7 +466,7 @@ export class PaymentsService {
           break;
         case 0:
           await this.paymentRepository.update(payment.id, {
-            status: 'processing',
+            status: "processing",
             txnId: payment_id,
           });
           break;
@@ -412,14 +481,24 @@ export class PaymentsService {
 
       return { received: true };
     } catch (error) {
-      console.error('PayHere webhook error:', error);
+      console.error("PayHere webhook error:", error);
       throw error;
     }
   }
 
-  private async handlePaymentSuccess(payment: PaymentEntity, transactionId: string): Promise<void> {
+  private async handlePaymentSuccess(
+    payment: PaymentEntity,
+    transactionId: string,
+  ): Promise<void> {
+    if (payment.status === "succeeded") {
+      this.logger.log(
+        `Payment ${payment.id} already marked as succeeded. Skipping duplicate success handling.`,
+      );
+      return;
+    }
+
     await this.paymentRepository.update(payment.id, {
-      status: 'succeeded',
+      status: "succeeded",
       txnId: transactionId,
     });
 
@@ -427,9 +506,9 @@ export class PaymentsService {
       where: { id: payment.bookingId },
     });
 
-    if (booking && booking.status === 'pending') {
+    if (booking && booking.status === "pending") {
       await this.bookingRepository.update(booking.id, {
-        status: 'confirmed',
+        status: "confirmed",
       });
     }
 
@@ -440,14 +519,21 @@ export class PaymentsService {
         payment.amount,
         payment.id,
       );
+
+      await this.notifyOwnerBookingPaymentReceived(payment.bookingId);
     }
 
-    console.log(`Payment ${payment.id} succeeded. Booking ${payment.bookingId} confirmed.`);
+    console.log(
+      `Payment ${payment.id} succeeded. Booking ${payment.bookingId} confirmed.`,
+    );
   }
 
-  private async handlePaymentFailure(payment: PaymentEntity, statusCode: string): Promise<void> {
+  private async handlePaymentFailure(
+    payment: PaymentEntity,
+    statusCode: string,
+  ): Promise<void> {
     await this.paymentRepository.update(payment.id, {
-      status: 'failed',
+      status: "failed",
       metadata: JSON.stringify({ payhereStatusCode: statusCode }),
     });
 
@@ -468,14 +554,39 @@ export class PaymentsService {
     console.log(`Payment ${payment.id} failed with status code: ${statusCode}`);
   }
 
+  private async notifyOwnerBookingPaymentReceived(
+    bookingId: string,
+  ): Promise<void> {
+    try {
+      const booking = await this.bookingRepository.findOne({
+        where: { id: bookingId },
+        relations: ["charger", "charger.owner"],
+      });
+
+      const ownerPhone = booking?.charger?.owner?.phoneNumber;
+      if (!booking || !ownerPhone) {
+        return;
+      }
+
+      await this.smsService.sendBookingPaymentReceivedSMS(ownerPhone, {
+        ownerName: booking.charger.owner?.name,
+        chargerName: booking.charger.name || "your charger",
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Owner payment SMS notification failed for booking ${bookingId}: ${String(error)}`,
+      );
+    }
+  }
+
   async confirmPayment(paymentId: string): Promise<PaymentEntity> {
     const payment = await this.paymentRepository.findOne({
       where: { id: paymentId },
-      relations: ['booking'],
+      relations: ["booking"],
     });
 
     if (!payment) {
-      throw new NotFoundException('Payment not found');
+      throw new NotFoundException("Payment not found");
     }
 
     return payment;
@@ -483,19 +594,19 @@ export class PaymentsService {
 
   async findAll(): Promise<PaymentEntity[]> {
     return this.paymentRepository.find({
-      relations: ['booking'],
-      order: { createdAt: 'DESC' },
+      relations: ["booking"],
+      order: { createdAt: "DESC" },
     });
   }
 
   async findOne(id: string): Promise<PaymentEntity> {
     const payment = await this.paymentRepository.findOne({
       where: { id },
-      relations: ['booking'],
+      relations: ["booking"],
     });
 
     if (!payment) {
-      throw new NotFoundException('Payment not found');
+      throw new NotFoundException("Payment not found");
     }
 
     return payment;
@@ -504,7 +615,7 @@ export class PaymentsService {
   async findByBooking(bookingId: string): Promise<PaymentEntity[]> {
     return this.paymentRepository.find({
       where: { bookingId },
-      order: { createdAt: 'DESC' },
+      order: { createdAt: "DESC" },
     });
   }
 
@@ -514,50 +625,57 @@ export class PaymentsService {
     });
 
     if (!payment) {
-      throw new NotFoundException('Payment not found');
+      throw new NotFoundException("Payment not found");
     }
 
-    if (payment.status !== 'succeeded') {
-      throw new BadRequestException('Only succeeded payments can be refunded');
+    if (payment.status !== "succeeded") {
+      throw new BadRequestException("Only succeeded payments can be refunded");
     }
 
     await this.paymentRepository.update(paymentId, {
-      status: 'refunded',
+      status: "refunded",
       metadata: JSON.stringify({
         refundRequestedAt: new Date().toISOString(),
-        note: 'Refund needs to be processed manually via PayHere dashboard',
+        note: "Refund needs to be processed manually via PayHere dashboard",
       }),
     });
 
     return this.findOne(paymentId);
   }
 
-  async findUserTransactions(userId: string, filters?: {
-    status?: string;
-    startDate?: Date;
-    endDate?: Date;
-    limit?: number;
-    offset?: number;
-  }): Promise<{ transactions: PaymentEntity[]; total: number }> {
+  async findUserTransactions(
+    userId: string,
+    filters?: {
+      status?: string;
+      startDate?: Date;
+      endDate?: Date;
+      limit?: number;
+      offset?: number;
+    },
+  ): Promise<{ transactions: PaymentEntity[]; total: number }> {
     const query = this.paymentRepository
-      .createQueryBuilder('payment')
-      .leftJoinAndSelect('payment.booking', 'booking')
-      .leftJoinAndSelect('booking.charger', 'charger')
-      .where('booking.userId = :userId', { userId });
+      .createQueryBuilder("payment")
+      .leftJoinAndSelect("payment.booking", "booking")
+      .leftJoinAndSelect("booking.charger", "charger")
+      .where("booking.userId = :userId", { userId });
 
     if (filters?.status) {
-      query.andWhere('payment.status = :status', { status: filters.status });
+      query.andWhere("payment.status = :status", { status: filters.status });
     }
 
     if (filters?.startDate) {
-      query.andWhere('payment.createdAt >= :startDate', { startDate: filters.startDate });
+      query.andWhere("payment.createdAt >= :startDate", {
+        startDate: filters.startDate,
+      });
     }
 
     if (filters?.endDate) {
-      query.andWhere('payment.createdAt <= :endDate', { endDate: filters.endDate });
+      query.andWhere("payment.createdAt <= :endDate", {
+        endDate: filters.endDate,
+      });
     }
 
-    query.orderBy('payment.createdAt', 'DESC');
+    query.orderBy("payment.createdAt", "DESC");
 
     const total = await query.getCount();
 
@@ -579,30 +697,30 @@ export class PaymentsService {
     const merchantSecret = this.payhereMerchantSecret.trim();
 
     const invalidMerchantId =
-      !merchantId || merchantId.toUpperCase() === 'MERCHANT_ID';
+      !merchantId || merchantId.toUpperCase() === "MERCHANT_ID";
     const invalidMerchantSecret =
-      !merchantSecret || merchantSecret.toUpperCase() === 'MERCHANT_SECRET';
+      !merchantSecret || merchantSecret.toUpperCase() === "MERCHANT_SECRET";
 
     if (invalidMerchantId || invalidMerchantSecret) {
       throw new BadRequestException(
-        'PayHere sandbox is not configured. Set PAYHERE_MERCHANT_ID and PAYHERE_MERCHANT_SECRET in backend environment.',
+        "PayHere sandbox is not configured. Set PAYHERE_MERCHANT_ID and PAYHERE_MERCHANT_SECRET in backend environment.",
       );
     }
   }
 
   private normalizeSriLankanPhone(phone: string): string {
-    const digits = String(phone || '').replace(/\D/g, '');
-    if (!digits) return '';
+    const digits = String(phone || "").replace(/\D/g, "");
+    if (!digits) return "";
 
-    if (digits.startsWith('0') && digits.length === 10) {
+    if (digits.startsWith("0") && digits.length === 10) {
       return digits;
     }
 
-    if (digits.startsWith('94') && digits.length === 11) {
+    if (digits.startsWith("94") && digits.length === 11) {
       return `0${digits.substring(2)}`;
     }
 
-    if (digits.length === 9 && digits.startsWith('7')) {
+    if (digits.length === 9 && digits.startsWith("7")) {
       return `0${digits}`;
     }
 

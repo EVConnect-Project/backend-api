@@ -1,14 +1,23 @@
-import { Injectable, BadRequestException, UnauthorizedException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThan, MoreThan } from 'typeorm';
-import { JwtService } from '@nestjs/jwt';
-import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn } from 'typeorm';
-import * as crypto from 'crypto';
+import {
+  Injectable,
+  BadRequestException,
+  UnauthorizedException,
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository, LessThan, MoreThan } from "typeorm";
+import { JwtService } from "@nestjs/jwt";
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  CreateDateColumn,
+} from "typeorm";
+import * as crypto from "crypto";
 
 /**
  * OTP Verification Entity
  */
-@Entity('otp_verifications')
+@Entity("otp_verifications")
 export class OtpVerification {
   @PrimaryGeneratedColumn()
   id: number;
@@ -59,7 +68,7 @@ export class OtpService {
 
     if (recentAttempts >= 3) {
       throw new BadRequestException(
-        'Too many OTP requests. Please try again after an hour.',
+        "Too many OTP requests. Please try again after an hour.",
       );
     }
 
@@ -92,16 +101,16 @@ export class OtpService {
         isUsed: false,
       },
       order: {
-        createdAt: 'DESC',
+        createdAt: "DESC",
       },
     });
 
     if (!otpRecord) {
-      throw new UnauthorizedException('Invalid OTP');
+      throw new UnauthorizedException("Invalid OTP");
     }
 
     if (new Date() > otpRecord.expiresAt) {
-      throw new UnauthorizedException('OTP has expired');
+      throw new UnauthorizedException("OTP has expired");
     }
 
     // Mark OTP as used
@@ -110,8 +119,8 @@ export class OtpService {
 
     // Generate verification token (valid for 10 minutes)
     const verificationToken = this.jwtService.sign(
-      { phoneNumber, type: 'verification' },
-      { expiresIn: '10m' },
+      { phoneNumber, type: "verification" },
+      { expiresIn: "10m" },
     );
 
     return verificationToken;
@@ -132,12 +141,12 @@ export class OtpService {
   verifyToken(token: string): { phoneNumber: string } {
     try {
       const payload = this.jwtService.verify(token);
-      if (payload.type !== 'verification') {
-        throw new UnauthorizedException('Invalid verification token');
+      if (payload.type !== "verification") {
+        throw new UnauthorizedException("Invalid verification token");
       }
       return { phoneNumber: payload.phoneNumber };
     } catch (error) {
-      throw new UnauthorizedException('Invalid or expired verification token');
+      throw new UnauthorizedException("Invalid or expired verification token");
     }
   }
 }

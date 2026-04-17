@@ -6,18 +6,18 @@ import {
   ConnectedSocket,
   OnGatewayConnection,
   OnGatewayDisconnect,
-} from '@nestjs/websockets';
-import { Server, Socket } from 'socket.io';
-import { UseGuards } from '@nestjs/common';
-import { ChatService } from './chat.service';
-import { SendMessageDto } from './dto/send-message.dto';
-import { WsJwtGuard } from '../auth/guards/ws-jwt.guard';
+} from "@nestjs/websockets";
+import { Server, Socket } from "socket.io";
+import { UseGuards } from "@nestjs/common";
+import { ChatService } from "./chat.service";
+import { SendMessageDto } from "./dto/send-message.dto";
+import { WsJwtGuard } from "../auth/guards/ws-jwt.guard";
 
 @WebSocketGateway({
   cors: {
-    origin: '*',
+    origin: "*",
   },
-  namespace: '/chat',
+  namespace: "/chat",
 })
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
@@ -33,7 +33,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   handleDisconnect(client: Socket) {
     console.log(`Client disconnected: ${client.id}`);
-    
+
     // Remove from user sockets
     const userId = (client as any).userId;
     if (userId) {
@@ -48,7 +48,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @UseGuards(WsJwtGuard)
-  @SubscribeMessage('join')
+  @SubscribeMessage("join")
   async handleJoin(
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { userId: string },
@@ -63,11 +63,11 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.userSockets.get(userId)!.add(client.id);
 
     console.log(`User ${userId} joined with socket ${client.id}`);
-    return { success: true, message: 'Joined successfully' };
+    return { success: true, message: "Joined successfully" };
   }
 
   @UseGuards(WsJwtGuard)
-  @SubscribeMessage('sendMessage')
+  @SubscribeMessage("sendMessage")
   async handleMessage(
     @ConnectedSocket() client: Socket,
     @MessageBody() dto: SendMessageDto & { userId: string },
@@ -87,29 +87,30 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
           : conversation.userId;
 
       // Emit to sender's other devices
-      this.emitToUser(dto.userId, 'newMessage', {
+      this.emitToUser(dto.userId, "newMessage", {
         ...message,
         conversationId: dto.conversationId,
       });
 
       // Emit to recipient
-      this.emitToUser(recipientId, 'newMessage', {
+      this.emitToUser(recipientId, "newMessage", {
         ...message,
         conversationId: dto.conversationId,
       });
 
       return { success: true, message };
     } catch (error) {
-      console.error('Send message error:', error);
+      console.error("Send message error:", error);
       return { success: false, error: error.message };
     }
   }
 
   @UseGuards(WsJwtGuard)
-  @SubscribeMessage('typing')
+  @SubscribeMessage("typing")
   async handleTyping(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { conversationId: string; userId: string; isTyping: boolean },
+    @MessageBody()
+    data: { conversationId: string; userId: string; isTyping: boolean },
   ) {
     try {
       const conversation = await this.chatService.getConversation(
@@ -123,7 +124,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
           : conversation.userId;
 
       // Emit typing status to recipient
-      this.emitToUser(recipientId, 'typing', {
+      this.emitToUser(recipientId, "typing", {
         conversationId: data.conversationId,
         userId: data.userId,
         isTyping: data.isTyping,
@@ -136,7 +137,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @UseGuards(WsJwtGuard)
-  @SubscribeMessage('markRead')
+  @SubscribeMessage("markRead")
   async handleMarkRead(
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { conversationId: string; userId: string },
@@ -155,7 +156,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
           ? conversation.participantId
           : conversation.userId;
 
-      this.emitToUser(senderId, 'messagesRead', {
+      this.emitToUser(senderId, "messagesRead", {
         conversationId: data.conversationId,
         readBy: data.userId,
       });

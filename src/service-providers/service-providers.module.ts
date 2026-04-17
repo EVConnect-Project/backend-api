@@ -1,10 +1,10 @@
-import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { MechanicEntity } from '../mechanics/entities/mechanic.entity';
-import { ServiceStationEntity } from '../service-stations/entities/service-station.entity';
-import { ServiceProviderSignalEntity } from './entities/service-provider-signal.entity';
-import { ServiceProvidersController } from './service-providers.controller';
-import { ServiceProvidersService } from './service-providers.service';
+import { Module } from "@nestjs/common";
+import { TypeOrmModule } from "@nestjs/typeorm";
+import { MechanicEntity } from "../mechanics/entities/mechanic.entity";
+import { ServiceStationEntity } from "../service-stations/entities/service-station.entity";
+import { ServiceProviderSignalEntity } from "./entities/service-provider-signal.entity";
+import { ServiceProvidersController } from "./service-providers.controller";
+import { ServiceProvidersService } from "./service-providers.service";
 
 @Module({
   imports: [

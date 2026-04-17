@@ -3,14 +3,17 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
-} from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { BreakdownRequest, BreakdownStatus } from './entities/breakdown-request.entity';
-import { UserEntity } from '../users/entities/user.entity';
-import { CreateBreakdownRequestDto } from './dto/create-breakdown-request.dto';
-import { UpdateBreakdownStatusDto } from './dto/update-breakdown-status.dto';
-import { NotificationsService } from '../notifications/notifications.service';
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import {
+  BreakdownRequest,
+  BreakdownStatus,
+} from "./entities/breakdown-request.entity";
+import { UserEntity } from "../users/entities/user.entity";
+import { CreateBreakdownRequestDto } from "./dto/create-breakdown-request.dto";
+import { UpdateBreakdownStatusDto } from "./dto/update-breakdown-status.dto";
+import { NotificationsService } from "../notifications/notifications.service";
 
 @Injectable()
 export class BreakdownService {
@@ -25,21 +28,19 @@ export class BreakdownService {
   /**
    * Create a breakdown assistance request
    */
-  async createRequest(
-    createDto: CreateBreakdownRequestDto,
-    userId: string,
-  ) {
+  async createRequest(createDto: CreateBreakdownRequestDto, userId: string) {
     const request = this.breakdownRequestRepository.create({
       ...createDto,
       userId,
-      status: 'pending',
+      status: "pending",
     });
 
     const saved = await this.breakdownRequestRepository.save(request);
 
     return {
       ...saved,
-      message: 'Breakdown request created successfully. Looking for available mechanics...',
+      message:
+        "Breakdown request created successfully. Looking for available mechanics...",
     };
   }
 
@@ -49,8 +50,8 @@ export class BreakdownService {
   async getMyRequests(userId: string) {
     const requests = await this.breakdownRequestRepository.find({
       where: { userId },
-      relations: ['user'],
-      order: { createdAt: 'DESC' },
+      relations: ["user"],
+      order: { createdAt: "DESC" },
     });
 
     return requests;
@@ -62,15 +63,15 @@ export class BreakdownService {
   async getRequestById(id: string, userId: string) {
     const request = await this.breakdownRequestRepository.findOne({
       where: { id },
-      relations: ['user'],
+      relations: ["user"],
     });
 
     if (!request) {
-      throw new NotFoundException('Request not found');
+      throw new NotFoundException("Request not found");
     }
 
     if (request.userId !== userId) {
-      throw new ForbiddenException('You can only view your own requests');
+      throw new ForbiddenException("You can only view your own requests");
     }
 
     return request;
@@ -82,18 +83,18 @@ export class BreakdownService {
   async getAvailableRequests(mechanicId?: string) {
     // Get pending and assigned requests
     const where: any = {};
-    
+
     if (mechanicId) {
       // Mechanic can see their assigned requests and pending ones
-      where.status = 'pending';
+      where.status = "pending";
     } else {
-      where.status = 'pending';
+      where.status = "pending";
     }
 
     const requests = await this.breakdownRequestRepository.find({
       where,
-      relations: ['user'],
-      order: { createdAt: 'DESC' },
+      relations: ["user"],
+      order: { createdAt: "DESC" },
     });
 
     return requests;
@@ -105,8 +106,8 @@ export class BreakdownService {
   async getMechanicRequests(mechanicId: string) {
     const requests = await this.breakdownRequestRepository.find({
       where: { mechanicId },
-      relations: ['user'],
-      order: { createdAt: 'DESC' },
+      relations: ["user"],
+      order: { createdAt: "DESC" },
     });
 
     return requests;
@@ -121,11 +122,11 @@ export class BreakdownService {
     });
 
     if (!request) {
-      throw new NotFoundException('Request not found');
+      throw new NotFoundException("Request not found");
     }
 
-    if (request.status !== 'pending') {
-      throw new BadRequestException('Request is not available for assignment');
+    if (request.status !== "pending") {
+      throw new BadRequestException("Request is not available for assignment");
     }
 
     // Verify mechanic exists and has mechanic role
@@ -133,12 +134,12 @@ export class BreakdownService {
       where: { id: mechanicId },
     });
 
-    if (!mechanic || mechanic.role !== 'mechanic') {
-      throw new BadRequestException('Invalid mechanic');
+    if (!mechanic || mechanic.role !== "mechanic") {
+      throw new BadRequestException("Invalid mechanic");
     }
 
     request.mechanicId = mechanicId;
-    request.status = 'assigned';
+    request.status = "assigned";
 
     const updated = await this.breakdownRequestRepository.save(request);
 
@@ -151,7 +152,7 @@ export class BreakdownService {
 
     return {
       ...updated,
-      message: 'Mechanic assigned successfully',
+      message: "Mechanic assigned successfully",
     };
   }
 
@@ -168,19 +169,19 @@ export class BreakdownService {
     });
 
     if (!request) {
-      throw new NotFoundException('Request not found');
+      throw new NotFoundException("Request not found");
     }
 
     // Only assigned mechanic or request owner can update
     if (request.mechanicId !== userId && request.userId !== userId) {
-      throw new ForbiddenException('Not authorized to update this request');
+      throw new ForbiddenException("Not authorized to update this request");
     }
 
     Object.assign(request, updateDto);
 
-    if (updateDto.status === 'resolved') {
+    if (updateDto.status === "resolved") {
       request.completedAt = new Date();
-      
+
       // Send service completed notification
       await this.notificationsService.sendServiceCompleted(
         request.userId,
@@ -192,7 +193,7 @@ export class BreakdownService {
 
     return {
       ...updated,
-      message: 'Request updated successfully',
+      message: "Request updated successfully",
     };
   }
 
@@ -205,20 +206,20 @@ export class BreakdownService {
     });
 
     if (!request) {
-      throw new NotFoundException('Request not found');
+      throw new NotFoundException("Request not found");
     }
 
     if (request.userId !== userId) {
-      throw new ForbiddenException('You can only cancel your own requests');
+      throw new ForbiddenException("You can only cancel your own requests");
     }
 
-    if (request.status === 'resolved') {
-      throw new BadRequestException('Cannot cancel resolved request');
+    if (request.status === "resolved") {
+      throw new BadRequestException("Cannot cancel resolved request");
     }
 
-    request.status = 'cancelled';
+    request.status = "cancelled";
     await this.breakdownRequestRepository.save(request);
 
-    return { message: 'Request cancelled successfully' };
+    return { message: "Request cancelled successfully" };
   }
 }

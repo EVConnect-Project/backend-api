@@ -11,18 +11,18 @@ import {
   UseGuards,
   Request,
   Ip,
-} from '@nestjs/common';
-import { AdminService } from './admin.service';
-import { AdminChatService } from './admin-chat.service';
-import { AdminAuditService } from './admin-audit.service';
-import { SupportService } from '../support/support.service';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
+} from "@nestjs/common";
+import { AdminService } from "./admin.service";
+import { AdminChatService } from "./admin-chat.service";
+import { AdminAuditService } from "./admin-audit.service";
+import { SupportService } from "../support/support.service";
+import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
+import { RolesGuard } from "../auth/guards/roles.guard";
+import { Roles } from "../auth/decorators/roles.decorator";
 
-@Controller('admin')
+@Controller("admin")
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('admin')
+@Roles("admin")
 export class AdminController {
   constructor(
     private readonly adminService: AdminService,
@@ -32,56 +32,56 @@ export class AdminController {
   ) {}
 
   // Dashboard Stats
-  @Get('stats')
+  @Get("stats")
   async getDashboardStats() {
     try {
       return await this.adminService.getDashboardStats();
     } catch (error) {
-      console.error('Controller error in getDashboardStats:', error.message);
-      console.error('Stack trace:', error.stack);
+      console.error("Controller error in getDashboardStats:", error.message);
+      console.error("Stack trace:", error.stack);
       throw error;
     }
   }
 
   // Analytics
-  @Get('analytics')
+  @Get("analytics")
   async getAnalytics(
-    @Query('startDate') startDate: string,
-    @Query('endDate') endDate: string,
+    @Query("startDate") startDate: string,
+    @Query("endDate") endDate: string,
   ) {
     return this.adminService.getAnalytics(startDate, endDate);
   }
 
-  @Get('analytics/revenue')
+  @Get("analytics/revenue")
   async getRevenueData(
-    @Query('startDate') startDate: string,
-    @Query('endDate') endDate: string,
+    @Query("startDate") startDate: string,
+    @Query("endDate") endDate: string,
   ) {
     return this.adminService.getRevenueData(startDate, endDate);
   }
 
-  @Get('analytics/user-growth')
-  async getUserGrowth(@Query('period') period: string) {
+  @Get("analytics/user-growth")
+  async getUserGrowth(@Query("period") period: string) {
     return this.adminService.getUserGrowthData(period);
   }
 
-  @Get('analytics/bookings')
+  @Get("analytics/bookings")
   async getBookingStats() {
     return this.adminService.getBookingStats();
   }
 
-  @Get('analytics/vehicles')
+  @Get("analytics/vehicles")
   async getVehicleAnalytics() {
     return this.adminService.getVehicleAnalytics();
   }
 
   // User Management
-  @Get('users')
+  @Get("users")
   async getUsers(
-    @Query('page') page: string,
-    @Query('limit') limit: string,
-    @Query('search') search: string,
-    @Query('role') role: string,
+    @Query("page") page: string,
+    @Query("limit") limit: string,
+    @Query("search") search: string,
+    @Query("role") role: string,
   ) {
     return this.adminService.getUsers({
       page: page ? parseInt(page) : 1,
@@ -91,22 +91,22 @@ export class AdminController {
     });
   }
 
-  @Get('users/:id')
-  async getUserById(@Param('id') id: string) {
+  @Get("users/:id")
+  async getUserById(@Param("id") id: string) {
     return this.adminService.getUserById(id);
   }
 
-  @Get('users/:id/payment-accounts')
-  async getUserPaymentAccounts(@Param('id') id: string) {
+  @Get("users/:id/payment-accounts")
+  async getUserPaymentAccounts(@Param("id") id: string) {
     return this.adminService.getUserPaymentAccounts(id);
   }
 
-  @Get('payment-accounts')
+  @Get("payment-accounts")
   async getPaymentAccounts(
-    @Query('page') page: string,
-    @Query('limit') limit: string,
-    @Query('search') search: string,
-    @Query('status') status: string,
+    @Query("page") page: string,
+    @Query("limit") limit: string,
+    @Query("search") search: string,
+    @Query("status") status: string,
   ) {
     return this.adminService.getPaymentAccountVerificationQueue({
       page: page ? parseInt(page) : 1,
@@ -116,172 +116,169 @@ export class AdminController {
     });
   }
 
-  @Patch('payment-accounts/:accountId/verification')
+  @Patch("payment-accounts/:accountId/verification")
   async updatePaymentAccountVerification(
-    @Param('accountId') accountId: string,
-    @Body('status') status: string,
-    @Body('notes') notes: string,
+    @Param("accountId") accountId: string,
+    @Body("status") status: string,
+    @Body("notes") notes: string,
   ) {
-    return this.adminService.updatePaymentAccountVerification(accountId, { status, notes });
+    return this.adminService.updatePaymentAccountVerification(accountId, {
+      status,
+      notes,
+    });
   }
 
-  @Post('users/:id/ban')
-  async banUser(@Param('id') id: string) {
+  @Post("users/:id/ban")
+  async banUser(@Param("id") id: string) {
     const user = await this.adminService.banUser(id);
-    
+
     // WebSocket broadcasting removed - implement REST-based notifications if needed
-    
+
     return user;
   }
 
-  @Post('users/:id/unban')
-  async unbanUser(@Param('id') id: string) {
+  @Post("users/:id/unban")
+  async unbanUser(@Param("id") id: string) {
     const user = await this.adminService.unbanUser(id);
-    
+
     // WebSocket broadcasting removed - implement REST-based notifications if needed
-    
+
     return user;
   }
 
-  @Patch('users/:id/role')
-  async updateUserRole(
-    @Param('id') id: string,
-    @Body('role') role: string,
-  ) {
+  @Patch("users/:id/role")
+  async updateUserRole(@Param("id") id: string, @Body("role") role: string) {
     const user = await this.adminService.updateUserRole(id, role);
-    
+
     // WebSocket broadcasting removed - implement REST-based notifications if needed
-    
+
     return user;
   }
 
-  @Delete('users/:id')
-  async deleteUser(@Param('id') id: string) {
+  @Delete("users/:id")
+  async deleteUser(@Param("id") id: string) {
     await this.adminService.deleteUser(id);
-    
-    return { 
-      message: 'User permanently deleted',
-      deletedUserId: id 
+
+    return {
+      message: "User permanently deleted",
+      deletedUserId: id,
     };
   }
 
   // Charger Management
-  @Get('chargers')
+  @Get("chargers")
   async getChargers(
-    @Query('page') page: string,
-    @Query('limit') limit: string,
-    @Query('search') search: string,
-    @Query('status') status: string,
-    @Query('verified') verified: string,
-    @Query('banned') banned: string,
+    @Query("page") page: string,
+    @Query("limit") limit: string,
+    @Query("search") search: string,
+    @Query("status") status: string,
+    @Query("verified") verified: string,
+    @Query("banned") banned: string,
   ) {
     return this.adminService.getChargers({
       page: page ? parseInt(page) : 1,
       limit: limit ? parseInt(limit) : 10,
       search,
       status,
-      verified: verified ? verified === 'true' : undefined,
-      banned: banned ? banned === 'true' : undefined,
+      verified: verified ? verified === "true" : undefined,
+      banned: banned ? banned === "true" : undefined,
     });
   }
 
-  @Get('chargers/:id')
-  async getChargerById(@Param('id') id: string) {
+  @Get("chargers/:id")
+  async getChargerById(@Param("id") id: string) {
     return this.adminService.getChargerById(id);
   }
 
-  @Get('chargers/:id/analytics')
-  async getChargerAnalytics(@Param('id') id: string) {
+  @Get("chargers/:id/analytics")
+  async getChargerAnalytics(@Param("id") id: string) {
     return this.adminService.getChargerAnalytics(id);
   }
 
-  @Post('chargers/:id/approve')
-  async approveCharger(@Param('id') id: string) {
+  @Post("chargers/:id/approve")
+  async approveCharger(@Param("id") id: string) {
     const charger = await this.adminService.approveCharger(id);
-    
+
     // WebSocket broadcasting removed - implement REST-based notifications if needed
-    
+
     return charger;
   }
 
-  @Post('chargers/:id/reject')
-  async rejectCharger(
-    @Param('id') id: string,
-    @Body('reason') reason: string,
-  ) {
+  @Post("chargers/:id/reject")
+  async rejectCharger(@Param("id") id: string, @Body("reason") reason: string) {
     const charger = await this.adminService.rejectCharger(id, reason);
-    
+
     // WebSocket broadcasting removed - implement REST-based notifications if needed
-    
+
     return charger;
   }
 
-  @Patch('chargers/:id')
-  async updateCharger(@Param('id') id: string, @Body() data: any) {
+  @Patch("chargers/:id")
+  async updateCharger(@Param("id") id: string, @Body() data: any) {
     const charger = await this.adminService.updateCharger(id, data);
-    
+
     // WebSocket broadcasting removed - implement REST-based notifications if needed
-    
+
     return charger;
   }
 
-  @Delete('chargers/:id')
-  async deleteCharger(@Param('id') id: string) {
+  @Delete("chargers/:id")
+  async deleteCharger(@Param("id") id: string) {
     const charger = await this.adminService.deleteCharger(id);
-    
+
     // WebSocket broadcasting removed - implement REST-based notifications if needed
-    
+
     return charger;
   }
 
-  @Post('chargers/:id/ban')
-  async banCharger(@Param('id') id: string) {
+  @Post("chargers/:id/ban")
+  async banCharger(@Param("id") id: string) {
     return this.adminService.banCharger(id);
   }
 
-  @Post('chargers/:id/unban')
-  async unbanCharger(@Param('id') id: string) {
+  @Post("chargers/:id/unban")
+  async unbanCharger(@Param("id") id: string) {
     return this.adminService.unbanCharger(id);
   }
 
   // Charging Station Management
-  @Get('stations')
+  @Get("stations")
   async getStations(
-    @Query('page') page: string,
-    @Query('limit') limit: string,
-    @Query('search') search: string,
-    @Query('verified') verified: string,
+    @Query("page") page: string,
+    @Query("limit") limit: string,
+    @Query("search") search: string,
+    @Query("verified") verified: string,
   ) {
     return this.adminService.getStations({
       page: page ? parseInt(page) : 1,
       limit: limit ? parseInt(limit) : 10,
       search,
-      verified: verified ? verified === 'true' : undefined,
+      verified: verified ? verified === "true" : undefined,
     });
   }
 
-  @Get('stations/:id')
-  async getStationById(@Param('id') id: string) {
+  @Get("stations/:id")
+  async getStationById(@Param("id") id: string) {
     return this.adminService.getStationById(id);
   }
 
-  @Patch('stations/:id')
-  async updateStation(@Param('id') id: string, @Body() data: any) {
+  @Patch("stations/:id")
+  async updateStation(@Param("id") id: string, @Body() data: any) {
     return this.adminService.updateStation(id, data);
   }
 
-  @Delete('stations/:id')
-  async deleteStation(@Param('id') id: string) {
+  @Delete("stations/:id")
+  async deleteStation(@Param("id") id: string) {
     return this.adminService.deleteStation(id);
   }
 
   // Service Station Application Management
-  @Get('service-station-applications')
+  @Get("service-station-applications")
   async getServiceStationApplications(
-    @Query('page') page: string,
-    @Query('limit') limit: string,
-    @Query('status') status: string,
-    @Query('search') search: string,
+    @Query("page") page: string,
+    @Query("limit") limit: string,
+    @Query("status") status: string,
+    @Query("search") search: string,
   ) {
     return this.adminService.getServiceStationApplications({
       page: page ? parseInt(page) : 1,
@@ -291,15 +288,15 @@ export class AdminController {
     });
   }
 
-  @Get('service-station-applications/:id')
-  async getServiceStationApplicationById(@Param('id') id: string) {
+  @Get("service-station-applications/:id")
+  async getServiceStationApplicationById(@Param("id") id: string) {
     return this.adminService.getServiceStationApplicationById(id);
   }
 
-  @Post('service-station-applications/:id/approve')
+  @Post("service-station-applications/:id/approve")
   async approveServiceStationApplication(
-    @Param('id') id: string,
-    @Body('reviewNotes') reviewNotes: string,
+    @Param("id") id: string,
+    @Body("reviewNotes") reviewNotes: string,
     @Request() req,
   ) {
     return this.adminService.approveServiceStationApplication(
@@ -309,10 +306,10 @@ export class AdminController {
     );
   }
 
-  @Post('service-station-applications/:id/reject')
+  @Post("service-station-applications/:id/reject")
   async rejectServiceStationApplication(
-    @Param('id') id: string,
-    @Body('reviewNotes') reviewNotes: string,
+    @Param("id") id: string,
+    @Body("reviewNotes") reviewNotes: string,
     @Request() req,
   ) {
     return this.adminService.rejectServiceStationApplication(
@@ -323,7 +320,7 @@ export class AdminController {
   }
 
   // OCPP Live Controls
-  @Get('ocpp/live')
+  @Get("ocpp/live")
   async ocppLive() {
     const [connected, sessions] = await Promise.all([
       this.adminService.ocppGetConnectedChargers(),
@@ -332,49 +329,49 @@ export class AdminController {
     return { connected, sessions };
   }
 
-  @Get('ocpp/sessions')
-  async ocppGetSessions(@Query('status') status?: string) {
+  @Get("ocpp/sessions")
+  async ocppGetSessions(@Query("status") status?: string) {
     return this.adminService.ocppGetActiveSessions(status);
   }
 
-  @Post('chargers/:id/ocpp/reset')
+  @Post("chargers/:id/ocpp/reset")
   async ocppReset(
-    @Param('id') id: string,
-    @Body('type') type: 'Soft' | 'Hard' = 'Soft',
+    @Param("id") id: string,
+    @Body("type") type: "Soft" | "Hard" = "Soft",
   ) {
     return this.adminService.ocppResetCharger(id, type);
   }
 
-  @Post('chargers/:id/ocpp/unlock')
+  @Post("chargers/:id/ocpp/unlock")
   async ocppUnlock(
-    @Param('id') id: string,
-    @Body('connectorId') connectorId = 1,
+    @Param("id") id: string,
+    @Body("connectorId") connectorId = 1,
   ) {
     return this.adminService.ocppUnlockConnector(id, connectorId);
   }
 
-  @Post('chargers/:id/ocpp/availability')
+  @Post("chargers/:id/ocpp/availability")
   async ocppAvailability(
-    @Param('id') id: string,
-    @Body('connectorId') connectorId: number,
-    @Body('type') type: 'Operative' | 'Inoperative',
+    @Param("id") id: string,
+    @Body("connectorId") connectorId: number,
+    @Body("type") type: "Operative" | "Inoperative",
   ) {
     return this.adminService.ocppSetAvailability(id, connectorId, type);
   }
 
-  @Post('sessions/:sessionId/ocpp/stop')
-  async ocppForceStop(@Param('sessionId') sessionId: string) {
+  @Post("sessions/:sessionId/ocpp/stop")
+  async ocppForceStop(@Param("sessionId") sessionId: string) {
     return this.adminService.ocppForceStopSession(sessionId);
   }
 
   // Booking Management
-  @Get('bookings')
+  @Get("bookings")
   async getBookings(
-    @Query('page') page: string,
-    @Query('limit') limit: string,
-    @Query('status') status: string,
-    @Query('startDate') startDate: string,
-    @Query('endDate') endDate: string,
+    @Query("page") page: string,
+    @Query("limit") limit: string,
+    @Query("status") status: string,
+    @Query("startDate") startDate: string,
+    @Query("endDate") endDate: string,
   ) {
     return this.adminService.getBookings({
       page: page ? parseInt(page) : 1,
@@ -385,155 +382,154 @@ export class AdminController {
     });
   }
 
-  @Get('bookings/:id')
-  async getBookingById(@Param('id') id: string) {
+  @Get("bookings/:id")
+  async getBookingById(@Param("id") id: string) {
     return this.adminService.getBookingById(id);
   }
 
-  @Get('bookings/:id/timeline')
-  async getBookingTimeline(@Param('id') id: string) {
+  @Get("bookings/:id/timeline")
+  async getBookingTimeline(@Param("id") id: string) {
     return this.adminService.getBookingTimeline(id);
   }
 
-  @Post('bookings/:id/approve')
-  async approveBooking(@Param('id') id: string) {
+  @Post("bookings/:id/approve")
+  async approveBooking(@Param("id") id: string) {
     const booking = await this.adminService.approveBooking(id);
-    
+
     // WebSocket broadcasting removed - implement REST-based notifications if needed
-    
+
     return booking;
   }
 
-  @Post('bookings/:id/cancel')
+  @Post("bookings/:id/cancel")
   async cancelBooking(
-    @Param('id') id: string,
-    @Body('reason') reason?: string,
+    @Param("id") id: string,
+    @Body("reason") reason?: string,
   ) {
     const booking = await this.adminService.cancelBooking(id, reason);
-    
+
     // WebSocket broadcasting removed - implement REST-based notifications if needed
-    
+
     return booking;
   }
 
-      // Payout Management
-      @Get('payouts/summary')
-      async getPayoutSummary() {
-        return this.adminService.getPayoutSummary();
-      }
+  // Payout Management
+  @Get("payouts/summary")
+  async getPayoutSummary() {
+    return this.adminService.getPayoutSummary();
+  }
 
-      @Get('payouts')
-      async getPayouts(
-        @Query('page') page: string,
-        @Query('limit') limit: string,
-        @Query('status') status: string,
-        @Query('ownerId') ownerId: string,
-        @Query('search') search: string,
-        @Query('startDate') startDate?: string,
-        @Query('endDate') endDate?: string,
-        @Query('minAmount') minAmount?: string,
-        @Query('maxAmount') maxAmount?: string,
-      ) {
-        const parsedMinAmount = minAmount !== undefined ? parseFloat(minAmount) : undefined;
-        const parsedMaxAmount = maxAmount !== undefined ? parseFloat(maxAmount) : undefined;
+  @Get("payouts")
+  async getPayouts(
+    @Query("page") page: string,
+    @Query("limit") limit: string,
+    @Query("status") status: string,
+    @Query("ownerId") ownerId: string,
+    @Query("search") search: string,
+    @Query("startDate") startDate?: string,
+    @Query("endDate") endDate?: string,
+    @Query("minAmount") minAmount?: string,
+    @Query("maxAmount") maxAmount?: string,
+  ) {
+    const parsedMinAmount =
+      minAmount !== undefined ? parseFloat(minAmount) : undefined;
+    const parsedMaxAmount =
+      maxAmount !== undefined ? parseFloat(maxAmount) : undefined;
 
-        return this.adminService.getOwnerPayouts({
-          page: page ? parseInt(page) : 1,
-          limit: limit ? parseInt(limit) : 10,
-          status,
-          ownerId,
-          search,
-          startDate,
-          endDate,
-          minAmount: Number.isNaN(parsedMinAmount) ? undefined : parsedMinAmount,
-          maxAmount: Number.isNaN(parsedMaxAmount) ? undefined : parsedMaxAmount,
-        });
-      }
+    return this.adminService.getOwnerPayouts({
+      page: page ? parseInt(page) : 1,
+      limit: limit ? parseInt(limit) : 10,
+      status,
+      ownerId,
+      search,
+      startDate,
+      endDate,
+      minAmount: Number.isNaN(parsedMinAmount) ? undefined : parsedMinAmount,
+      maxAmount: Number.isNaN(parsedMaxAmount) ? undefined : parsedMaxAmount,
+    });
+  }
 
-      @Get('payouts/pending-bookings')
-      async getPendingBookingPayouts(
-        @Query('page') page: string,
-        @Query('limit') limit: string,
-        @Query('ownerId') ownerId?: string,
-        @Query('search') search?: string,
-      ) {
-        return this.adminService.getPendingBookingPayoutQueue({
-          page: page ? parseInt(page) : 1,
-          limit: limit ? parseInt(limit) : 50,
-          ownerId,
-          search,
-        });
-      }
+  @Get("payouts/pending-bookings")
+  async getPendingBookingPayouts(
+    @Query("page") page: string,
+    @Query("limit") limit: string,
+    @Query("ownerId") ownerId?: string,
+    @Query("search") search?: string,
+  ) {
+    return this.adminService.getPendingBookingPayoutQueue({
+      page: page ? parseInt(page) : 1,
+      limit: limit ? parseInt(limit) : 50,
+      ownerId,
+      search,
+    });
+  }
 
-      @Get('payouts/:id')
-      async getPayoutById(@Param('id') id: string) {
-        return this.adminService.getOwnerPayoutById(id);
-      }
+  @Get("payouts/:id")
+  async getPayoutById(@Param("id") id: string) {
+    return this.adminService.getOwnerPayoutById(id);
+  }
 
-      @Post('payouts/prepare')
-      async preparePayouts(
-        @Request() req,
-        @Body('startDate') startDate?: string,
-        @Body('endDate') endDate?: string,
-        @Body('ownerId') ownerId?: string,
-        @Body('dryRun') dryRun?: boolean,
-        @Body('notes') notes?: string,
-      ) {
-        return this.adminService.prepareOwnerPayouts(req.user.userId, {
-          startDate,
-          endDate,
-          ownerId,
-          dryRun,
-          notes,
-        });
-      }
+  @Post("payouts/prepare")
+  async preparePayouts(
+    @Request() req,
+    @Body("startDate") startDate?: string,
+    @Body("endDate") endDate?: string,
+    @Body("ownerId") ownerId?: string,
+    @Body("dryRun") dryRun?: boolean,
+    @Body("notes") notes?: string,
+  ) {
+    return this.adminService.prepareOwnerPayouts(req.user.userId, {
+      startDate,
+      endDate,
+      ownerId,
+      dryRun,
+      notes,
+    });
+  }
 
-      @Post('payouts/:id/approve')
-      async approvePayout(@Request() req, @Param('id') id: string) {
-        return this.adminService.approveOwnerPayout(id, req.user.userId);
-      }
+  @Post("payouts/:id/approve")
+  async approvePayout(@Request() req, @Param("id") id: string) {
+    return this.adminService.approveOwnerPayout(id, req.user.userId);
+  }
 
-      @Post('payouts/:id/processing')
-      async markPayoutProcessing(@Param('id') id: string) {
-        return this.adminService.markOwnerPayoutProcessing(id);
-      }
+  @Post("payouts/:id/processing")
+  async markPayoutProcessing(@Param("id") id: string) {
+    return this.adminService.markOwnerPayoutProcessing(id);
+  }
 
-      @Post('payouts/:id/paid')
-      async markPayoutPaid(
-        @Request() req,
-        @Param('id') id: string,
-        @Body('transferReference') transferReference?: string,
-        @Body('notes') notes?: string,
-      ) {
-        return this.adminService.markOwnerPayoutPaid(id, req.user.userId, {
-          transferReference,
-          notes,
-        });
-      }
+  @Post("payouts/:id/paid")
+  async markPayoutPaid(
+    @Request() req,
+    @Param("id") id: string,
+    @Body("transferReference") transferReference?: string,
+    @Body("notes") notes?: string,
+  ) {
+    return this.adminService.markOwnerPayoutPaid(id, req.user.userId, {
+      transferReference,
+      notes,
+    });
+  }
 
-      @Post('payouts/:id/failed')
-      async markPayoutFailed(
-        @Param('id') id: string,
-        @Body('notes') notes?: string,
-      ) {
-        return this.adminService.markOwnerPayoutFailed(id, { notes });
-      }
+  @Post("payouts/:id/failed")
+  async markPayoutFailed(
+    @Param("id") id: string,
+    @Body("notes") notes?: string,
+  ) {
+    return this.adminService.markOwnerPayoutFailed(id, { notes });
+  }
 
-      @Post('payouts/:id/cancel')
-      async cancelPayout(
-        @Param('id') id: string,
-        @Body('notes') notes?: string,
-      ) {
-        return this.adminService.cancelOwnerPayout(id, { notes });
-      }
+  @Post("payouts/:id/cancel")
+  async cancelPayout(@Param("id") id: string, @Body("notes") notes?: string) {
+    return this.adminService.cancelOwnerPayout(id, { notes });
+  }
 
   // Mechanic Application Management
-  @Get('mechanic-applications')
+  @Get("mechanic-applications")
   async getMechanicApplications(
-    @Query('page') page: string,
-    @Query('limit') limit: string,
-    @Query('status') status: string,
-    @Query('search') search: string,
+    @Query("page") page: string,
+    @Query("limit") limit: string,
+    @Query("status") status: string,
+    @Query("search") search: string,
   ) {
     return this.adminService.getMechanicApplications({
       page: page ? parseInt(page) : 1,
@@ -543,15 +539,15 @@ export class AdminController {
     });
   }
 
-  @Get('mechanic-applications/:id')
-  async getMechanicApplicationById(@Param('id') id: string) {
+  @Get("mechanic-applications/:id")
+  async getMechanicApplicationById(@Param("id") id: string) {
     return this.adminService.getMechanicApplicationById(id);
   }
 
-  @Post('mechanic-applications/:id/approve')
+  @Post("mechanic-applications/:id/approve")
   async approveMechanicApplication(
-    @Param('id') id: string,
-    @Body('reviewNotes') reviewNotes: string,
+    @Param("id") id: string,
+    @Body("reviewNotes") reviewNotes: string,
     @Request() req,
   ) {
     const application = await this.adminService.approveMechanicApplication(
@@ -559,16 +555,16 @@ export class AdminController {
       reviewNotes,
       req.user.userId,
     );
-    
+
     // WebSocket broadcasting removed - implement REST-based notifications if needed
-    
+
     return application;
   }
 
-  @Post('mechanic-applications/:id/reject')
+  @Post("mechanic-applications/:id/reject")
   async rejectMechanicApplication(
-    @Param('id') id: string,
-    @Body('reviewNotes') reviewNotes: string,
+    @Param("id") id: string,
+    @Body("reviewNotes") reviewNotes: string,
     @Request() req,
   ) {
     const application = await this.adminService.rejectMechanicApplication(
@@ -576,58 +572,58 @@ export class AdminController {
       reviewNotes,
       req.user.userId,
     );
-    
+
     // WebSocket broadcasting removed - implement REST-based notifications if needed
-    
+
     return application;
   }
 
   // Mechanics Management
-  @Get('mechanics')
+  @Get("mechanics")
   async getMechanics(
-    @Query('page') page: string,
-    @Query('limit') limit: string,
-    @Query('search') search: string,
-    @Query('available') available: string,
+    @Query("page") page: string,
+    @Query("limit") limit: string,
+    @Query("search") search: string,
+    @Query("available") available: string,
   ) {
     return this.adminService.getMechanics({
       page: page ? parseInt(page) : 1,
       limit: limit ? parseInt(limit) : 10,
       search,
-      available: available ? available === 'true' : undefined,
+      available: available ? available === "true" : undefined,
     });
   }
 
-  @Get('mechanics/:id')
-  async getMechanicById(@Param('id') id: string) {
+  @Get("mechanics/:id")
+  async getMechanicById(@Param("id") id: string) {
     return this.adminService.getMechanicById(id);
   }
 
-  @Patch('mechanics/:id')
-  async updateMechanic(@Param('id') id: string, @Body() data: any) {
+  @Patch("mechanics/:id")
+  async updateMechanic(@Param("id") id: string, @Body() data: any) {
     const mechanic = await this.adminService.updateMechanic(id, data);
-    
+
     // WebSocket broadcasting removed - implement REST-based notifications if needed
-    
+
     return mechanic;
   }
 
-  @Delete('mechanics/:id')
-  async deleteMechanic(@Param('id') id: string) {
+  @Delete("mechanics/:id")
+  async deleteMechanic(@Param("id") id: string) {
     const mechanic = await this.adminService.deleteMechanic(id);
-    
+
     // WebSocket broadcasting removed - implement REST-based notifications if needed
-    
+
     return mechanic;
   }
 
-  @Post('mechanics/:id/ban')
-  async banMechanic(@Param('id') id: string) {
+  @Post("mechanics/:id/ban")
+  async banMechanic(@Param("id") id: string) {
     return this.adminService.banMechanic(id);
   }
 
-  @Post('mechanics/:id/unban')
-  async unbanMechanic(@Param('id') id: string) {
+  @Post("mechanics/:id/unban")
+  async unbanMechanic(@Param("id") id: string) {
     return this.adminService.unbanMechanic(id);
   }
 
@@ -636,11 +632,11 @@ export class AdminController {
   /**
    * Initiate a chat with any user (owner/seller/mechanic/driver)
    */
-  @Post('chat/initiate')
+  @Post("chat/initiate")
   async initiateChat(
     @Request() req,
-    @Body('targetUserId') targetUserId: string,
-    @Body('initialMessage') initialMessage?: string,
+    @Body("targetUserId") targetUserId: string,
+    @Body("initialMessage") initialMessage?: string,
     @Ip() ip?: string,
   ) {
     const result = await this.adminChatService.initiateAdminChat(
@@ -651,8 +647,8 @@ export class AdminController {
 
     await this.adminAuditService.logAction(
       req.user.userId,
-      'initiate_chat',
-      'user',
+      "initiate_chat",
+      "user",
       targetUserId,
       { hasInitialMessage: !!initialMessage },
       undefined,
@@ -665,11 +661,11 @@ export class AdminController {
   /**
    * Get all admin conversations
    */
-  @Get('chat/conversations')
+  @Get("chat/conversations")
   async getConversations(
     @Request() req,
-    @Query('page') page: string,
-    @Query('limit') limit: string,
+    @Query("page") page: string,
+    @Query("limit") limit: string,
   ) {
     return this.adminChatService.getAdminConversations(
       req.user.userId,
@@ -681,11 +677,11 @@ export class AdminController {
   /**
    * Get messages for a conversation
    */
-  @Get('chat/conversations/:id/messages')
+  @Get("chat/conversations/:id/messages")
   async getMessages(
-    @Param('id') conversationId: string,
-    @Query('page') page: string,
-    @Query('limit') limit: string,
+    @Param("id") conversationId: string,
+    @Query("page") page: string,
+    @Query("limit") limit: string,
   ) {
     return this.adminChatService.getConversationMessages(
       conversationId,
@@ -697,13 +693,13 @@ export class AdminController {
   /**
    * Send a message in admin chat
    */
-  @Post('chat/conversations/:id/send')
+  @Post("chat/conversations/:id/send")
   async sendMessage(
     @Request() req,
-    @Param('id') conversationId: string,
-    @Body('content') content: string,
-    @Body('type') type?: string,
-    @Body('priority') priority?: 'normal' | 'high' | 'urgent',
+    @Param("id") conversationId: string,
+    @Body("content") content: string,
+    @Body("type") type?: string,
+    @Body("priority") priority?: "normal" | "high" | "urgent",
   ) {
     return this.adminChatService.sendAdminMessage(
       conversationId,
@@ -717,12 +713,12 @@ export class AdminController {
   /**
    * Broadcast message to multiple users
    */
-  @Post('chat/broadcast')
+  @Post("chat/broadcast")
   async broadcastMessage(
     @Request() req,
-    @Body('userIds') userIds: string[],
-    @Body('message') message: string,
-    @Body('priority') priority?: 'normal' | 'high' | 'urgent',
+    @Body("userIds") userIds: string[],
+    @Body("message") message: string,
+    @Body("priority") priority?: "normal" | "high" | "urgent",
     @Ip() ip?: string,
   ) {
     const messages = await this.adminChatService.broadcastMessage(
@@ -734,9 +730,9 @@ export class AdminController {
 
     await this.adminAuditService.logAction(
       req.user.userId,
-      'broadcast_message',
-      'multiple_users',
-      'broadcast',
+      "broadcast_message",
+      "multiple_users",
+      "broadcast",
       { recipientCount: userIds.length, priority },
       undefined,
       ip,
@@ -751,10 +747,10 @@ export class AdminController {
   /**
    * Set conversation priority
    */
-  @Put('chat/conversations/:id/priority')
+  @Put("chat/conversations/:id/priority")
   async setPriority(
-    @Param('id') conversationId: string,
-    @Body('priority') priority: 'normal' | 'high' | 'urgent',
+    @Param("id") conversationId: string,
+    @Body("priority") priority: "normal" | "high" | "urgent",
   ) {
     await this.adminChatService.setPriority(conversationId, priority);
     return { success: true };
@@ -763,8 +759,8 @@ export class AdminController {
   /**
    * Get user context for chat
    */
-  @Get('chat/users/:id/context')
-  async getUserContext(@Param('id') userId: string) {
+  @Get("chat/users/:id/context")
+  async getUserContext(@Param("id") userId: string) {
     return this.adminChatService.getUserContext(userId);
   }
 
@@ -773,20 +769,20 @@ export class AdminController {
   /**
    * Suspend/Resume charger (admin override)
    */
-  @Put('chargers/:id/suspend')
+  @Put("chargers/:id/suspend")
   async suspendCharger(
     @Request() req,
-    @Param('id') id: string,
-    @Body('suspend') suspend: boolean,
-    @Body('reason') reason?: string,
+    @Param("id") id: string,
+    @Body("suspend") suspend: boolean,
+    @Body("reason") reason?: string,
     @Ip() ip?: string,
   ) {
     const charger = await this.adminService.suspendCharger(id, suspend, reason);
 
     await this.adminAuditService.logAction(
       req.user.userId,
-      suspend ? 'suspend_charger' : 'resume_charger',
-      'charger',
+      suspend ? "suspend_charger" : "resume_charger",
+      "charger",
       id,
       { reason },
       reason,
@@ -799,20 +795,24 @@ export class AdminController {
   /**
    * Override charger status
    */
-  @Put('chargers/:id/status')
+  @Put("chargers/:id/status")
   async setChargerStatus(
     @Request() req,
-    @Param('id') id: string,
-    @Body('status') status: 'available' | 'in-use' | 'offline',
-    @Body('reason') reason?: string,
+    @Param("id") id: string,
+    @Body("status") status: "available" | "in-use" | "offline",
+    @Body("reason") reason?: string,
     @Ip() ip?: string,
   ) {
-    const charger = await this.adminService.setChargerStatus(id, status, reason);
+    const charger = await this.adminService.setChargerStatus(
+      id,
+      status,
+      reason,
+    );
 
     await this.adminAuditService.logAction(
       req.user.userId,
-      'change_charger_status',
-      'charger',
+      "change_charger_status",
+      "charger",
       id,
       { newStatus: status, reason },
       reason,
@@ -825,20 +825,24 @@ export class AdminController {
   /**
    * Set price override for a charger
    */
-  @Put('chargers/:id/price-override')
+  @Put("chargers/:id/price-override")
   async setPriceOverride(
     @Request() req,
-    @Param('id') id: string,
-    @Body('pricePerKwh') pricePerKwh: number,
-    @Body('reason') reason?: string,
+    @Param("id") id: string,
+    @Body("pricePerKwh") pricePerKwh: number,
+    @Body("reason") reason?: string,
     @Ip() ip?: string,
   ) {
-    const charger = await this.adminService.setChargerPriceOverride(id, pricePerKwh, reason);
+    const charger = await this.adminService.setChargerPriceOverride(
+      id,
+      pricePerKwh,
+      reason,
+    );
 
     await this.adminAuditService.logAction(
       req.user.userId,
-      'override_charger_price',
-      'charger',
+      "override_charger_price",
+      "charger",
       id,
       { newPrice: pricePerKwh, reason },
       reason,
@@ -851,22 +855,24 @@ export class AdminController {
   /**
    * Get charger owner details for admin
    */
-  @Get('chargers/:id/owner')
-  async getChargerOwner(@Param('id') id: string) {
+  @Get("chargers/:id/owner")
+  async getChargerOwner(@Param("id") id: string) {
     return this.adminService.getChargerOwnerDetails(id);
   }
 
   /**
    * Contact charger owner via chat
    */
-  @Post('chargers/:id/contact-owner')
+  @Post("chargers/:id/contact-owner")
   async contactChargerOwner(
     @Request() req,
-    @Param('id') chargerId: string,
-    @Body('message') message: string,
+    @Param("id") chargerId: string,
+    @Body("message") message: string,
   ) {
     const owner = await this.adminService.getChargerOwnerDetails(chargerId);
-    return this.initiateChat(req, { body: { targetUserId: owner.id, initialMessage: message } } as any);
+    return this.initiateChat(req, {
+      body: { targetUserId: owner.id, initialMessage: message },
+    } as any);
   }
 
   // ==================== MARKETPLACE SELLER MANAGEMENT ====================
@@ -874,12 +880,12 @@ export class AdminController {
   /**
    * Get all marketplace listings with admin filters
    */
-  @Get('marketplace/listings')
+  @Get("marketplace/listings")
   async getMarketplaceListings(
-    @Query('page') page: string,
-    @Query('limit') limit: string,
-    @Query('status') status: string,
-    @Query('search') search: string,
+    @Query("page") page: string,
+    @Query("limit") limit: string,
+    @Query("status") status: string,
+    @Query("search") search: string,
   ) {
     return this.adminService.getMarketplaceListings({
       page: page ? parseInt(page) : 1,
@@ -892,19 +898,22 @@ export class AdminController {
   /**
    * Approve marketplace listing
    */
-  @Put('marketplace/listings/:id/approve')
+  @Put("marketplace/listings/:id/approve")
   async approveMarketplaceListing(
     @Request() req,
-    @Param('id') id: string,
-    @Body('adminNotes') adminNotes?: string,
+    @Param("id") id: string,
+    @Body("adminNotes") adminNotes?: string,
     @Ip() ip?: string,
   ) {
-    const listing = await this.adminService.approveMarketplaceListing(id, adminNotes);
+    const listing = await this.adminService.approveMarketplaceListing(
+      id,
+      adminNotes,
+    );
 
     await this.adminAuditService.logAction(
       req.user.userId,
-      'approve_listing',
-      'marketplace_listing',
+      "approve_listing",
+      "marketplace_listing",
       id,
       { adminNotes },
       adminNotes,
@@ -917,19 +926,22 @@ export class AdminController {
   /**
    * Reject marketplace listing
    */
-  @Put('marketplace/listings/:id/reject')
+  @Put("marketplace/listings/:id/reject")
   async rejectMarketplaceListing(
     @Request() req,
-    @Param('id') id: string,
-    @Body('reason') reason: string,
+    @Param("id") id: string,
+    @Body("reason") reason: string,
     @Ip() ip?: string,
   ) {
-    const listing = await this.adminService.rejectMarketplaceListing(id, reason);
+    const listing = await this.adminService.rejectMarketplaceListing(
+      id,
+      reason,
+    );
 
     await this.adminAuditService.logAction(
       req.user.userId,
-      'reject_listing',
-      'marketplace_listing',
+      "reject_listing",
+      "marketplace_listing",
       id,
       { reason },
       reason,
@@ -942,10 +954,10 @@ export class AdminController {
   /**
    * Edit marketplace listing (admin override)
    */
-  @Put('marketplace/listings/:id/edit')
+  @Put("marketplace/listings/:id/edit")
   async editMarketplaceListing(
     @Request() req,
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() updates: any,
     @Ip() ip?: string,
   ) {
@@ -953,11 +965,11 @@ export class AdminController {
 
     await this.adminAuditService.logAction(
       req.user.userId,
-      'edit_listing',
-      'marketplace_listing',
+      "edit_listing",
+      "marketplace_listing",
       id,
       { updates },
-      'Admin edited listing',
+      "Admin edited listing",
       ip,
     );
 
@@ -967,32 +979,38 @@ export class AdminController {
   /**
    * Contact seller via chat
    */
-  @Post('marketplace/sellers/:id/contact')
+  @Post("marketplace/sellers/:id/contact")
   async contactSeller(
     @Request() req,
-    @Param('id') sellerId: string,
-    @Body('message') message: string,
+    @Param("id") sellerId: string,
+    @Body("message") message: string,
   ) {
-    return this.initiateChat(req, { body: { targetUserId: sellerId, initialMessage: message } } as any);
+    return this.initiateChat(req, {
+      body: { targetUserId: sellerId, initialMessage: message },
+    } as any);
   }
 
   /**
    * Suspend seller account
    */
-  @Put('marketplace/sellers/:id/suspend')
+  @Put("marketplace/sellers/:id/suspend")
   async suspendSeller(
     @Request() req,
-    @Param('id') sellerId: string,
-    @Body('suspend') suspend: boolean,
-    @Body('reason') reason: string,
+    @Param("id") sellerId: string,
+    @Body("suspend") suspend: boolean,
+    @Body("reason") reason: string,
     @Ip() ip?: string,
   ) {
-    const result = await this.adminService.suspendSeller(sellerId, suspend, reason);
+    const result = await this.adminService.suspendSeller(
+      sellerId,
+      suspend,
+      reason,
+    );
 
     await this.adminAuditService.logAction(
       req.user.userId,
-      suspend ? 'suspend_seller' : 'resume_seller',
-      'user',
+      suspend ? "suspend_seller" : "resume_seller",
+      "user",
       sellerId,
       { reason },
       reason,
@@ -1005,32 +1023,32 @@ export class AdminController {
   /**
    * Ban marketplace listing
    */
-  @Post('marketplace/listings/:id/ban')
-  async banMarketplaceListing(@Param('id') id: string) {
+  @Post("marketplace/listings/:id/ban")
+  async banMarketplaceListing(@Param("id") id: string) {
     return this.adminService.banMarketplaceListing(id);
   }
 
   /**
    * Unban marketplace listing
    */
-  @Post('marketplace/listings/:id/unban')
-  async unbanMarketplaceListing(@Param('id') id: string) {
+  @Post("marketplace/listings/:id/unban")
+  async unbanMarketplaceListing(@Param("id") id: string) {
     return this.adminService.unbanMarketplaceListing(id);
   }
 
   /**
    * Ban seller (prevents new listings)
    */
-  @Post('marketplace/sellers/:id/ban')
-  async banSeller(@Param('id') sellerId: string) {
+  @Post("marketplace/sellers/:id/ban")
+  async banSeller(@Param("id") sellerId: string) {
     return this.adminService.banSeller(sellerId);
   }
 
   /**
    * Unban seller
    */
-  @Post('marketplace/sellers/:id/unban')
-  async unbanSeller(@Param('id') sellerId: string) {
+  @Post("marketplace/sellers/:id/unban")
+  async unbanSeller(@Param("id") sellerId: string) {
     return this.adminService.unbanSeller(sellerId);
   }
 
@@ -1039,20 +1057,24 @@ export class AdminController {
   /**
    * Verify mechanic credentials
    */
-  @Put('mechanics/:id/verify')
+  @Put("mechanics/:id/verify")
   async verifyMechanic(
     @Request() req,
-    @Param('id') id: string,
-    @Body('verified') verified: boolean,
-    @Body('notes') notes?: string,
+    @Param("id") id: string,
+    @Body("verified") verified: boolean,
+    @Body("notes") notes?: string,
     @Ip() ip?: string,
   ) {
-    const mechanic = await this.adminService.verifyMechanic(id, verified, notes);
+    const mechanic = await this.adminService.verifyMechanic(
+      id,
+      verified,
+      notes,
+    );
 
     await this.adminAuditService.logAction(
       req.user.userId,
-      verified ? 'verify_mechanic' : 'unverify_mechanic',
-      'mechanic',
+      verified ? "verify_mechanic" : "unverify_mechanic",
+      "mechanic",
       id,
       { notes },
       notes,
@@ -1065,20 +1087,24 @@ export class AdminController {
   /**
    * Suspend mechanic
    */
-  @Put('mechanics/:id/suspend')
+  @Put("mechanics/:id/suspend")
   async suspendMechanic(
     @Request() req,
-    @Param('id') id: string,
-    @Body('suspend') suspend: boolean,
-    @Body('reason') reason: string,
+    @Param("id") id: string,
+    @Body("suspend") suspend: boolean,
+    @Body("reason") reason: string,
     @Ip() ip?: string,
   ) {
-    const mechanic = await this.adminService.suspendMechanic(id, suspend, reason);
+    const mechanic = await this.adminService.suspendMechanic(
+      id,
+      suspend,
+      reason,
+    );
 
     await this.adminAuditService.logAction(
       req.user.userId,
-      suspend ? 'suspend_mechanic' : 'resume_mechanic',
-      'mechanic',
+      suspend ? "suspend_mechanic" : "resume_mechanic",
+      "mechanic",
       id,
       { reason },
       reason,
@@ -1091,24 +1117,26 @@ export class AdminController {
   /**
    * Contact mechanic via chat
    */
-  @Post('mechanics/:id/contact')
+  @Post("mechanics/:id/contact")
   async contactMechanic(
     @Request() req,
-    @Param('id') mechanicId: string,
-    @Body('message') message: string,
+    @Param("id") mechanicId: string,
+    @Body("message") message: string,
   ) {
     const mechanic = await this.adminService.getMechanicById(mechanicId);
-    return this.initiateChat(req, { body: { targetUserId: mechanic.userId, initialMessage: message } } as any);
+    return this.initiateChat(req, {
+      body: { targetUserId: mechanic.userId, initialMessage: message },
+    } as any);
   }
 
   /**
    * Get mechanic job history
    */
-  @Get('mechanics/:id/jobs')
+  @Get("mechanics/:id/jobs")
   async getMechanicJobs(
-    @Param('id') id: string,
-    @Query('page') page: string,
-    @Query('limit') limit: string,
+    @Param("id") id: string,
+    @Query("page") page: string,
+    @Query("limit") limit: string,
   ) {
     return this.adminService.getMechanicJobs(
       id,
@@ -1122,151 +1150,155 @@ export class AdminController {
   /**
    * Hold approved charger (temporarily disable)
    */
-  @Put('chargers/:id/hold')
+  @Put("chargers/:id/hold")
   async holdCharger(
     @Request() req,
-    @Param('id') id: string,
-    @Body('reason') reason: string,
+    @Param("id") id: string,
+    @Body("reason") reason: string,
     @Ip() ip?: string,
   ) {
     const charger = await this.adminService.holdCharger(id, reason);
 
     await this.adminAuditService.logAction(
       req.user.userId,
-      'hold_charger',
-      'charger',
+      "hold_charger",
+      "charger",
       id,
       { reason, previousStatus: charger.metadata?.previousStatus },
       reason,
       ip,
     );
 
-    return { success: true, charger, message: 'Charger held successfully' };
+    return { success: true, charger, message: "Charger held successfully" };
   }
 
   /**
    * Release held charger (restore to active)
    */
-  @Put('chargers/:id/release')
+  @Put("chargers/:id/release")
   async releaseCharger(
     @Request() req,
-    @Param('id') id: string,
-    @Body('notes') notes?: string,
+    @Param("id") id: string,
+    @Body("notes") notes?: string,
     @Ip() ip?: string,
   ) {
     const charger = await this.adminService.releaseCharger(id, notes);
 
     await this.adminAuditService.logAction(
       req.user.userId,
-      'release_charger',
-      'charger',
+      "release_charger",
+      "charger",
       id,
       { notes },
       notes,
       ip,
     );
 
-    return { success: true, charger, message: 'Charger released successfully' };
+    return { success: true, charger, message: "Charger released successfully" };
   }
 
   /**
    * Hold approved marketplace listing
    */
-  @Put('marketplace/listings/:id/hold')
+  @Put("marketplace/listings/:id/hold")
   async holdListing(
     @Request() req,
-    @Param('id') id: string,
-    @Body('reason') reason: string,
+    @Param("id") id: string,
+    @Body("reason") reason: string,
     @Ip() ip?: string,
   ) {
     const listing = await this.adminService.holdListing(id, reason);
 
     await this.adminAuditService.logAction(
       req.user.userId,
-      'hold_listing',
-      'marketplace_listing',
+      "hold_listing",
+      "marketplace_listing",
       id,
       { reason },
       reason,
       ip,
     );
 
-    return { success: true, listing, message: 'Listing held successfully' };
+    return { success: true, listing, message: "Listing held successfully" };
   }
 
   /**
    * Release held marketplace listing
    */
-  @Put('marketplace/listings/:id/release')
+  @Put("marketplace/listings/:id/release")
   async releaseListing(
     @Request() req,
-    @Param('id') id: string,
-    @Body('notes') notes?: string,
+    @Param("id") id: string,
+    @Body("notes") notes?: string,
     @Ip() ip?: string,
   ) {
     const listing = await this.adminService.releaseListing(id, notes);
 
     await this.adminAuditService.logAction(
       req.user.userId,
-      'release_listing',
-      'marketplace_listing',
+      "release_listing",
+      "marketplace_listing",
       id,
       { notes },
       notes,
       ip,
     );
 
-    return { success: true, listing, message: 'Listing released successfully' };
+    return { success: true, listing, message: "Listing released successfully" };
   }
 
   /**
    * Hold approved mechanic (temporarily disable)
    */
-  @Put('mechanics/:id/hold')
+  @Put("mechanics/:id/hold")
   async holdMechanic(
     @Request() req,
-    @Param('id') id: string,
-    @Body('reason') reason: string,
+    @Param("id") id: string,
+    @Body("reason") reason: string,
     @Ip() ip?: string,
   ) {
     const mechanic = await this.adminService.holdMechanic(id, reason);
 
     await this.adminAuditService.logAction(
       req.user.userId,
-      'hold_mechanic',
-      'mechanic',
+      "hold_mechanic",
+      "mechanic",
       id,
       { reason },
       reason,
       ip,
     );
 
-    return { success: true, mechanic, message: 'Mechanic held successfully' };
+    return { success: true, mechanic, message: "Mechanic held successfully" };
   }
 
   /**
    * Release held mechanic (restore to active)
    */
-  @Put('mechanics/:id/release')
+  @Put("mechanics/:id/release")
   async releaseMechanic(
     @Request() req,
-    @Param('id') id: string,
-    @Body('notes') notes?: string,
+    @Param("id") id: string,
+    @Body("notes") notes?: string,
     @Ip() ip?: string,
   ) {
     const mechanic = await this.adminService.releaseMechanic(id, notes);
 
     await this.adminAuditService.logAction(
       req.user.userId,
-      'release_mechanic',
-      'mechanic',
+      "release_mechanic",
+      "mechanic",
       id,
       { notes },
       notes,
       ip,
     );
 
-    return { success: true, mechanic, message: 'Mechanic released successfully' };
+    return {
+      success: true,
+      mechanic,
+      message: "Mechanic released successfully",
+    };
   }
 
   // ==================== NOTIFICATIONS ====================
@@ -1274,13 +1306,13 @@ export class AdminController {
   /**
    * Get all notification logs (paginated)
    */
-  @Get('notifications')
+  @Get("notifications")
   async getNotificationLogs(
-    @Query('page') page: string,
-    @Query('limit') limit: string,
-    @Query('search') search: string,
-    @Query('type') type: string,
-    @Query('status') status: string,
+    @Query("page") page: string,
+    @Query("limit") limit: string,
+    @Query("search") search: string,
+    @Query("type") type: string,
+    @Query("status") status: string,
   ) {
     return this.adminService.getNotificationLogs({
       page: page ? parseInt(page) : 1,
@@ -1294,7 +1326,7 @@ export class AdminController {
   /**
    * Get notification statistics
    */
-  @Get('notifications/stats')
+  @Get("notifications/stats")
   async getNotificationStats() {
     return this.adminService.getNotificationStats();
   }
@@ -1302,9 +1334,10 @@ export class AdminController {
   /**
    * Send notification to a specific user
    */
-  @Post('notifications/send')
+  @Post("notifications/send")
   async sendNotificationToUser(
-    @Body() body: { userId: string; title: string; body: string; type?: string },
+    @Body()
+    body: { userId: string; title: string; body: string; type?: string },
     @Request() req,
     @Ip() ip: string,
   ) {
@@ -1317,8 +1350,8 @@ export class AdminController {
     // Audit log
     await this.adminAuditService.logAction(
       req.user.userId,
-      'SEND_NOTIFICATION',
-      'user',
+      "SEND_NOTIFICATION",
+      "user",
       body.userId,
       { title: body.title, type: body.type },
       `Sent notification to user ${body.userId}`,
@@ -1330,7 +1363,7 @@ export class AdminController {
   /**
    * Broadcast notification to all users
    */
-  @Post('notifications/broadcast')
+  @Post("notifications/broadcast")
   async broadcastNotification(
     @Body() body: { title: string; body: string },
     @Request() req,
@@ -1342,9 +1375,9 @@ export class AdminController {
     );
     await this.adminAuditService.logAction(
       req.user.userId,
-      'BROADCAST_NOTIFICATION',
-      'system',
-      'all_users',
+      "BROADCAST_NOTIFICATION",
+      "system",
+      "all_users",
       { title: body.title },
       `Broadcast notification to all users`,
       ip,
@@ -1355,17 +1388,17 @@ export class AdminController {
   /**
    * Delete a notification log entry
    */
-  @Delete('notifications/:id')
+  @Delete("notifications/:id")
   async deleteNotificationLog(
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Request() req,
     @Ip() ip: string,
   ) {
     const result = await this.adminService.deleteNotificationLog(id);
     await this.adminAuditService.logAction(
       req.user.userId,
-      'DELETE_NOTIFICATION',
-      'notification',
+      "DELETE_NOTIFICATION",
+      "notification",
       id,
       {},
       `Deleted notification log ${id}`,
@@ -1379,16 +1412,16 @@ export class AdminController {
   /**
    * Get admin action history
    */
-  @Get('audit/actions')
+  @Get("audit/actions")
   async getAuditLog(
-    @Query('adminId') adminId: string,
-    @Query('targetType') targetType: string,
-    @Query('targetId') targetId: string,
-    @Query('actionType') actionType: string,
-    @Query('startDate') startDate: string,
-    @Query('endDate') endDate: string,
-    @Query('page') page: string,
-    @Query('limit') limit: string,
+    @Query("adminId") adminId: string,
+    @Query("targetType") targetType: string,
+    @Query("targetId") targetId: string,
+    @Query("actionType") actionType: string,
+    @Query("startDate") startDate: string,
+    @Query("endDate") endDate: string,
+    @Query("page") page: string,
+    @Query("limit") limit: string,
   ) {
     return this.adminAuditService.getActionHistory(
       {
@@ -1405,12 +1438,12 @@ export class AdminController {
   }
 
   // Support Reports Management
-  @Get('support/reports')
+  @Get("support/reports")
   async getSupportReports(
-    @Query('page') page: string,
-    @Query('limit') limit: string,
-    @Query('status') status: string,
-    @Query('category') category: string,
+    @Query("page") page: string,
+    @Query("limit") limit: string,
+    @Query("status") status: string,
+    @Query("category") category: string,
   ) {
     const reports = await this.supportService.findAll();
     return {
@@ -1419,28 +1452,28 @@ export class AdminController {
     };
   }
 
-  @Get('support/reports/statistics')
+  @Get("support/reports/statistics")
   async getSupportStatistics() {
     return this.supportService.getStatistics();
   }
 
-  @Get('support/reports/:id')
-  async getSupportReportById(@Param('id') id: string) {
+  @Get("support/reports/:id")
+  async getSupportReportById(@Param("id") id: string) {
     return this.supportService.findOne(id);
   }
 
-  @Patch('support/reports/:id')
+  @Patch("support/reports/:id")
   async updateSupportReport(
-    @Param('id') id: string,
+    @Param("id") id: string,
     @Body() updateReportDto: any,
     @Request() req,
   ) {
     return this.supportService.update(id, updateReportDto, req.user.userId);
   }
 
-  @Delete('support/reports/:id')
-  async deleteSupportReport(@Param('id') id: string) {
+  @Delete("support/reports/:id")
+  async deleteSupportReport(@Param("id") id: string) {
     await this.supportService.delete(id);
-    return { message: 'Support report deleted successfully' };
+    return { message: "Support report deleted successfully" };
   }
 }

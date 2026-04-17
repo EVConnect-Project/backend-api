@@ -6,13 +6,18 @@ import {
   SubscribeMessage,
   WebSocketGateway,
   WebSocketServer,
-} from '@nestjs/websockets';
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { JwtService } from '@nestjs/jwt';
-import { Repository } from 'typeorm';
-import { Server, Socket } from 'socket.io';
-import { TripPlanEntity } from './entities/trip-plan.entity';
+} from "@nestjs/websockets";
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { JwtService } from "@nestjs/jwt";
+import { Repository } from "typeorm";
+import { Server, Socket } from "socket.io";
+import { TripPlanEntity } from "./entities/trip-plan.entity";
 
 interface TripLocationPayload {
   tripId: string;
@@ -34,15 +39,19 @@ interface LiveTripLocation {
 }
 
 @WebSocketGateway({
-  namespace: '/trip',
+  namespace: "/trip",
   cors: {
-    origin: '*',
+    origin: "*",
     credentials: true,
   },
 })
 @Injectable()
 export class TripGateway
-  implements OnGatewayConnection, OnGatewayDisconnect, OnModuleInit, OnModuleDestroy
+  implements
+    OnGatewayConnection,
+    OnGatewayDisconnect,
+    OnModuleInit,
+    OnModuleDestroy
 {
   @WebSocketServer()
   server: Server;
@@ -103,14 +112,14 @@ export class TripGateway
     this.logger.log(`Trip socket disconnected: ${client.id}`);
   }
 
-  @SubscribeMessage('joinTrip')
+  @SubscribeMessage("joinTrip")
   async handleJoinTrip(
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { tripId: string },
   ) {
     const userId = this.getUserIdFromSocket(client);
     if (!userId || !data?.tripId) {
-      client.emit('tripError', { message: 'Unauthorized or invalid tripId' });
+      client.emit("tripError", { message: "Unauthorized or invalid tripId" });
       return;
     }
 
@@ -119,14 +128,15 @@ export class TripGateway
     });
 
     if (!trip) {
-      client.emit('tripError', { message: 'Trip not found' });
+      client.emit("tripError", { message: "Trip not found" });
       return;
     }
 
     const room = this.getTripRoom(data.tripId);
     await client.join(room);
 
-    const latestLocation = this.latestTripLocation.get(data.tripId) ??
+    const latestLocation =
+      this.latestTripLocation.get(data.tripId) ??
       (trip.currentLat != null && trip.currentLng != null
         ? {
             tripId: trip.id,
@@ -139,13 +149,17 @@ export class TripGateway
           }
         : null);
     const heartbeatAgeSeconds = trip.lastLocationAt
-      ? Math.max(0, Math.floor((Date.now() - trip.lastLocationAt.getTime()) / 1000))
+      ? Math.max(
+          0,
+          Math.floor((Date.now() - trip.lastLocationAt.getTime()) / 1000),
+        )
       : null;
-    const isStale = heartbeatAgeSeconds != null
-      ? heartbeatAgeSeconds > TripGateway.STALE_HEARTBEAT_SECONDS
-      : true;
+    const isStale =
+      heartbeatAgeSeconds != null
+        ? heartbeatAgeSeconds > TripGateway.STALE_HEARTBEAT_SECONDS
+        : true;
 
-    client.emit('tripJoined', {
+    client.emit("tripJoined", {
       tripId: data.tripId,
       room,
       status: trip.status,
@@ -157,14 +171,14 @@ export class TripGateway
     this.logger.log(`User ${userId} joined trip room ${room}`);
   }
 
-  @SubscribeMessage('locationUpdate')
+  @SubscribeMessage("locationUpdate")
   async handleLocationUpdate(
     @ConnectedSocket() client: Socket,
     @MessageBody() data: TripLocationPayload,
   ) {
     const userId = this.getUserIdFromSocket(client);
     if (!userId || !data?.tripId) {
-      client.emit('tripError', { message: 'Unauthorized or invalid payload' });
+      client.emit("tripError", { message: "Unauthorized or invalid payload" });
       return;
     }
 
@@ -173,7 +187,7 @@ export class TripGateway
     });
 
     if (!trip) {
-      client.emit('tripError', { message: 'Trip not found' });
+      client.emit("tripError", { message: "Trip not found" });
       return;
     }
 
@@ -201,21 +215,23 @@ export class TripGateway
       },
     );
 
-    this.server.to(this.getTripRoom(data.tripId)).emit('locationUpdate', location);
-    client.emit('locationAck', {
+    this.server
+      .to(this.getTripRoom(data.tripId))
+      .emit("locationUpdate", location);
+    client.emit("locationAck", {
       tripId: data.tripId,
       timestamp: location.timestamp,
     });
   }
 
-  @SubscribeMessage('tripEnded')
+  @SubscribeMessage("tripEnded")
   async handleTripEnded(
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { tripId: string },
   ) {
     const userId = this.getUserIdFromSocket(client);
     if (!userId || !data?.tripId) {
-      client.emit('tripError', { message: 'Unauthorized or invalid tripId' });
+      client.emit("tripError", { message: "Unauthorized or invalid tripId" });
       return;
     }
 
@@ -224,18 +240,18 @@ export class TripGateway
     });
 
     if (!trip) {
-      client.emit('tripError', { message: 'Trip not found' });
+      client.emit("tripError", { message: "Trip not found" });
       return;
     }
 
-    if (trip.status !== 'completed') {
-      trip.status = 'completed';
+    if (trip.status !== "completed") {
+      trip.status = "completed";
       await this.tripPlanRepository.save(trip);
     }
 
-    this.server.to(this.getTripRoom(data.tripId)).emit('tripEnded', {
+    this.server.to(this.getTripRoom(data.tripId)).emit("tripEnded", {
       tripId: data.tripId,
-      status: 'completed',
+      status: "completed",
       timestamp: new Date().toISOString(),
     });
 
@@ -247,7 +263,7 @@ export class TripGateway
     if (this.staleHeartbeatDisabled) return;
 
     const activeTrips = await this.tripPlanRepository.find({
-      where: { status: 'active' },
+      where: { status: "active" },
     });
     const now = Date.now();
 
@@ -255,12 +271,13 @@ export class TripGateway
       const heartbeatAgeSeconds = trip.lastLocationAt
         ? Math.max(0, Math.floor((now - trip.lastLocationAt.getTime()) / 1000))
         : null;
-      const isStale = heartbeatAgeSeconds != null
-        ? heartbeatAgeSeconds > TripGateway.STALE_HEARTBEAT_SECONDS
-        : true;
+      const isStale =
+        heartbeatAgeSeconds != null
+          ? heartbeatAgeSeconds > TripGateway.STALE_HEARTBEAT_SECONDS
+          : true;
 
       if (isStale && !this.staleTripIds.has(trip.id)) {
-        this.server.to(this.getTripRoom(trip.id)).emit('tripStale', {
+        this.server.to(this.getTripRoom(trip.id)).emit("tripStale", {
           tripId: trip.id,
           isStale: true,
           heartbeatAgeSeconds,
@@ -270,7 +287,7 @@ export class TripGateway
       }
 
       if (!isStale && this.staleTripIds.has(trip.id)) {
-        this.server.to(this.getTripRoom(trip.id)).emit('tripStale', {
+        this.server.to(this.getTripRoom(trip.id)).emit("tripStale", {
           tripId: trip.id,
           isStale: false,
           heartbeatAgeSeconds,
@@ -303,17 +320,18 @@ export class TripGateway
     return (
       message.includes('relation "trip_plans" does not exist') ||
       message.includes("relation 'trip_plans' does not exist") ||
-      message.includes('no such table')
+      message.includes("no such table")
     );
   }
 
   private getUserIdFromSocket(client: Socket): string | null {
     try {
-      const rawAuth = client.handshake.auth?.token || client.handshake.headers?.authorization;
-      if (!rawAuth || typeof rawAuth !== 'string') return null;
+      const rawAuth =
+        client.handshake.auth?.token || client.handshake.headers?.authorization;
+      if (!rawAuth || typeof rawAuth !== "string") return null;
 
-      const token = rawAuth.startsWith('Bearer ') ? rawAuth.slice(7) : rawAuth;
-      const payload = this.jwtService.verify(token) as { userId?: string; sub?: string };
+      const token = rawAuth.startsWith("Bearer ") ? rawAuth.slice(7) : rawAuth;
+      const payload = this.jwtService.verify(token);
 
       return payload.userId || payload.sub || null;
     } catch {

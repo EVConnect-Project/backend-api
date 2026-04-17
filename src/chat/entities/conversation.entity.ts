@@ -7,72 +7,72 @@ import {
   ManyToOne,
   OneToMany,
   JoinColumn,
-} from 'typeorm';
-import { UserEntity } from '../../users/entities/user.entity';
-import { Message } from './message.entity';
+} from "typeorm";
+import { UserEntity } from "../../users/entities/user.entity";
+import { Message } from "./message.entity";
 
 export enum ConversationType {
-  DIRECT = 'direct',
-  MECHANIC = 'mechanic',
-  MARKETPLACE = 'marketplace',
+  DIRECT = "direct",
+  MECHANIC = "mechanic",
+  MARKETPLACE = "marketplace",
 }
 
-@Entity('conversations')
+@Entity("conversations")
 export class Conversation {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn("uuid")
   id: string;
 
   @Column({
-    type: 'varchar',
+    type: "varchar",
     length: 50,
     default: ConversationType.DIRECT,
   })
   type: ConversationType;
 
   // Participant 1 (usually the customer/user)
-  @Column({ name: 'user_id' })
+  @Column({ name: "user_id" })
   userId: string;
 
   @ManyToOne(() => UserEntity)
-  @JoinColumn({ name: 'user_id' })
+  @JoinColumn({ name: "user_id" })
   user: UserEntity;
 
   // Participant 2 (mechanic or seller)
-  @Column({ name: 'participant_id' })
+  @Column({ name: "participant_id" })
   participantId: string;
 
   @ManyToOne(() => UserEntity)
-  @JoinColumn({ name: 'participant_id' })
+  @JoinColumn({ name: "participant_id" })
   participant: UserEntity;
 
   // Optional: linked breakdown request or listing
-  @Column({ name: 'reference_id', nullable: true })
+  @Column({ name: "reference_id", nullable: true })
   referenceId: string;
 
-  @Column({ name: 'reference_type', nullable: true })
+  @Column({ name: "reference_type", nullable: true })
   referenceType: string; // 'breakdown_request', 'listing', etc.
 
-  @Column({ name: 'last_message', type: 'text', nullable: true })
+  @Column({ name: "last_message", type: "text", nullable: true })
   lastMessage: string;
 
-  @Column({ name: 'last_message_at', type: 'timestamp', nullable: true })
+  @Column({ name: "last_message_at", type: "timestamp", nullable: true })
   lastMessageAt: Date;
 
-  @Column({ name: 'unread_count_user', default: 0 })
+  @Column({ name: "unread_count_user", default: 0 })
   unreadCountUser: number;
 
-  @Column({ name: 'unread_count_participant', default: 0 })
+  @Column({ name: "unread_count_participant", default: 0 })
   unreadCountParticipant: number;
 
-  @Column({ type: 'jsonb', nullable: true })
+  @Column({ type: "jsonb", nullable: true })
   metadata: any;
 
   @OneToMany(() => Message, (message) => message.conversation)
   messages: Message[];
 
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn({ name: "created_at" })
   createdAt: Date;
 
-  @UpdateDateColumn({ name: 'updated_at' })
+  @UpdateDateColumn({ name: "updated_at" })
   updatedAt: Date;
 }

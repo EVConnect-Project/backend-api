@@ -1,6 +1,6 @@
-import { IsOptional, IsString, IsNumber, IsEnum, Min } from 'class-validator';
-import { Type } from 'class-transformer';
-import { PaginationDto } from '../../common/dto/pagination.dto';
+import { IsOptional, IsString, IsNumber, IsEnum, Min } from "class-validator";
+import { Type } from "class-transformer";
+import { PaginationDto } from "../../common/dto/pagination.dto";
 
 export class GetMarketplaceFeedDto extends PaginationDto {
   @IsOptional()
@@ -24,8 +24,8 @@ export class GetMarketplaceFeedDto extends PaginationDto {
   priceMax?: number;
 
   @IsOptional()
-  @IsEnum(['new', 'used'])
-  condition?: 'new' | 'used';
+  @IsEnum(["new", "used"])
+  condition?: "new" | "used";
 
   @IsOptional()
   @IsString()

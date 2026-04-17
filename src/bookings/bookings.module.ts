@@ -1,13 +1,13 @@
-import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { ScheduleModule } from '@nestjs/schedule';
-import { BookingsService } from './bookings.service';
-import { BookingsController } from './bookings.controller';
-import { BookingEntity } from './entities/booking.entity';
-import { Charger } from '../charger/entities/charger.entity';
-import { ChargerSocket } from '../owner/entities/charger-socket.entity';
-import { NotificationsModule } from '../notifications/notifications.module';
-import { AuthModule } from '../auth/auth.module';
+import { Module } from "@nestjs/common";
+import { TypeOrmModule } from "@nestjs/typeorm";
+import { ScheduleModule } from "@nestjs/schedule";
+import { BookingsService } from "./bookings.service";
+import { BookingsController } from "./bookings.controller";
+import { BookingEntity } from "./entities/booking.entity";
+import { Charger } from "../charger/entities/charger.entity";
+import { ChargerSocket } from "../owner/entities/charger-socket.entity";
+import { NotificationsModule } from "../notifications/notifications.module";
+import { AuthModule } from "../auth/auth.module";
 
 @Module({
   imports: [

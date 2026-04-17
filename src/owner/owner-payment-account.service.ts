@@ -1,10 +1,15 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Not } from 'typeorm';
-import { OwnerPaymentAccount } from './entities/owner-payment-account.entity';
-import { CreatePaymentAccountDto } from './dto/create-payment-account.dto';
-import { UpdatePaymentAccountDto } from './dto/update-payment-account.dto';
-import { Charger } from '../charger/entities/charger.entity';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository, Not } from "typeorm";
+import { OwnerPaymentAccount } from "./entities/owner-payment-account.entity";
+import { CreatePaymentAccountDto } from "./dto/create-payment-account.dto";
+import { UpdatePaymentAccountDto } from "./dto/update-payment-account.dto";
+import { Charger } from "../charger/entities/charger.entity";
 
 @Injectable()
 export class OwnerPaymentAccountService {
@@ -15,12 +20,15 @@ export class OwnerPaymentAccountService {
     private readonly chargerRepository: Repository<Charger>,
   ) {}
 
-  async create(userId: string, createDto: CreatePaymentAccountDto): Promise<OwnerPaymentAccount> {
+  async create(
+    userId: string,
+    createDto: CreatePaymentAccountDto,
+  ): Promise<OwnerPaymentAccount> {
     // If this is being set as primary, unset any existing primary accounts
-    if (createDto['isPrimary']) {
+    if (createDto["isPrimary"]) {
       await this.paymentAccountRepository.update(
         { userId, isPrimary: true },
-        { isPrimary: false }
+        { isPrimary: false },
       );
     }
 
@@ -35,7 +43,7 @@ export class OwnerPaymentAccountService {
   async findAllByUser(userId: string): Promise<OwnerPaymentAccount[]> {
     return this.paymentAccountRepository.find({
       where: { userId },
-      order: { isPrimary: 'DESC', createdAt: 'DESC' },
+      order: { isPrimary: "DESC", createdAt: "DESC" },
     });
   }
 
@@ -45,20 +53,24 @@ export class OwnerPaymentAccountService {
     });
 
     if (!account) {
-      throw new NotFoundException('Payment account not found');
+      throw new NotFoundException("Payment account not found");
     }
 
     return account;
   }
 
-  async update(id: string, userId: string, updateDto: UpdatePaymentAccountDto): Promise<OwnerPaymentAccount> {
+  async update(
+    id: string,
+    userId: string,
+    updateDto: UpdatePaymentAccountDto,
+  ): Promise<OwnerPaymentAccount> {
     const account = await this.findOne(id, userId);
 
     // If setting as primary, unset other primary accounts
     if (updateDto.isPrimary) {
       await this.paymentAccountRepository.update(
         { userId, isPrimary: true, id: Not(id) },
-        { isPrimary: false }
+        { isPrimary: false },
       );
     }
 
@@ -76,7 +88,7 @@ export class OwnerPaymentAccountService {
 
     if (chargersUsingAccount > 0) {
       throw new BadRequestException(
-        `Cannot delete payment account. It is being used by ${chargersUsingAccount} charger(s). Please update those chargers first.`
+        `Cannot delete payment account. It is being used by ${chargersUsingAccount} charger(s). Please update those chargers first.`,
       );
     }
 
@@ -89,7 +101,7 @@ export class OwnerPaymentAccountService {
     // Unset all other primary accounts
     await this.paymentAccountRepository.update(
       { userId, isPrimary: true },
-      { isPrimary: false }
+      { isPrimary: false },
     );
 
     // Set this one as primary
@@ -105,10 +117,10 @@ export class OwnerPaymentAccountService {
 
   async hasVerifiedAccount(userId: string): Promise<boolean> {
     const count = await this.paymentAccountRepository.count({
-      where: { 
-        userId, 
-        verificationStatus: 'verified' as any,
-        isActive: true 
+      where: {
+        userId,
+        verificationStatus: "verified" as any,
+        isActive: true,
       },
     });
     return count > 0;
