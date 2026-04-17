@@ -312,6 +312,7 @@ export class AuthService {
     phoneNumber: string,
     password: string,
     verificationToken: string,
+    name?: string,
   ) {
     // Verify the verification token
     const tokenData = this.otpService.verifyToken(verificationToken);
@@ -333,10 +334,13 @@ export class AuthService {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // Create user
+    const normalizedName = name?.trim();
     const user = this.userRepository.create({
       phoneNumber,
       password: hashedPassword,
-      name: `User ${phoneNumber.slice(-4)}`, // Default name
+      name: normalizedName && normalizedName.length > 0
+        ? normalizedName
+        : `User ${phoneNumber.slice(-4)}`,
       isVerified: true, // Phone is verified via OTP
     });
 

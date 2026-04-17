@@ -188,6 +188,7 @@ export class AuthController {
       registerPhoneDto.phoneNumber,
       registerPhoneDto.password,
       registerPhoneDto.verificationToken,
+      registerPhoneDto.name,
     );
   }
 

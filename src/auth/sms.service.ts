@@ -4,14 +4,20 @@ import { ConfigService } from '@nestjs/config';
 @Injectable()
 export class SmsService {
   private readonly logger = new Logger(SmsService.name);
+  private readonly appName: string;
   private readonly senderId: string;
   private readonly apiToken: string;
   private readonly oauthSendEndpoint: string;
   private readonly httpSendEndpoint: string;
+  private readonly welcomeTemplate: string;
 
   constructor(private configService: ConfigService) {
+    this.appName = this.configService.get<string>('SMS_APP_NAME') || 'EVRS';
     this.senderId = this.configService.get<string>('TEXTLK_SENDER_ID') || 'EVRS';
     this.apiToken = this.configService.get<string>('TEXTLK_API_TOKEN') || '';
+    this.welcomeTemplate =
+      this.configService.get<string>('TEXTLK_WELCOME_MESSAGE_TEMPLATE') ||
+      'Hi {{name}}! Welcome to {{appName}}. Power your journey with Sri Lanka’s growing EV network smart, simple, and seamless.';
 
     const oauthBase =
       this.configService.get<string>('TEXTLK_OAUTH_API_ENDPOINT') ||
@@ -169,8 +175,11 @@ export class SmsService {
    */
   async sendWelcomeSMS(phoneNumber: string, userName?: string): Promise<void> {
     try {
-      const greeting = userName ? `Hi ${userName}` : 'Hello';
-      const message = `${greeting}! Welcome to EVRS. Start finding and booking EV charging stations near you.`;
+      const fallbackName = 'there';
+      const resolvedName = (userName || '').trim() || fallbackName;
+      const message = this.welcomeTemplate
+        .replace(/\{\{\s*name\s*\}\}/g, resolvedName)
+        .replace(/\{\{\s*appName\s*\}\}/g, this.appName);
       await this.sendMessage(phoneNumber, message);
     } catch (error) {
       this.logger.error(`Failed to send welcome SMS to ${phoneNumber}:`, error);

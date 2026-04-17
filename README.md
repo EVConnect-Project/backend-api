@@ -88,6 +88,12 @@ Set the following environment variables in your backend runtime environment:
 - `TEXTLK_SENDER_ID`: Approved sender id (example: `EVRS`).
 - `TEXTLK_OAUTH_API_ENDPOINT`: Base OAuth API endpoint. Default: `https://app.text.lk/api/v3/`
 - `TEXTLK_HTTP_API_ENDPOINT`: Base HTTP API endpoint fallback. Default: `https://app.text.lk/api/http/`
+- `SMS_APP_NAME`: Optional app name injected into welcome template. Default: `EVRS`
+- `TEXTLK_WELCOME_MESSAGE_TEMPLATE`: Optional welcome SMS template. Supports placeholders `{{name}}` and `{{appName}}`.
+
+Example template:
+
+`Hi {{name}}, welcome to {{appName}}! We're happy to have you on board.`
 
 How delivery works:
 

@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, Matches, Length } from 'class-validator';
+import { IsString, IsNotEmpty, Matches, Length, IsOptional } from 'class-validator';
 
 export class SendOtpDto {
   @IsString()
@@ -40,6 +40,13 @@ export class RegisterPhoneDto {
   @IsString()
   @IsNotEmpty()
   verificationToken: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(2, 80, {
+    message: 'Name must be between 2 and 80 characters',
+  })
+  name?: string;
 }
 
 export class LoginPhoneDto {
