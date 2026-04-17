@@ -35,6 +35,18 @@ export class PaymentEntity {
   @Column({ nullable: true })
   paymentMethod: string; // 'stripe', 'payhere', 'card', 'wallet'
 
+  @Column({ type: 'varchar', length: 50, default: 'payhere' })
+  provider: string;
+
+  @Column({ type: 'varchar', nullable: true })
+  transactionId: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  webhookPayload: string | null;
+
+  @Column({ type: 'boolean', default: false })
+  isCommissionDeducted: boolean;
+
   @Column({ type: 'text', nullable: true })
   metadata: string; // JSON string for additional payment details
 

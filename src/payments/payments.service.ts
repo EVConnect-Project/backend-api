@@ -198,6 +198,7 @@ export class PaymentsService {
         ownerRevenue,
         status: 'pending',
         paymentMethod: normalizedMethod,
+        provider: normalizedMethod,
       });
 
       const savedPayment = await this.paymentRepository.save(payment);
