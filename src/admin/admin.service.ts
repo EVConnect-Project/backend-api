@@ -1591,6 +1591,214 @@ export class AdminService {
   }
 
   // Payout Management
+  async getPendingBookingPayoutQueue(params: {
+    page: number;
+    limit: number;
+    ownerId?: string;
+    search?: string;
+  }) {
+    const { page, limit, ownerId, search } = params;
+    const skip = (page - 1) * limit;
+
+    const eligibleOwnerRows = await this.paymentAccountRepository
+      .createQueryBuilder('account')
+      .select('DISTINCT account.userId', 'ownerId')
+      .where('account.isActive = true')
+      .andWhere('account.isPrimary = true')
+      .andWhere('account.verificationStatus = :verificationStatus', {
+        verificationStatus: VerificationStatus.VERIFIED,
+      })
+      .getRawMany();
+
+    const eligibleOwnerSet = new Set(
+      eligibleOwnerRows.map((row) => row.ownerId as string).filter(Boolean),
+    );
+
+    const primaryAccounts = await this.paymentAccountRepository
+      .createQueryBuilder('account')
+      .select('account.userId', 'ownerId')
+      .addSelect('account.accountHolderName', 'accountHolderName')
+      .addSelect('account.bankName', 'bankName')
+      .addSelect('account.accountNumber', 'accountNumber')
+      .addSelect('account.accountType', 'accountType')
+      .addSelect('account.verificationStatus', 'verificationStatus')
+      .where('account.isActive = true')
+      .andWhere('account.isPrimary = true')
+      .getRawMany();
+
+    const primaryAccountByOwner = new Map<
+      string,
+      {
+        accountHolderName: string;
+        bankName: string;
+        accountNumber: string;
+        accountType: string;
+        verificationStatus: string;
+      }
+    >();
+
+    for (const row of primaryAccounts) {
+      const ownerKey = row.ownerId as string;
+      if (!ownerKey || primaryAccountByOwner.has(ownerKey)) continue;
+      primaryAccountByOwner.set(ownerKey, {
+        accountHolderName: row.accountHolderName,
+        bankName: row.bankName,
+        accountNumber: row.accountNumber,
+        accountType: row.accountType,
+        verificationStatus: row.verificationStatus,
+      });
+    }
+
+    const qb = this.paymentRepository
+      .createQueryBuilder('payment')
+      .innerJoin(BookingEntity, 'booking', 'booking.id = payment.bookingId')
+      .innerJoin(Charger, 'charger', 'charger.id = booking.chargerId')
+      .leftJoin(UserEntity, 'owner', 'owner.id = charger.ownerId')
+      .leftJoin(UserEntity, 'bookingUser', 'bookingUser.id = booking.userId')
+      .where("payment.status = 'succeeded'")
+      .andWhere("(payment.payoutStatus IS NULL OR payment.payoutStatus = 'unsettled')")
+      .select('payment.id', 'paymentId')
+      .addSelect('payment.bookingId', 'bookingId')
+      .addSelect('payment.createdAt', 'paymentCreatedAt')
+      .addSelect('payment.status', 'paymentStatus')
+      .addSelect('payment.amount', 'amount')
+      .addSelect('payment.ownerRevenue', 'ownerRevenue')
+      .addSelect('payment.payoutStatus', 'payoutStatus')
+      .addSelect('booking.createdAt', 'bookingCreatedAt')
+      .addSelect('booking.updatedAt', 'bookingUpdatedAt')
+      .addSelect('booking.startTime', 'startTime')
+      .addSelect('booking.endTime', 'endTime')
+      .addSelect('booking.status', 'bookingStatus')
+      .addSelect('booking.paymentStatus', 'bookingPaymentStatus')
+      .addSelect('booking.cancelledAt', 'bookingCancelledAt')
+      .addSelect('booking.cancelReason', 'bookingCancelReason')
+      .addSelect('charger.id', 'chargerId')
+      .addSelect('charger.name', 'chargerName')
+      .addSelect('charger.ownerId', 'ownerId')
+      .addSelect('owner.name', 'ownerName')
+      .addSelect('owner.phoneNumber', 'ownerPhone')
+      .addSelect('bookingUser.id', 'userId')
+      .addSelect('bookingUser.name', 'userName')
+      .addSelect('bookingUser.phoneNumber', 'userPhone')
+      .orderBy('owner.name', 'ASC')
+      .addOrderBy('payment.createdAt', 'ASC');
+
+    if (ownerId) {
+      qb.andWhere('charger.ownerId = :ownerId', { ownerId });
+    }
+
+    if (search && search.trim()) {
+      qb.andWhere(
+        '(owner.name ILIKE :search OR owner.phoneNumber ILIKE :search OR booking.id::text ILIKE :search OR payment.id::text ILIKE :search OR charger.name ILIKE :search)',
+        { search: `%${search.trim()}%` },
+      );
+    }
+
+    const countQb = qb.clone();
+    const total = await countQb.getCount();
+
+    const rows = await qb.skip(skip).take(limit).getRawMany();
+
+    const items = rows.map((row) => {
+      const ownerRevenue = Number(row.ownerRevenue ?? Number(row.amount || 0) * 0.94);
+      const ownerIdValue = row.ownerId as string;
+      const hasVerifiedPrimaryAccount = eligibleOwnerSet.has(ownerIdValue);
+      const ownerPrimaryAccount = primaryAccountByOwner.get(ownerIdValue);
+      const rawAccountNumber = ownerPrimaryAccount?.accountNumber || null;
+      const maskedAccountNumber = rawAccountNumber
+        ? rawAccountNumber.length > 4
+          ? `****${rawAccountNumber.slice(-4)}`
+          : rawAccountNumber
+        : null;
+
+      return {
+        paymentId: row.paymentId,
+        bookingId: row.bookingId,
+        paymentCreatedAt: row.paymentCreatedAt,
+        paymentStatus: row.paymentStatus,
+        bookingCreatedAt: row.bookingCreatedAt,
+        bookingUpdatedAt: row.bookingUpdatedAt,
+        ownerId: ownerIdValue,
+        ownerName: row.ownerName || 'Unknown owner',
+        ownerPhone: row.ownerPhone || null,
+        userId: row.userId,
+        userName: row.userName || 'Unknown user',
+        userPhone: row.userPhone || null,
+        chargerId: row.chargerId,
+        chargerName: row.chargerName || 'Unknown charger',
+        startTime: row.startTime,
+        endTime: row.endTime,
+        bookingStatus: row.bookingStatus,
+        bookingPaymentStatus: row.bookingPaymentStatus || null,
+        bookingCancelledAt: row.bookingCancelledAt || null,
+        bookingCancelReason: row.bookingCancelReason || null,
+        grossPaymentAmount: Number(row.amount || 0),
+        ownerRevenue: Number(ownerRevenue.toFixed(2)),
+        payoutStatus: row.payoutStatus || 'unsettled',
+        hasVerifiedPrimaryAccount,
+        ownerPrimaryBankDetails: ownerPrimaryAccount
+          ? {
+              accountHolderName: ownerPrimaryAccount.accountHolderName,
+              bankName: ownerPrimaryAccount.bankName,
+              accountType: ownerPrimaryAccount.accountType,
+              accountNumberMasked: maskedAccountNumber,
+              verificationStatus: ownerPrimaryAccount.verificationStatus,
+            }
+          : null,
+        processingState: hasVerifiedPrimaryAccount
+          ? 'ready_for_admin_processing'
+          : 'blocked_missing_verified_primary_account',
+      };
+    });
+
+    const ownerMap = new Map<
+      string,
+      {
+        ownerId: string;
+        ownerName: string;
+        ownerPhone: string | null;
+        bookingCount: number;
+        totalOwnerRevenue: number;
+        readyForProcessing: boolean;
+      }
+    >();
+
+    for (const item of items) {
+      const existing = ownerMap.get(item.ownerId) || {
+        ownerId: item.ownerId,
+        ownerName: item.ownerName,
+        ownerPhone: item.ownerPhone,
+        bookingCount: 0,
+        totalOwnerRevenue: 0,
+        readyForProcessing: item.hasVerifiedPrimaryAccount,
+      };
+      existing.bookingCount += 1;
+      existing.totalOwnerRevenue += item.ownerRevenue;
+      existing.readyForProcessing = existing.readyForProcessing && item.hasVerifiedPrimaryAccount;
+      ownerMap.set(item.ownerId, existing);
+    }
+
+    return {
+      items,
+      ownerGroups: Array.from(ownerMap.values()).map((group) => ({
+        ...group,
+        totalOwnerRevenue: Number(group.totalOwnerRevenue.toFixed(2)),
+      })),
+      totals: {
+        bookingCount: items.length,
+        totalOwnerRevenue: Number(
+          items.reduce((sum, item) => sum + item.ownerRevenue, 0).toFixed(2),
+        ),
+        readyCount: items.filter((item) => item.hasVerifiedPrimaryAccount).length,
+        blockedCount: items.filter((item) => !item.hasVerifiedPrimaryAccount).length,
+      },
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
   async getPayoutSummary() {
     const unsettled = await this.paymentRepository
       .createQueryBuilder('payment')
@@ -1708,6 +1916,20 @@ export class AdminService {
               phone: p.owner.phoneNumber,
             }
           : null,
+        createdByAdmin: p.createdByAdmin
+          ? {
+              id: p.createdByAdmin.id,
+              name: p.createdByAdmin.name,
+              phone: p.createdByAdmin.phoneNumber,
+            }
+          : null,
+        approvedByAdmin: p.approvedByAdmin
+          ? {
+              id: p.approvedByAdmin.id,
+              name: p.approvedByAdmin.name,
+              phone: p.approvedByAdmin.phoneNumber,
+            }
+          : null,
         periodStart: p.periodStart,
         periodEnd: p.periodEnd,
         grossOwnerRevenue: Number(p.grossOwnerRevenue || 0),
@@ -1756,6 +1978,20 @@ export class AdminService {
             id: payout.owner.id,
             name: payout.owner.name,
             phone: payout.owner.phoneNumber,
+          }
+        : null,
+      createdByAdmin: payout.createdByAdmin
+        ? {
+            id: payout.createdByAdmin.id,
+            name: payout.createdByAdmin.name,
+            phone: payout.createdByAdmin.phoneNumber,
+          }
+        : null,
+      approvedByAdmin: payout.approvedByAdmin
+        ? {
+            id: payout.approvedByAdmin.id,
+            name: payout.approvedByAdmin.name,
+            phone: payout.approvedByAdmin.phoneNumber,
           }
         : null,
       periodStart: payout.periodStart,

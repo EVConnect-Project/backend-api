@@ -426,6 +426,21 @@ export class AdminController {
         });
       }
 
+      @Get('payouts/pending-bookings')
+      async getPendingBookingPayouts(
+        @Query('page') page: string,
+        @Query('limit') limit: string,
+        @Query('ownerId') ownerId?: string,
+        @Query('search') search?: string,
+      ) {
+        return this.adminService.getPendingBookingPayoutQueue({
+          page: page ? parseInt(page) : 1,
+          limit: limit ? parseInt(limit) : 50,
+          ownerId,
+          search,
+        });
+      }
+
       @Get('payouts/:id')
       async getPayoutById(@Param('id') id: string) {
         return this.adminService.getOwnerPayoutById(id);

@@ -755,48 +755,6 @@ export class OwnerService {
     }
     const updated = await this.bookingRepository.save(booking);
 
-    if (status === 'confirmed') {
-      const charger = booking.charger;
-      charger.currentStatus = ChargerStatus.RESERVED;
-      charger.lastStatusUpdate = new Date();
-      await this.chargerRepository.save(charger);
-
-      if (booking.socketId) {
-        const socket = await this.socketRepository.findOne({
-          where: { id: booking.socketId, chargerId: booking.chargerId },
-        });
-        if (socket) {
-          socket.status = 'reserved';
-          await this.socketRepository.save(socket);
-        }
-      }
-    } else if (status === 'cancelled') {
-      const hasReservedOrActive = await this.bookingRepository
-        .createQueryBuilder('b')
-        .where('b.chargerId = :chargerId', { chargerId: booking.chargerId })
-        .andWhere('b.id != :bookingId', { bookingId: booking.id })
-        .andWhere('b.status IN (:...statuses)', { statuses: ['confirmed', 'active'] })
-        .getCount();
-
-      if (hasReservedOrActive === 0) {
-        const charger = booking.charger;
-        charger.currentStatus = ChargerStatus.AVAILABLE;
-        charger.lastStatusUpdate = new Date();
-        await this.chargerRepository.save(charger);
-      }
-
-      if (booking.socketId) {
-        const socket = await this.socketRepository.findOne({
-          where: { id: booking.socketId, chargerId: booking.chargerId },
-        });
-        if (socket) {
-          socket.status = 'available';
-          socket.occupiedBy = null as any;
-          await this.socketRepository.save(socket);
-        }
-      }
-    }
-
     return {
       booking: updated,
       message:

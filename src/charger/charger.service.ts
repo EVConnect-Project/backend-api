@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, ForbiddenException, Inject, forwardRef, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Not, Repository } from 'typeorm';
 import { Charger } from './entities/charger.entity';
 import { CreateChargerDto } from './dto/create-charger.dto';
 import { UpdateChargerDto } from './dto/update-charger.dto';
@@ -15,6 +15,7 @@ import { DEFAULT_BOOKING_SETTINGS } from './interfaces/booking-settings.interfac
 import { ChargingStation } from '../owner/entities/charging-station.entity';
 import { VehicleProfileService } from '../auth/vehicle-profile.service';
 import { VehicleProfile } from '../auth/entities/vehicle-profile.entity';
+import { BookingEntity } from '../bookings/entities/booking.entity';
 
 @Injectable()
 export class ChargerService {
@@ -23,12 +24,74 @@ export class ChargerService {
     private chargerRepository: Repository<Charger>,
     @InjectRepository(ChargingStation)
     private stationRepository: Repository<ChargingStation>,
+    @InjectRepository(BookingEntity)
+    private bookingRepository: Repository<BookingEntity>,
     @Inject(forwardRef(() => ChargerIntegrationService))
     private integrationService: ChargerIntegrationService,
     @Inject(forwardRef(() => ChargersGateway))
     private chargersGateway: ChargersGateway,
     private vehicleProfileService: VehicleProfileService,
   ) {}
+
+  private isStatusOperationalNow(status: string | null | undefined): boolean {
+    const normalized = String(status ?? '').toLowerCase().replaceAll('-', '_').trim();
+    return normalized != 'offline' && normalized != 'faulted' && normalized != 'maintenance';
+  }
+
+  private socketBookingKey(chargerId: string, socketId: string): string {
+    return `${chargerId}:${socketId}`;
+  }
+
+  private async getCurrentBookingBlocks(chargerIds: string[]): Promise<{
+    blockedChargers: Set<string>;
+    blockedSockets: Set<string>;
+    activeSockets: Set<string>;
+  }> {
+    const blockedChargers = new Set<string>();
+    const blockedSockets = new Set<string>();
+    const activeSockets = new Set<string>();
+
+    if (chargerIds.length == 0) {
+      return { blockedChargers, blockedSockets, activeSockets };
+    }
+
+    const now = new Date();
+    const rows = await this.bookingRepository
+      .createQueryBuilder('b')
+      .select('b.chargerId', 'chargerId')
+      .addSelect('b.socketId', 'socketId')
+      .addSelect('b.status', 'status')
+      .addSelect('b.paymentStatus', 'paymentStatus')
+      .where('b.chargerId IN (:...chargerIds)', { chargerIds })
+      .andWhere('b.startTime <= :now', { now })
+      .andWhere('b.endTime > :now', { now })
+      .andWhere(
+        `(b.status = :activeStatus OR (b.status = :confirmedStatus AND LOWER(COALESCE(b.paymentStatus, '')) = 'success'))`,
+        {
+          activeStatus: 'active',
+          confirmedStatus: 'confirmed',
+        },
+      )
+      .getRawMany<{
+        chargerId: string;
+        socketId: string | null;
+        status: string;
+        paymentStatus: string | null;
+      }>();
+
+    for (const row of rows) {
+      blockedChargers.add(row.chargerId);
+      if (row.socketId) {
+        const key = this.socketBookingKey(row.chargerId, row.socketId);
+        blockedSockets.add(key);
+        if ((row.status || '').toLowerCase() == 'active') {
+          activeSockets.add(key);
+        }
+      }
+    }
+
+    return { blockedChargers, blockedSockets, activeSockets };
+  }
 
   async create(createChargerDto: CreateChargerDto, ownerId: string): Promise<any> {
     const charger = this.chargerRepository.create({
@@ -77,7 +140,9 @@ export class ChargerService {
       SELECT c.*, cs.station_name AS "stationName"
       FROM chargers c
       LEFT JOIN charging_stations cs ON c.station_id = cs.id
-      WHERE c.verified = true AND c."isBanned" = false AND c.status != 'offline'
+      WHERE c.verified = true
+        AND c."isBanned" = false
+        AND c.status != 'offline'
       ORDER BY c."createdAt" DESC
     `;
     return this.chargerRepository.query(query);
@@ -111,7 +176,9 @@ export class ChargerService {
             sin( radians(lat) ) 
           ) ) AS distance 
         FROM chargers
-        WHERE verified = true AND "isBanned" = false AND status != 'offline'
+        WHERE verified = true
+          AND "isBanned" = false
+          AND status != 'offline'
       ) AS cwd
       LEFT JOIN charging_stations cs ON cwd.station_id = cs.id
       WHERE cwd.distance < $3 
@@ -210,7 +277,9 @@ export class ChargerService {
     const query = this.chargerRepository.createQueryBuilder('charger')
       .leftJoinAndSelect('charger.owner', 'owner')
       .leftJoinAndSelect('charger.sockets', 'sockets')
-      .where('charger.verified = :verified', { verified: true });
+      .where('charger.verified = :verified', { verified: true })
+      .andWhere('charger.isBanned = :isBanned', { isBanned: false })
+      .andWhere('charger.status != :offlineStatus', { offlineStatus: 'offline' });
 
     // Location filters (if provided)
     if (filters.lat && filters.lng) {
@@ -307,7 +376,11 @@ export class ChargerService {
       
       // Get all verified chargers with their sockets and owner
       const chargers = await this.chargerRepository.find({
-        where: { verified: true, isBanned: false },
+        where: {
+          verified: true,
+          isBanned: false,
+          status: Not('offline'),
+        },
         relations: ['sockets', 'owner'],
       });
       
@@ -365,6 +438,10 @@ export class ChargerService {
         }
       }
 
+      const bookingBlocks = await this.getCurrentBookingBlocks(
+        filteredChargers.map((c) => c.id),
+      );
+
       // Fetch station metadata from charging_stations table
       const stationIds = Object.keys(stationMap);
       let stationMetadata: Record<string, any> = {};
@@ -393,11 +470,17 @@ export class ChargerService {
         let maxPower = 0;
         
         for (const charger of stationChargers) {
+          const chargerBlockedNow = bookingBlocks.blockedChargers.has(charger.id);
           if (charger.sockets && charger.sockets.length > 0) {
             for (const socket of charger.sockets) {
               connectorTypes.add(socket.connectorType);
               totalSockets++;
-              if (socket.status === 'available') availableSockets++;
+              const socketBlockedNow = bookingBlocks.blockedSockets.has(
+                this.socketBookingKey(charger.id, socket.id),
+              );
+              if (!socketBlockedNow && this.isStatusOperationalNow(socket.status)) {
+                availableSockets++;
+              }
               const price = parseFloat(socket.pricePerKwh || socket.pricePerHour || '0');
               if (price > 0 && price < minPrice) minPrice = price;
               const power = parseFloat(socket.maxPowerKw || '0');
@@ -406,7 +489,9 @@ export class ChargerService {
           } else {
             if (charger.connectorType) connectorTypes.add(charger.connectorType);
             totalSockets++;
-            if (charger.status === 'available') availableSockets++;
+            if (!chargerBlockedNow && this.isStatusOperationalNow(charger.status)) {
+              availableSockets++;
+            }
             const price = parseFloat(charger.pricePerKwh || '0');
             if (price > 0 && price < minPrice) minPrice = price;
             const power = parseFloat(charger.maxPowerKw || charger.powerKw || '0');
@@ -475,6 +560,21 @@ export class ChargerService {
             createdAt: c.createdAt,
             updatedAt: c.updatedAt,
             sockets: (c.sockets || []).map((s: any) => ({
+              ...(function () {
+                const key = `${c.id}:${s.id}`;
+                const isBlocked = bookingBlocks.blockedSockets.has(key);
+                const isActive = bookingBlocks.activeSockets.has(key);
+                let currentStatus = s.status;
+                if (isBlocked) {
+                  currentStatus = isActive ? 'in_use' : 'reserved';
+                } else if (
+                  String(s.status || '').toLowerCase() == 'reserved' ||
+                  String(s.status || '').toLowerCase() == 'in_use'
+                ) {
+                  currentStatus = 'available';
+                }
+                return { currentStatus };
+              })(),
               id: s.id,
               chargerId: s.chargerId || c.id,
               socketNumber: s.socketNumber,
@@ -484,7 +584,6 @@ export class ChargerService {
               pricePerKwh: s.pricePerKwh ? parseFloat(s.pricePerKwh) : null,
               pricePerHour: s.pricePerHour ? parseFloat(s.pricePerHour) : null,
               isFree: s.isFree || false,
-              currentStatus: s.status,
               bookingMode: s.bookingMode,
               isOccupied: s.occupiedBy ? true : false,
               createdAt: s.createdAt,
@@ -498,8 +597,20 @@ export class ChargerService {
       const individuals = individualChargers.map(c => {
         const sockets = c.sockets || [];
         let totalSockets = sockets.length || 1;
-        let availableSockets = sockets.filter((s: any) => s.status === 'available').length;
-        if (sockets.length === 0 && c.status === 'available') availableSockets = 1;
+        let availableSockets = 0;
+        if (sockets.length > 0) {
+          availableSockets = sockets.filter((s: any) => {
+            const socketBlockedNow = bookingBlocks.blockedSockets.has(
+              this.socketBookingKey(c.id, s.id),
+            );
+            return !socketBlockedNow && this.isStatusOperationalNow(s.status);
+          }).length;
+        } else if (
+          !bookingBlocks.blockedChargers.has(c.id) &&
+          this.isStatusOperationalNow(c.status)
+        ) {
+          availableSockets = 1;
+        }
         
         const connectorTypes = new Set<string>();
         if (sockets.length > 0) {
@@ -560,6 +671,21 @@ export class ChargerService {
             createdAt: c.createdAt,
             updatedAt: c.updatedAt,
             sockets: sockets.map((s: any) => ({
+              ...(function () {
+                const key = `${c.id}:${s.id}`;
+                const isBlocked = bookingBlocks.blockedSockets.has(key);
+                const isActive = bookingBlocks.activeSockets.has(key);
+                let currentStatus = s.status;
+                if (isBlocked) {
+                  currentStatus = isActive ? 'in_use' : 'reserved';
+                } else if (
+                  String(s.status || '').toLowerCase() == 'reserved' ||
+                  String(s.status || '').toLowerCase() == 'in_use'
+                ) {
+                  currentStatus = 'available';
+                }
+                return { currentStatus };
+              })(),
               id: s.id,
               chargerId: s.chargerId || c.id,
               socketNumber: s.socketNumber,
@@ -569,7 +695,6 @@ export class ChargerService {
               pricePerKwh: s.pricePerKwh ? parseFloat(s.pricePerKwh) : null,
               pricePerHour: s.pricePerHour ? parseFloat(s.pricePerHour) : null,
               isFree: s.isFree || false,
-              currentStatus: s.status,
               bookingMode: s.bookingMode,
               isOccupied: s.occupiedBy ? true : false,
               createdAt: s.createdAt,
@@ -629,9 +754,18 @@ export class ChargerService {
 
       // Fetch all chargers for this station with their sockets
       const chargers = await this.chargerRepository.find({
-        where: { stationId },
+        where: {
+          stationId,
+          verified: true,
+          isBanned: false,
+          status: Not('offline'),
+        },
         relations: ['sockets'],
       });
+
+      const bookingBlocks = await this.getCurrentBookingBlocks(
+        chargers.map((c) => c.id),
+      );
 
       // Build the response similar to filterStations
       const connectorTypes = new Set<string>();
@@ -641,11 +775,17 @@ export class ChargerService {
       let maxPower = 0;
 
       for (const charger of chargers) {
+        const chargerBlockedNow = bookingBlocks.blockedChargers.has(charger.id);
         if (charger.sockets && charger.sockets.length > 0) {
           for (const socket of charger.sockets) {
             connectorTypes.add(socket.connectorType);
             totalSockets++;
-            if (socket.status === 'available') availableSockets++;
+            const socketBlockedNow = bookingBlocks.blockedSockets.has(
+              this.socketBookingKey(charger.id, socket.id),
+            );
+            if (!socketBlockedNow && this.isStatusOperationalNow(socket.status)) {
+              availableSockets++;
+            }
             const price = parseFloat(String(socket.pricePerKwh || socket.pricePerHour || '0'));
             if (price > 0 && price < minPrice) minPrice = price;
             const power = parseFloat(String(socket.maxPowerKw || '0'));
@@ -654,7 +794,9 @@ export class ChargerService {
         } else {
           if (charger.connectorType) connectorTypes.add(charger.connectorType);
           totalSockets++;
-          if (charger.status === 'available') availableSockets++;
+          if (!chargerBlockedNow && this.isStatusOperationalNow(charger.status)) {
+            availableSockets++;
+          }
           const price = parseFloat(String(charger.pricePerKwh || '0'));
           if (price > 0 && price < minPrice) minPrice = price;
           const power = parseFloat(String(charger.maxPowerKw || charger.powerKw || '0'));
@@ -719,6 +861,21 @@ export class ChargerService {
           createdAt: c.createdAt,
           updatedAt: c.updatedAt,
           sockets: (c.sockets || []).map((s: any) => ({
+            ...(function () {
+              const key = `${c.id}:${s.id}`;
+              const isBlocked = bookingBlocks.blockedSockets.has(key);
+              const isActive = bookingBlocks.activeSockets.has(key);
+              let currentStatus = s.status;
+              if (isBlocked) {
+                currentStatus = isActive ? 'in_use' : 'reserved';
+              } else if (
+                String(s.status || '').toLowerCase() == 'reserved' ||
+                String(s.status || '').toLowerCase() == 'in_use'
+              ) {
+                currentStatus = 'available';
+              }
+              return { currentStatus };
+            })(),
             id: s.id,
             chargerId: s.chargerId || c.id,
             socketNumber: s.socketNumber,
@@ -728,7 +885,6 @@ export class ChargerService {
             pricePerKwh: s.pricePerKwh ? parseFloat(s.pricePerKwh) : null,
             pricePerHour: s.pricePerHour ? parseFloat(s.pricePerHour) : null,
             isFree: s.isFree || false,
-            currentStatus: s.status,
             bookingMode: s.bookingMode,
             isOccupied: s.occupiedBy ? true : false,
             createdAt: s.createdAt,

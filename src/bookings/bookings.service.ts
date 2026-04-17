@@ -221,7 +221,7 @@ export class BookingsService {
     booking.status = 'cancelled';
     booking.cancelledAt = new Date();
     const saved = await this.bookingRepository.save(booking);
-    await this._syncChargerAndSocketAvailability(saved);
+    await this._syncChargerAndSocketAvailability(saved.chargerId);
     return saved;
   }
 
@@ -235,50 +235,96 @@ export class BookingsService {
     }
 
     const saved = await this.bookingRepository.save(booking);
-    await this._syncChargerAndSocketAvailability(saved);
+    await this._syncChargerAndSocketAvailability(saved.chargerId);
     return saved;
   }
 
-  private async _syncChargerAndSocketAvailability(booking: BookingEntity): Promise<void> {
-    if (booking.status !== 'cancelled' && booking.status !== 'completed') {
-      return;
-    }
+  private async _syncChargerAndSocketAvailability(chargerId: string): Promise<void> {
+    const charger = await this.chargerRepository.findOne({ where: { id: chargerId } });
+    if (!charger) return;
 
+    const now = new Date();
     const activeBookingCount = await this.bookingRepository
       .createQueryBuilder('b')
-      .where('b.chargerId = :chargerId', { chargerId: booking.chargerId })
-      .andWhere('b.id != :bookingId', { bookingId: booking.id })
-      .andWhere('b.status = :status', { status: 'active' })
+      .where('b.chargerId = :chargerId', { chargerId })
+      .andWhere('b.startTime <= :now', { now })
+      .andWhere('b.endTime > :now', { now })
+      .andWhere(
+        `(b.status = :activeStatus OR (b.status = :confirmedStatus AND LOWER(COALESCE(b.paymentStatus, '')) = 'success'))`,
+        {
+          activeStatus: 'active',
+          confirmedStatus: 'confirmed',
+        },
+      )
       .getCount();
 
-    if (activeBookingCount == 0) {
-      const charger = await this.chargerRepository.findOne({ where: { id: booking.chargerId } });
-      if (charger && charger.currentStatus != ChargerStatus.AVAILABLE) {
-        charger.currentStatus = ChargerStatus.AVAILABLE;
-        charger.lastStatusUpdate = new Date();
-        await this.chargerRepository.save(charger);
+    const activeInUseCount = await this.bookingRepository
+      .createQueryBuilder('b')
+      .where('b.chargerId = :chargerId', { chargerId })
+      .andWhere('b.startTime <= :now', { now })
+      .andWhere('b.endTime > :now', { now })
+      .andWhere('b.status = :activeStatus', { activeStatus: 'active' })
+      .getCount();
+
+    const nextChargerStatus =
+      activeInUseCount > 0
+        ? ChargerStatus.OCCUPIED
+        : activeBookingCount > 0
+          ? ChargerStatus.RESERVED
+          : ChargerStatus.AVAILABLE;
+
+    if (charger.currentStatus != nextChargerStatus) {
+      charger.currentStatus = nextChargerStatus;
+      charger.lastStatusUpdate = now;
+      await this.chargerRepository.save(charger);
+    }
+
+    const sockets = await this.socketRepository.find({ where: { chargerId } });
+    if (sockets.length == 0) return;
+
+    const blockingRows = await this.bookingRepository
+      .createQueryBuilder('b')
+      .select('b.socketId', 'socketId')
+      .addSelect('b.status', 'status')
+      .addSelect('b.paymentStatus', 'paymentStatus')
+      .where('b.chargerId = :chargerId', { chargerId })
+      .andWhere('b.socket_id IS NOT NULL')
+      .andWhere('b.startTime <= :now', { now })
+      .andWhere('b.endTime > :now', { now })
+      .andWhere(
+        `(b.status = :activeStatus OR (b.status = :confirmedStatus AND LOWER(COALESCE(b.paymentStatus, '')) = 'success'))`,
+        {
+          activeStatus: 'active',
+          confirmedStatus: 'confirmed',
+        },
+      )
+      .getRawMany<{ socketId: string; status: string; paymentStatus: string | null }>();
+
+    const activeSocketIds = new Set<string>();
+    const blockedSocketIds = new Set<string>();
+    for (const row of blockingRows) {
+      if (!row.socketId) continue;
+      blockedSocketIds.add(row.socketId);
+      if ((row.status || '').toLowerCase() == 'active') {
+        activeSocketIds.add(row.socketId);
       }
     }
 
-    if (booking.socketId != null) {
-      const activeSocketBookingCount = await this.bookingRepository
-        .createQueryBuilder('b')
-        .where('b.chargerId = :chargerId', { chargerId: booking.chargerId })
-        .andWhere('b.socket_id = :socketId', { socketId: booking.socketId })
-        .andWhere('b.id != :bookingId', { bookingId: booking.id })
-        .andWhere('b.status = :status', { status: 'active' })
-        .getCount();
+    for (const socket of sockets) {
+      const shouldBeInUse = activeSocketIds.has(socket.id);
+      const shouldBeReserved = blockedSocketIds.has(socket.id) && !shouldBeInUse;
+      const nextSocketStatus = shouldBeInUse
+        ? 'in_use'
+        : shouldBeReserved
+          ? 'reserved'
+          : 'available';
 
-      if (activeSocketBookingCount == 0) {
-        const socket = await this.socketRepository.findOne({
-          where: { id: booking.socketId, chargerId: booking.chargerId },
-        });
-
-        if (socket && socket.status !== 'available') {
-          socket.status = 'available';
+      if (socket.status !== nextSocketStatus) {
+        socket.status = nextSocketStatus;
+        if (nextSocketStatus == 'available') {
           socket.occupiedBy = null as any;
-          await this.socketRepository.save(socket);
         }
+        await this.socketRepository.save(socket);
       }
     }
   }
@@ -358,6 +404,7 @@ export class BookingsService {
         booking.status = 'cancelled';
         booking.noShow = true;
         await this.bookingRepository.save(booking);
+        await this._syncChargerAndSocketAvailability(booking.chargerId);
         cancelledCount++;
 
         this.logger.warn(
@@ -872,6 +919,7 @@ export class BookingsService {
       booking.status = 'cancelled';
       booking.noShow = true;
       await this.bookingRepository.save(booking);
+      await this._syncChargerAndSocketAvailability(booking.chargerId);
 
       throw new BadRequestException(
         'Check-in window has expired. Your booking has been marked as a no-show.'
@@ -890,6 +938,7 @@ export class BookingsService {
     booking.checkInTime = now;
     booking.status = 'active';
     const updatedBooking = await this.bookingRepository.save(booking);
+    await this._syncChargerAndSocketAvailability(booking.chargerId);
 
     // Update charger status
     const charger = booking.charger;
@@ -920,12 +969,9 @@ export class BookingsService {
     booking.noShow = true;
     booking.status = 'cancelled';
     await this.bookingRepository.save(booking);
+    await this._syncChargerAndSocketAvailability(booking.chargerId);
 
-    // Release charger
     const charger = booking.charger;
-    charger.currentStatus = ChargerStatus.AVAILABLE;
-    charger.lastStatusUpdate = new Date();
-    await this.chargerRepository.save(charger);
 
     this.logger.log(`Booking ${bookingId} marked as no-show`);
 
