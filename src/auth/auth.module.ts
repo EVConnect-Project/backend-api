@@ -40,6 +40,6 @@ import { JwtStrategy } from './strategies/jwt.strategy';
   ],
   controllers: [AuthController, EnhancedAuthController, VehicleProfileController, MigrationController],
   providers: [AuthService, EnhancedAuthService, VehicleProfileService, OtpService, SmsService, JwtStrategy],
-  exports: [AuthService, EnhancedAuthService, JwtModule, VehicleProfileService],
+  exports: [AuthService, EnhancedAuthService, JwtModule, VehicleProfileService, SmsService],
 })
 export class AuthModule {}

@@ -84,7 +84,7 @@ export class PaymentsService {
     const signature = this.generateCardSetupSignature(setupId, userId, expiresAt);
     const callbackUrl =
       this.configService.get<string>('MOBILE_CARD_SETUP_CALLBACK_URL') ||
-      'evconnect://wallet/card-setup';
+      'evrs://wallet/card-setup';
 
     const hostedSetupBaseUrl = this.configService.get<string>('PAYHERE_CARD_SETUP_URL');
     let hostedUrl: string | null = null;
@@ -162,6 +162,9 @@ export class PaymentsService {
     const normalizedMethod = (paymentMethod || 'payhere').toLowerCase();
 
     try {
+      if (normalizedMethod === 'payhere') {
+        this.assertPayHereConfigured();
+      }
 
       if (amount <= 0) {
         throw new BadRequestException('Payment amount must be greater than 0');
@@ -315,8 +318,8 @@ export class PaymentsService {
           amount: amountStr,
           first_name: booking.user?.name?.split(' ')[0] || 'Customer',
           last_name: booking.user?.name?.split(' ').slice(1).join(' ') || '',
-          email: 'customer@evconnect.lk', // Default email for PayHere
-          phone: booking.user?.phoneNumber || '0771234567',
+          email: 'customer@evrs.lk', // Default email for PayHere
+          phone: this.normalizeSriLankanPhone(booking.user?.phoneNumber || '') || '0771234567',
           address: booking.charger?.address || 'Colombo',
           city: 'Colombo',
           country: 'Sri Lanka',
@@ -568,5 +571,40 @@ export class PaymentsService {
     const transactions = await query.getMany();
 
     return { transactions, total };
+  }
+
+  private assertPayHereConfigured(): void {
+    const merchantId = this.payhereMerchantId.trim();
+    const merchantSecret = this.payhereMerchantSecret.trim();
+
+    const invalidMerchantId =
+      !merchantId || merchantId.toUpperCase() === 'MERCHANT_ID';
+    const invalidMerchantSecret =
+      !merchantSecret || merchantSecret.toUpperCase() === 'MERCHANT_SECRET';
+
+    if (invalidMerchantId || invalidMerchantSecret) {
+      throw new BadRequestException(
+        'PayHere sandbox is not configured. Set PAYHERE_MERCHANT_ID and PAYHERE_MERCHANT_SECRET in backend environment.',
+      );
+    }
+  }
+
+  private normalizeSriLankanPhone(phone: string): string {
+    const digits = String(phone || '').replace(/\D/g, '');
+    if (!digits) return '';
+
+    if (digits.startsWith('0') && digits.length === 10) {
+      return digits;
+    }
+
+    if (digits.startsWith('94') && digits.length === 11) {
+      return `0${digits.substring(2)}`;
+    }
+
+    if (digits.length === 9 && digits.startsWith('7')) {
+      return `0${digits}`;
+    }
+
+    return digits;
   }
 }

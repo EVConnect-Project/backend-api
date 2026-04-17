@@ -14,6 +14,7 @@ import { ChargerSocket } from './entities/charger-socket.entity';
 import { ChargingStation } from './entities/charging-station.entity';
 import { Station } from '../station/entities/station.entity';
 import { ChargerModule } from '../charger/charger.module';
+import { AuthModule } from '../auth/auth.module';
 import { ServiceStationApplicationEntity } from '../service-stations/entities/service-station-application.entity';
 import { ServiceStationEntity } from '../service-stations/entities/service-station.entity';
 
@@ -32,6 +33,7 @@ import { ServiceStationEntity } from '../service-stations/entities/service-stati
     ]),
     HttpModule,
     ChargerModule,
+    AuthModule,
   ],
   controllers: [OwnerController, OwnerPaymentAccountController],
   providers: [OwnerService, OwnerPaymentAccountService, IsChargerOwnerGuard],

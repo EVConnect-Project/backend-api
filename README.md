@@ -62,7 +62,7 @@ $ npm run test:cov
 To enable hosted card tokenization (wallet-only add card flow), configure these environment variables:
 
 - `PAYHERE_CARD_SETUP_URL`: Hosted card setup page URL provided by your payment gateway/tokenization service.
-- `MOBILE_CARD_SETUP_CALLBACK_URL`: Callback URL used by the mobile app to capture tokenized card details. Default: `evconnect://wallet/card-setup`.
+- `MOBILE_CARD_SETUP_CALLBACK_URL`: Callback URL used by the mobile app to capture tokenized card details. Default: `evrs://wallet/card-setup`.
 
 The hosted setup page should redirect to the callback URL with query parameters:
 
@@ -74,9 +74,26 @@ The hosted setup page should redirect to the callback URL with query parameters:
 
 Example callback:
 
-`evconnect://wallet/card-setup?token=tok_xxx&lastFour=4242&expiryMonth=12&expiryYear=29&cardBrand=Visa`
+`evrs://wallet/card-setup?token=tok_xxx&lastFour=4242&expiryMonth=12&expiryYear=29&cardBrand=Visa`
 
 If `PAYHERE_CARD_SETUP_URL` is not configured, the app falls back to the local manual entry flow.
+
+## PayHere Sandbox Integration (Bookings)
+
+Set these environment variables to enable PayHere sandbox checkout for booking payments:
+
+- `PAYHERE_BASE_URL`: Sandbox URL `https://sandbox.payhere.lk`
+- `PAYHERE_MERCHANT_ID`: Your PayHere sandbox merchant id
+- `PAYHERE_MERCHANT_SECRET`: Your PayHere sandbox merchant secret
+- `PAYHERE_NOTIFY_URL`: Public webhook URL to this backend (example: `https://<public-domain>/api/payments/webhook`)
+- `PAYHERE_RETURN_URL`: Return URL used after successful checkout (example: `https://<public-domain>/payment/success`)
+- `PAYHERE_CANCEL_URL`: Cancel URL used after cancelled checkout (example: `https://<public-domain>/payment/cancel`)
+
+Notes:
+
+- `PAYHERE_NOTIFY_URL` must be publicly reachable by PayHere for webhook status updates.
+- In local development, use a tunnel (for example ngrok/cloudflared) and set `PAYHERE_NOTIFY_URL` to that public URL.
+- Booking payment status is finalized when webhook status code `2` is received and verified.
 
 ## SMS OTP Configuration (Text.lk)
 
@@ -91,6 +108,8 @@ Set the following environment variables in your backend runtime environment:
 - `SMS_APP_NAME`: Optional app name injected into welcome template. Default: `EVRS`
 - `TEXTLK_WELCOME_MESSAGE_TEMPLATE`: Optional welcome SMS template. Supports placeholders `{{name}}` and `{{appName}}`.
 - `TEXTLK_ACCOUNT_DELETED_MESSAGE_TEMPLATE`: Optional account-deleted SMS template. Supports placeholders `{{name}}` and `{{appName}}`.
+- `TEXTLK_BOOKING_REQUEST_MESSAGE_TEMPLATE`: Optional booking-request SMS template. Supports placeholders `{{name}}`, `{{appName}}`, `{{chargerName}}`, `{{startTime}}`, and `{{endTime}}`.
+- `TEXTLK_BOOKING_ACCEPTED_MESSAGE_TEMPLATE`: Optional booking-accepted SMS template. Supports placeholders `{{name}}`, `{{appName}}`, and `{{chargerName}}`.
 
 Example template:
 

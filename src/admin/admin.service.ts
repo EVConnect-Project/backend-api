@@ -1341,14 +1341,22 @@ export class AdminService {
       queryBuilder.where('booking.status IN (:...statuses)', { statuses });
     }
 
-    if (startDate && endDate) {
-      queryBuilder.andWhere(
-        'booking.createdAt BETWEEN :startDate AND :endDate',
-        {
-          startDate: new Date(startDate),
-          endDate: new Date(endDate),
-        },
-      );
+    if (startDate || endDate) {
+      if (startDate) {
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        queryBuilder.andWhere('booking.createdAt >= :startDate', {
+          startDate: start,
+        });
+      }
+
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        queryBuilder.andWhere('booking.createdAt <= :endDate', {
+          endDate: end,
+        });
+      }
     }
 
     const [bookings, total] = await queryBuilder

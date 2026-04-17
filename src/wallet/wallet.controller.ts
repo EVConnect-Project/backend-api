@@ -44,6 +44,15 @@ export class WalletController {
     return this.walletService.createTopup(req.user.userId, dto);
   }
 
+  @Post('wallet/topup/confirm')
+  @UseGuards(JwtAuthGuard)
+  confirmWalletTopup(
+    @Request() req,
+    @Body() payload: Record<string, any>,
+  ) {
+    return this.walletService.confirmTopupFromReturn(req.user.userId, payload);
+  }
+
   @Get('transactions')
   @UseGuards(JwtAuthGuard)
   getTransactions(

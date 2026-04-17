@@ -22,11 +22,21 @@ export class ChatService {
     dto: CreateConversationDto,
     userId: string,
   ): Promise<Conversation> {
+    const preferredType = dto.type;
+    const fallbackType =
+      dto.type === ConversationType.DIRECT ? ConversationType.MECHANIC : dto.type;
+
     // Check if conversation already exists
     let conversation = await this.conversationRepo.findOne({
       where: [
-        { userId, participantId: dto.participantId, type: dto.type },
-        { userId: dto.participantId, participantId: userId, type: dto.type },
+        { userId, participantId: dto.participantId, type: preferredType },
+        { userId: dto.participantId, participantId: userId, type: preferredType },
+        ...(preferredType !== fallbackType
+          ? [
+              { userId, participantId: dto.participantId, type: fallbackType },
+              { userId: dto.participantId, participantId: userId, type: fallbackType },
+            ]
+          : []),
       ],
       relations: ['user', 'participant'],
     });
@@ -34,14 +44,24 @@ export class ChatService {
     if (!conversation) {
       // Create new conversation
       conversation = this.conversationRepo.create({
-        type: dto.type,
+        type: preferredType,
         userId,
         participantId: dto.participantId,
         referenceId: dto.referenceId,
         referenceType: dto.referenceType,
       });
 
-      conversation = await this.conversationRepo.save(conversation);
+      try {
+        conversation = await this.conversationRepo.save(conversation);
+      } catch (error) {
+        // Backward compatibility: some deployed DB schemas may not yet accept `direct` type.
+        if (preferredType === ConversationType.DIRECT) {
+          conversation.type = fallbackType;
+          conversation = await this.conversationRepo.save(conversation);
+        } else {
+          throw error;
+        }
+      }
 
       // Send initial message if provided
       if (dto.initialMessage) {

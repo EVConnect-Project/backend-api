@@ -7,6 +7,7 @@ import { Charger } from '../charger/entities/charger.entity';
 import { ChargerSocket } from '../owner/entities/charger-socket.entity';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { NotificationsService } from '../notifications/notifications.service';
+import { SmsService } from '../auth/sms.service';
 import { BookingMode } from '../charger/enums/booking-mode.enum';
 import { BookingType } from '../charger/enums/booking-type.enum';
 import { ChargerStatus } from '../charger/enums/charger-status.enum';
@@ -39,6 +40,7 @@ export class BookingsService {
     @InjectRepository(ChargerSocket)
     private socketRepository: Repository<ChargerSocket>,
     private notificationsService: NotificationsService,
+    private smsService: SmsService,
   ) {}
 
   /**
@@ -129,6 +131,8 @@ export class BookingsService {
       const savedBooking = await this.bookingRepository.save(booking);
 
       this.logger.log(`Booking created: ${savedBooking.id} for charger ${chargerId} by user ${userId}`);
+
+      this.notifyOwnerAboutBookingRequest(charger, savedBooking);
 
       // Send booking confirmation notification (fire-and-forget to prevent blocking response)
       this.notificationsService.sendBookingConfirmed(
@@ -867,6 +871,8 @@ export class BookingsService {
 
     this.logger.log(`Pre-booking created: ${savedBooking.id} for charger ${dto.chargerId}`);
 
+    this.notifyOwnerAboutBookingRequest(charger, savedBooking);
+
     // Send notification without breaking booking creation on notification errors.
     this.notificationsService
       .sendBookingConfirmed(
@@ -896,6 +902,33 @@ export class BookingsService {
       gracePeriodMinutes: settings.gracePeriodMinutes,
       autoCancelAfterMinutes: settings.gracePeriodMinutes,
     };
+  }
+
+  private notifyOwnerAboutBookingRequest(charger: Charger, booking: BookingEntity): void {
+    if (booking.status !== 'pending') {
+      return;
+    }
+
+    const ownerPhone = charger.owner?.phoneNumber;
+    if (!ownerPhone) {
+      this.logger.warn(
+        `Owner phone number not found for charger ${charger.id}. Skipping booking request SMS.`,
+      );
+      return;
+    }
+
+    this.smsService
+      .sendBookingRequestSMS(ownerPhone, {
+        ownerName: charger.owner?.name,
+        chargerName: charger.name || 'your charger',
+        startTime: booking.startTime,
+        endTime: booking.endTime,
+      })
+      .catch((error) => {
+        this.logger.error(
+          `Failed to send owner booking request SMS for booking ${booking.id}: ${error.message}`,
+        );
+      });
   }
 
   /**

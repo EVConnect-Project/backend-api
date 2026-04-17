@@ -25,6 +25,7 @@ import { BookingMode } from '../charger/enums/booking-mode.enum';
 import { ChargerStatus } from '../charger/enums/charger-status.enum';
 import { Station } from '../station/entities/station.entity';
 import { ChargersGateway } from '../charger/chargers.gateway';
+import { SmsService } from '../auth/sms.service';
 
 @Injectable()
 export class OwnerService {
@@ -48,6 +49,7 @@ export class OwnerService {
     private dataSource: DataSource,
     private httpService: HttpService,
     private chargersGateway: ChargersGateway,
+    private smsService: SmsService,
   ) {}
 
   /**
@@ -736,7 +738,7 @@ export class OwnerService {
   ) {
     const booking = await this.bookingRepository.findOne({
       where: { id },
-      relations: ['charger'],
+      relations: ['charger', 'user'],
     });
 
     if (!booking) {
@@ -758,6 +760,19 @@ export class OwnerService {
       booking.cancelledAt = new Date();
     }
     const updated = await this.bookingRepository.save(booking);
+
+    if (status === 'confirmed' && booking.user?.phoneNumber) {
+      this.smsService
+        .sendBookingAcceptedSMS(booking.user.phoneNumber, {
+          userName: booking.user.name,
+          chargerName: booking.charger?.name || 'your selected charger',
+        })
+        .catch((error) => {
+          console.error(
+            `[OwnerService] Failed to send booking accepted SMS for booking ${booking.id}: ${error.message}`,
+          );
+        });
+    }
 
     return {
       booking: updated,

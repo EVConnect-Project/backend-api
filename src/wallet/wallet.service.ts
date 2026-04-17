@@ -39,6 +39,7 @@ export class WalletService {
   private readonly payhereNotifyUrl: string;
   private readonly payhereReturnUrl: string;
   private readonly payhereCancelUrl: string;
+  private readonly allowUnsafeReturnConfirmation: boolean;
 
   constructor(
     @InjectRepository(WalletEntity)
@@ -74,8 +75,7 @@ export class WalletService {
     this.payhereMerchantId =
       (this.configService.get<string>('PAYHERE_MERCHANT_ID') || 'MERCHANT_ID').trim();
     this.payhereMerchantSecret =
-      (this.configService.get<string>('PAYHERE_MERCHANT_SECRET') ||
-        'MERCHANT_SECRET').trim();
+      (this.configService.get<string>('PAYHERE_MERCHANT_SECRET') || 'MERCHANT_SECRET').trim();
     this.payhereNotifyUrl =
       (this.configService.get<string>('PAYHERE_NOTIFY_URL') ||
         'http://localhost:4000/api/payment/webhook').trim();
@@ -85,6 +85,10 @@ export class WalletService {
     this.payhereCancelUrl =
       (this.configService.get<string>('PAYHERE_CANCEL_URL') ||
         'http://localhost:3000/payment/cancel').trim();
+    this.allowUnsafeReturnConfirmation =
+      String(this.configService.get<string>('PAYHERE_ALLOW_RETURN_FALLBACK') || 'false')
+        .trim()
+        .toLowerCase() === 'true';
   }
 
   async getWallet(userId: string) {
@@ -132,6 +136,8 @@ export class WalletService {
   }
 
   async createTopup(userId: string, dto: WalletTopupDto) {
+    this.assertPayHereConfigured();
+
     const amount = this.toMoney(dto.amount);
     if (amount < this.minimumTopupAmount) {
       throw new BadRequestException(
@@ -159,11 +165,11 @@ export class WalletService {
     const [firstName, ...restNames] = customerName.split(/\s+/);
     const lastName = restNames.join(' ');
     const rawPhone = String(user.phoneNumber || '').trim();
-    const sanitizedPhone = rawPhone.replace(/\D/g, '');
+    const sanitizedPhone = this.normalizeSriLankanPhone(rawPhone);
     const rawEmail =
       typeof (user as any).email === 'string' ? String((user as any).email).trim() : '';
     const hasUsableEmail = rawEmail.includes('@') && rawEmail.includes('.');
-    const userEmail = hasUsableEmail ? rawEmail : 'no-reply@evconnect.lk';
+    const userEmail = hasUsableEmail ? rawEmail : 'no-reply@evrs.lk';
 
     const transaction = await this.walletTransactionRepository.save(
       this.walletTransactionRepository.create({
@@ -179,6 +185,8 @@ export class WalletService {
       }),
     );
 
+    const currency = String(wallet.currency || 'LKR').toUpperCase();
+
     const payhereData = {
       merchant_id: this.payhereMerchantId,
       return_url: this.payhereReturnUrl,
@@ -186,7 +194,7 @@ export class WalletService {
       notify_url: this.payhereNotifyUrl,
       order_id: orderId,
       items: `EVRS Wallet Top-up (${userId.slice(0, 8)})`,
-      currency: wallet.currency,
+      currency,
       amount: amount.toFixed(2),
       first_name: firstName || 'EVRS',
       last_name: lastName || 'Customer',
@@ -195,7 +203,7 @@ export class WalletService {
       address: 'Sri Lanka',
       city: 'Colombo',
       country: 'Sri Lanka',
-      hash: this.generatePayHereCheckoutHash(orderId, amount, wallet.currency),
+      hash: this.generatePayHereCheckoutHash(orderId, amount, currency),
       custom_1: userId,
       custom_2: transaction.transactionId,
     };
@@ -290,6 +298,108 @@ export class WalletService {
     });
 
     return { received: true, failed: true, transactionId: transaction.transactionId };
+  }
+
+  async confirmTopupFromReturn(userId: string, payload: Record<string, any>) {
+    const orderId = String(payload?.order_id || payload?.orderId || '').trim();
+    const rawStatusCode = String(payload?.status_code || payload?.statusCode || '').trim();
+    const statusCode = Number(rawStatusCode);
+
+    if (!orderId) {
+      throw new BadRequestException('Missing order_id in callback payload');
+    }
+
+    const transaction = await this.walletTransactionRepository.findOne({
+      where: {
+        userId,
+        referenceId: orderId,
+        type: WalletTransactionType.TOPUP,
+      },
+    });
+
+    if (!transaction) {
+      throw new NotFoundException('Top-up transaction not found for this user');
+    }
+
+    if (transaction.status === WalletTransactionStatus.SUCCESS) {
+      return {
+        received: true,
+        idempotent: true,
+        transactionId: transaction.transactionId,
+      };
+    }
+
+    if (!Number.isFinite(statusCode) || statusCode <= 0) {
+      return {
+        received: true,
+        pendingVerification: true,
+        transactionId: transaction.transactionId,
+      };
+    }
+
+    if (statusCode !== 2) {
+      await this.walletTransactionRepository.update(transaction.transactionId, {
+        status: WalletTransactionStatus.FAILED,
+        metadata: {
+          ...(transaction.metadata || {}),
+          callbackStatusCode: statusCode,
+          callbackConfirmedAt: new Date().toISOString(),
+        },
+      });
+
+      return {
+        received: true,
+        failed: true,
+        transactionId: transaction.transactionId,
+      };
+    }
+
+    const merchantId = String(payload?.merchant_id || '').trim();
+    const incomingHash = String(payload?.md5sig || '').trim();
+    const payhereAmount = String(payload?.payhere_amount || transaction.amount).trim();
+    const payhereCurrency = String(payload?.payhere_currency || 'LKR').trim();
+
+    const hasSignaturePayload =
+      !!merchantId && !!incomingHash && !!payhereAmount && !!payhereCurrency;
+
+    if (hasSignaturePayload) {
+      if (merchantId !== this.payhereMerchantId) {
+        throw new BadRequestException('Invalid merchant id');
+      }
+
+      this.verifyPayHereWebhookHash(
+        merchantId,
+        orderId,
+        payhereAmount,
+        payhereCurrency,
+        rawStatusCode,
+        incomingHash,
+      );
+    } else if (!this.allowUnsafeReturnConfirmation) {
+      return {
+        received: true,
+        pendingVerification: true,
+        transactionId: transaction.transactionId,
+      };
+    } else {
+      this.logger.warn(
+        `Top-up ${transaction.transactionId} confirmed via return fallback without webhook signature`,
+      );
+    }
+
+    const result = await this.creditWalletForTopup(transaction.transactionId, {
+      paymentId: payload?.payment_id,
+      payhereAmount,
+      payhereCurrency,
+      confirmedVia: hasSignaturePayload ? 'return_signature' : 'return_fallback',
+    });
+
+    return {
+      received: true,
+      transactionId: result.transactionId,
+      walletBalance: result.walletBalance,
+      confirmedVia: hasSignaturePayload ? 'return_signature' : 'return_fallback',
+    };
   }
 
   async startCharging(userId: string, dto: StartChargingDto) {
@@ -597,7 +707,12 @@ export class WalletService {
 
   private async creditWalletForTopup(
     transactionId: string,
-    webhookData: { paymentId: string; payhereAmount: string; payhereCurrency: string },
+    webhookData: {
+      paymentId?: string;
+      payhereAmount: string;
+      payhereCurrency: string;
+      confirmedVia?: string;
+    },
   ) {
     return this.dataSource.transaction(async (manager) => {
       const txRepo = manager.getRepository(WalletTransactionEntity);
@@ -631,6 +746,7 @@ export class WalletService {
         paymentId: webhookData.paymentId,
         payhereAmount: webhookData.payhereAmount,
         payhereCurrency: webhookData.payhereCurrency,
+        confirmedVia: webhookData.confirmedVia || 'webhook',
         processedAt: new Date().toISOString(),
       };
       await txRepo.save(transaction);
@@ -675,6 +791,7 @@ export class WalletService {
     amount: number,
     currency: string,
   ) {
+    const currencyCode = String(currency || 'LKR').toUpperCase();
     const merchantSecretHash = createHash('md5')
       .update(this.payhereMerchantSecret)
       .digest('hex')
@@ -682,10 +799,45 @@ export class WalletService {
 
     return createHash('md5')
       .update(
-        `${this.payhereMerchantId}${orderId}${amount.toFixed(2)}${currency}${merchantSecretHash}`,
+        `${this.payhereMerchantId}${orderId}${amount.toFixed(2)}${currencyCode}${merchantSecretHash}`,
       )
       .digest('hex')
       .toUpperCase();
+  }
+
+  private assertPayHereConfigured(): void {
+    const merchantId = this.payhereMerchantId.trim();
+    const merchantSecret = this.payhereMerchantSecret.trim();
+
+    const invalidMerchantId =
+      !merchantId || merchantId.toUpperCase() === 'MERCHANT_ID';
+    const invalidMerchantSecret =
+      !merchantSecret || merchantSecret.toUpperCase() === 'MERCHANT_SECRET';
+
+    if (invalidMerchantId || invalidMerchantSecret) {
+      throw new BadRequestException(
+        'PayHere sandbox is not configured. Set PAYHERE_MERCHANT_ID and PAYHERE_MERCHANT_SECRET in backend environment.',
+      );
+    }
+  }
+
+  private normalizeSriLankanPhone(phone: string): string {
+    const digits = String(phone || '').replace(/\D/g, '');
+    if (!digits) return '';
+
+    if (digits.startsWith('0') && digits.length === 10) {
+      return digits;
+    }
+
+    if (digits.startsWith('94') && digits.length === 11) {
+      return `0${digits.substring(2)}`;
+    }
+
+    if (digits.length === 9 && digits.startsWith('7')) {
+      return `0${digits}`;
+    }
+
+    return digits;
   }
 
   private async getOrCreateWallet(

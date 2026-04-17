@@ -7,12 +7,14 @@ import { BookingEntity } from './entities/booking.entity';
 import { Charger } from '../charger/entities/charger.entity';
 import { ChargerSocket } from '../owner/entities/charger-socket.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([BookingEntity, Charger, ChargerSocket]),
     ScheduleModule.forRoot(), // Enable cron jobs for auto-cancel
     NotificationsModule, // Import to use NotificationsService
+    AuthModule,
   ],
   controllers: [BookingsController],
   providers: [BookingsService],

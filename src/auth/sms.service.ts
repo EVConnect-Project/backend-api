@@ -11,6 +11,8 @@ export class SmsService {
   private readonly httpSendEndpoint: string;
   private readonly welcomeTemplate: string;
   private readonly accountDeletedTemplate: string;
+  private readonly bookingRequestTemplate: string;
+  private readonly bookingAcceptedTemplate: string;
 
   constructor(private configService: ConfigService) {
     this.appName = this.configService.get<string>('SMS_APP_NAME') || 'EVRS';
@@ -22,6 +24,12 @@ export class SmsService {
     this.accountDeletedTemplate =
       this.configService.get<string>('TEXTLK_ACCOUNT_DELETED_MESSAGE_TEMPLATE') ||
       'Hi {{name}}, your account is successfully deleted from {{appName}}.';
+    this.bookingRequestTemplate =
+      this.configService.get<string>('TEXTLK_BOOKING_REQUEST_MESSAGE_TEMPLATE') ||
+      'Hi {{name}}, you have a new booking request for {{chargerName}} from {{startTime}} to {{endTime}} on {{appName}}. Open the app to accept or decline.';
+    this.bookingAcceptedTemplate =
+      this.configService.get<string>('TEXTLK_BOOKING_ACCEPTED_MESSAGE_TEMPLATE') ||
+      'Hi {{name}}, your booking for {{chargerName}} is accepted. Please proceed to payment in {{appName}} to confirm your session.';
 
     const oauthBase =
       this.configService.get<string>('TEXTLK_OAUTH_API_ENDPOINT') ||
@@ -204,5 +212,73 @@ export class SmsService {
     } catch (error) {
       this.logger.error(`Failed to send account-deleted SMS to ${phoneNumber}:`, error);
     }
+  }
+
+  /**
+   * Send SMS to charger owner for a new pending booking request.
+   */
+  async sendBookingRequestSMS(
+    phoneNumber: string,
+    payload: {
+      ownerName?: string;
+      chargerName: string;
+      startTime: Date;
+      endTime: Date;
+    },
+  ): Promise<void> {
+    try {
+      const resolvedName = (payload.ownerName || '').trim() || 'there';
+      const startLabel = this.formatDateTime(payload.startTime);
+      const endLabel = this.formatDateTime(payload.endTime);
+
+      const message = this.bookingRequestTemplate
+        .replace(/\{\{\s*name\s*\}\}/g, resolvedName)
+        .replace(/\{\{\s*appName\s*\}\}/g, this.appName)
+        .replace(/\{\{\s*chargerName\s*\}\}/g, payload.chargerName)
+        .replace(/\{\{\s*startTime\s*\}\}/g, startLabel)
+        .replace(/\{\{\s*endTime\s*\}\}/g, endLabel);
+
+      await this.sendMessage(phoneNumber, message);
+    } catch (error) {
+      this.logger.error(`Failed to send booking-request SMS to ${phoneNumber}:`, error);
+    }
+  }
+
+  /**
+   * Send SMS to user when booking request is accepted by charger owner.
+   */
+  async sendBookingAcceptedSMS(
+    phoneNumber: string,
+    payload: {
+      userName?: string;
+      chargerName: string;
+    },
+  ): Promise<void> {
+    try {
+      const resolvedName = (payload.userName || '').trim() || 'there';
+      const message = this.bookingAcceptedTemplate
+        .replace(/\{\{\s*name\s*\}\}/g, resolvedName)
+        .replace(/\{\{\s*appName\s*\}\}/g, this.appName)
+        .replace(/\{\{\s*chargerName\s*\}\}/g, payload.chargerName);
+
+      await this.sendMessage(phoneNumber, message);
+    } catch (error) {
+      this.logger.error(`Failed to send booking-accepted SMS to ${phoneNumber}:`, error);
+    }
+  }
+
+  private formatDateTime(input: Date): string {
+    const date = input instanceof Date ? input : new Date(input);
+    if (Number.isNaN(date.getTime())) {
+      return 'scheduled time';
+    }
+
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+
+    return `${year}-${month}-${day} ${hours}:${minutes}`;
   }
 }
