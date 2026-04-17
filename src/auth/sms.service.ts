@@ -26,10 +26,10 @@ export class SmsService {
       'Hi {{name}}, your account is successfully deleted from {{appName}}.';
     this.bookingRequestTemplate =
       this.configService.get<string>('TEXTLK_BOOKING_REQUEST_MESSAGE_TEMPLATE') ||
-      'Hi {{name}}, you have a new booking request for {{chargerName}} from {{startTime}} to {{endTime}} on {{appName}}. Open the app to accept or decline.';
+      'Hi {{name}}, you have a new booking request for {{chargerName}} from {{startTime}} to {{endTime}} on {{appName}}. Open the EVRS app -> My Chargers to accept or decline.';
     this.bookingAcceptedTemplate =
       this.configService.get<string>('TEXTLK_BOOKING_ACCEPTED_MESSAGE_TEMPLATE') ||
-      'Hi {{name}}, your booking for {{chargerName}} is accepted. Please proceed to payment in {{appName}} to confirm your session.';
+      'Hi {{name}}, your booking for {{chargerName}} is accepted. Please proceed to payment in {{appName}} to confirm your session.Go to EVRS app -> My Bookings.';
 
     const oauthBase =
       this.configService.get<string>('TEXTLK_OAUTH_API_ENDPOINT') ||
