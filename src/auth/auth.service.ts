@@ -284,12 +284,10 @@ export class AuthService {
     // Send OTP via SMS
     await this.smsService.sendOTP(phoneNumber, otp);
 
-    const isDev = this.configService.get<string>('NODE_ENV') !== 'production';
     return {
       success: true,
       message: 'OTP sent successfully',
       expiresIn: 300, // 5 minutes in seconds
-      ...(isDev && { otp }), // Only include OTP in development
     };
   }
 
@@ -421,12 +419,10 @@ export class AuthService {
     // Send OTP via SMS
     await this.smsService.sendOTP(phoneNumber, otp);
 
-    const isDev = this.configService.get<string>('NODE_ENV') !== 'production';
     return {
       success: true,
       message: 'Password reset OTP sent successfully',
       expiresIn: 300, // 5 minutes in seconds
-      ...(isDev && { otp }), // Only include OTP in development
     };
   }
 

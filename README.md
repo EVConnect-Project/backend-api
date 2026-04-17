@@ -78,6 +78,27 @@ Example callback:
 
 If `PAYHERE_CARD_SETUP_URL` is not configured, the app falls back to the local manual entry flow.
 
+## SMS OTP Configuration (Text.lk)
+
+OTP signup, OTP login verification, and forgot-password OTP flows in the backend auth module use Text.lk.
+
+Set the following environment variables in your backend runtime environment:
+
+- `TEXTLK_API_TOKEN`: API token from Text.lk dashboard.
+- `TEXTLK_SENDER_ID`: Approved sender id (example: `EVRS`).
+- `TEXTLK_OAUTH_API_ENDPOINT`: Base OAuth API endpoint. Default: `https://app.text.lk/api/v3/`
+- `TEXTLK_HTTP_API_ENDPOINT`: Base HTTP API endpoint fallback. Default: `https://app.text.lk/api/http/`
+
+How delivery works:
+
+- Primary: OAuth endpoint (`POST /sms/send`) with `Authorization: Bearer <token>`.
+- Fallback: HTTP endpoint (`GET /sms/send`) with query params.
+
+Security notes:
+
+- Do not commit API tokens to source control.
+- Rotate tokens immediately if they are shared in chats, logs, or screenshots.
+
 ## Trip Planner Routes API
 
 ### Endpoint

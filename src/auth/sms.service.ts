@@ -1,84 +1,178 @@
 import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Twilio } from 'twilio';
 
 @Injectable()
 export class SmsService {
-  private twilioClient: Twilio | null = null;
   private readonly logger = new Logger(SmsService.name);
-  private readonly fromNumber: string;
+  private readonly senderId: string;
+  private readonly apiToken: string;
+  private readonly oauthSendEndpoint: string;
+  private readonly httpSendEndpoint: string;
 
   constructor(private configService: ConfigService) {
-    const accountSid = this.configService.get<string>('TWILIO_ACCOUNT_SID');
-    const authToken = this.configService.get<string>('TWILIO_AUTH_TOKEN');
-    this.fromNumber = this.configService.get<string>('TWILIO_PHONE_NUMBER') || '';
+    this.senderId = this.configService.get<string>('TEXTLK_SENDER_ID') || 'EVRS';
+    this.apiToken = this.configService.get<string>('TEXTLK_API_TOKEN') || '';
 
-    if (!accountSid || !authToken || !this.fromNumber) {
+    const oauthBase =
+      this.configService.get<string>('TEXTLK_OAUTH_API_ENDPOINT') ||
+      'https://app.text.lk/api/v3/';
+    const httpBase =
+      this.configService.get<string>('TEXTLK_HTTP_API_ENDPOINT') ||
+      'https://app.text.lk/api/http/';
+
+    this.oauthSendEndpoint = this.buildEndpoint(oauthBase, 'sms/send');
+    this.httpSendEndpoint = this.buildEndpoint(httpBase, 'sms/send');
+
+    if (!this.apiToken) {
       this.logger.warn(
-        'Twilio credentials not configured. SMS sending will be disabled.',
+        'TEXTLK_API_TOKEN not configured. SMS sending is disabled and OTP will only be logged in development.',
       );
+    }
+  }
+
+  private buildEndpoint(base: string, path: string): string {
+    const normalized = base.endsWith('/') ? base : `${base}/`;
+    return new URL(path, normalized).toString();
+  }
+
+  private normalizePhoneNumber(rawPhoneNumber: string): string {
+    const cleaned = String(rawPhoneNumber || '').replace(/[^\d+]/g, '');
+
+    if (cleaned.startsWith('+')) {
+      return cleaned.slice(1);
+    }
+
+    if (cleaned.startsWith('0') && cleaned.length === 10) {
+      return `94${cleaned.slice(1)}`;
+    }
+
+    if (cleaned.startsWith('94')) {
+      return cleaned;
+    }
+
+    if (cleaned.length === 9 && cleaned.startsWith('7')) {
+      return `94${cleaned}`;
+    }
+
+    return cleaned;
+  }
+
+  private async sendViaOAuth(recipient: string, message: string): Promise<boolean> {
+    if (!this.apiToken) {
+      return false;
+    }
+
+    try {
+      const response = await fetch(this.oauthSendEndpoint, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.apiToken}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          recipient,
+          sender_id: this.senderId,
+          type: 'plain',
+          message,
+        }),
+      });
+
+      const result = (await response.json().catch(() => ({}))) as {
+        status?: boolean | string;
+        message?: string;
+      };
+
+      if (!response.ok || result.status === false || result.status === 'error') {
+        this.logger.warn(
+          `Text.lk OAuth send failed (${response.status}): ${result.message || 'unknown error'}`,
+        );
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      this.logger.warn(`Text.lk OAuth request error: ${(error as Error).message}`);
+      return false;
+    }
+  }
+
+  private async sendViaHttp(recipient: string, message: string): Promise<boolean> {
+    if (!this.apiToken) {
+      return false;
+    }
+
+    try {
+      const url = new URL(this.httpSendEndpoint);
+      url.searchParams.set('recipient', recipient);
+      url.searchParams.set('sender_id', this.senderId);
+      url.searchParams.set('type', 'plain');
+      url.searchParams.set('message', message);
+      url.searchParams.set('api_token', this.apiToken);
+
+      const response = await fetch(url.toString(), { method: 'GET' });
+      const result = (await response.json().catch(() => ({}))) as {
+        status?: boolean | string;
+        message?: string;
+      };
+
+      if (!response.ok || result.status === false || result.status === 'error') {
+        this.logger.warn(
+          `Text.lk HTTP send failed (${response.status}): ${result.message || 'unknown error'}`,
+        );
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      this.logger.warn(`Text.lk HTTP request error: ${(error as Error).message}`);
+      return false;
+    }
+  }
+
+  private async sendMessage(phoneNumber: string, message: string): Promise<void> {
+    const recipient = this.normalizePhoneNumber(phoneNumber);
+
+    if (!this.apiToken) {
+      throw new InternalServerErrorException(
+        'SMS provider is not configured. Please contact support.',
+      );
+    }
+
+    const oauthSuccess = await this.sendViaOAuth(recipient, message);
+    if (oauthSuccess) {
+      this.logger.log(`SMS sent via OAuth to ${recipient}`);
       return;
     }
 
-    this.twilioClient = new Twilio(accountSid, authToken);
+    const httpSuccess = await this.sendViaHttp(recipient, message);
+    if (httpSuccess) {
+      this.logger.log(`SMS sent via HTTP fallback to ${recipient}`);
+      return;
+    }
+
+    throw new InternalServerErrorException(
+      'Failed to send verification code. Please try again.',
+    );
   }
 
   /**
    * Send OTP via SMS
    */
   async sendOTP(phoneNumber: string, otp: string): Promise<void> {
-    if (!this.twilioClient) {
-      this.logger.warn(
-        `SMS disabled - OTP for ${phoneNumber}: ${otp} (Development mode)`,
-      );
-      // In development, just log the OTP
-      console.log(`\n🔐 OTP for ${phoneNumber}: ${otp}\n`);
-      return;
-    }
-
-    try {
-      const message = await this.twilioClient.messages.create({
-        body: `Your EVRS verification code is: ${otp}. Valid for 5 minutes. Do not share this code with anyone.`,
-        from: this.fromNumber,
-        to: phoneNumber,
-      });
-
-      this.logger.log(`SMS sent successfully to ${phoneNumber}: ${message.sid}`);
-    } catch (error) {
-      this.logger.error(`Failed to send SMS to ${phoneNumber}:`, error);
-      
-      // In development, still log the OTP even if Twilio fails
-      if (this.configService.get<string>('NODE_ENV') === 'development') {
-        console.log(`\n🔐 OTP for ${phoneNumber}: ${otp} (Twilio failed, development fallback)\n`);
-        return;
-      }
-      
-      throw new InternalServerErrorException(
-        'Failed to send verification code. Please try again.',
-      );
-    }
+    const message = `Your EVRS verification code is: ${otp}. Valid for 5 minutes. Do not share this code.`;
+    await this.sendMessage(phoneNumber, message);
   }
 
   /**
    * Send welcome SMS after successful registration
    */
   async sendWelcomeSMS(phoneNumber: string, userName?: string): Promise<void> {
-    if (!this.twilioClient) {
-      this.logger.warn(`SMS disabled - Welcome message for ${phoneNumber}`);
-      return;
-    }
-
     try {
       const greeting = userName ? `Hi ${userName}` : 'Hello';
-      const message = await this.twilioClient.messages.create({
-        body: `${greeting}! Welcome to EVRS - Connecting to EV World. Start finding and booking EV charging stations near you!`,
-        from: this.fromNumber,
-        to: phoneNumber,
-      });
-
-      this.logger.log(`Welcome SMS sent to ${phoneNumber}: ${message.sid}`);
+      const message = `${greeting}! Welcome to EVRS. Start finding and booking EV charging stations near you.`;
+      await this.sendMessage(phoneNumber, message);
     } catch (error) {
-      // Don't throw error for welcome SMS, just log it
       this.logger.error(`Failed to send welcome SMS to ${phoneNumber}:`, error);
     }
   }
