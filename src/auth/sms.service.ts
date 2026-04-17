@@ -10,6 +10,7 @@ export class SmsService {
   private readonly oauthSendEndpoint: string;
   private readonly httpSendEndpoint: string;
   private readonly welcomeTemplate: string;
+  private readonly accountDeletedTemplate: string;
 
   constructor(private configService: ConfigService) {
     this.appName = this.configService.get<string>('SMS_APP_NAME') || 'EVRS';
@@ -18,6 +19,9 @@ export class SmsService {
     this.welcomeTemplate =
       this.configService.get<string>('TEXTLK_WELCOME_MESSAGE_TEMPLATE') ||
       'Hi {{name}}! Welcome to {{appName}}. Power your journey with Sri Lanka’s growing EV network smart, simple, and seamless.';
+    this.accountDeletedTemplate =
+      this.configService.get<string>('TEXTLK_ACCOUNT_DELETED_MESSAGE_TEMPLATE') ||
+      'Hi {{name}}, your account is successfully deleted from {{appName}}.';
 
     const oauthBase =
       this.configService.get<string>('TEXTLK_OAUTH_API_ENDPOINT') ||
@@ -183,6 +187,22 @@ export class SmsService {
       await this.sendMessage(phoneNumber, message);
     } catch (error) {
       this.logger.error(`Failed to send welcome SMS to ${phoneNumber}:`, error);
+    }
+  }
+
+  /**
+   * Send account-deleted SMS notification
+   */
+  async sendAccountDeletedSMS(phoneNumber: string, userName?: string): Promise<void> {
+    try {
+      const fallbackName = 'there';
+      const resolvedName = (userName || '').trim() || fallbackName;
+      const message = this.accountDeletedTemplate
+        .replace(/\{\{\s*name\s*\}\}/g, resolvedName)
+        .replace(/\{\{\s*appName\s*\}\}/g, this.appName);
+      await this.sendMessage(phoneNumber, message);
+    } catch (error) {
+      this.logger.error(`Failed to send account-deleted SMS to ${phoneNumber}:`, error);
     }
   }
 }

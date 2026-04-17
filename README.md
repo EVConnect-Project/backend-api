@@ -90,10 +90,15 @@ Set the following environment variables in your backend runtime environment:
 - `TEXTLK_HTTP_API_ENDPOINT`: Base HTTP API endpoint fallback. Default: `https://app.text.lk/api/http/`
 - `SMS_APP_NAME`: Optional app name injected into welcome template. Default: `EVRS`
 - `TEXTLK_WELCOME_MESSAGE_TEMPLATE`: Optional welcome SMS template. Supports placeholders `{{name}}` and `{{appName}}`.
+- `TEXTLK_ACCOUNT_DELETED_MESSAGE_TEMPLATE`: Optional account-deleted SMS template. Supports placeholders `{{name}}` and `{{appName}}`.
 
 Example template:
 
 `Hi {{name}}, welcome to {{appName}}! We're happy to have you on board.`
+
+Account deletion template example:
+
+`Hi {{name}}, your account is successfully deleted from {{appName}}.`
 
 How delivery works:
 

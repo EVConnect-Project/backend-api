@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, ConflictException, BadRequestException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ConflictException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
@@ -14,6 +14,8 @@ import { MechanicEntity } from '../mechanics/entities/mechanic.entity';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
     async updateUserProfile(userId: string, data: Partial<{ name: string; phoneNumber: string; countryCode: string; gender: string }>) {
       const user = await this.userRepository.findOne({ where: { id: userId } });
       if (!user) {
@@ -256,7 +258,21 @@ export class AuthService {
       throw new UnauthorizedException('User not found');
     }
 
+    const phoneNumber = user.phoneNumber;
+    const userName = user.name;
+
     await this.userRepository.remove(user);
+
+    if (phoneNumber) {
+      try {
+        await this.smsService.sendAccountDeletedSMS(phoneNumber, userName);
+      } catch (error) {
+        this.logger.warn(
+          `Account deleted but failed to send deletion SMS for user ${userId}: ${(error as Error).message}`,
+        );
+      }
+    }
+
     return { message: 'Account deleted successfully' };
   }
 
