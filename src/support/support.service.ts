@@ -4,12 +4,14 @@ import { Repository } from "typeorm";
 import { SupportReport, ReportStatus } from "./entities/support-report.entity";
 import { CreateReportDto } from "./dto/create-report.dto";
 import { UpdateReportDto } from "./dto/update-report.dto";
+import { SmsService } from "../auth/sms.service";
 
 @Injectable()
 export class SupportService {
   constructor(
     @InjectRepository(SupportReport)
     private readonly supportReportRepository: Repository<SupportReport>,
+    private readonly smsService: SmsService,
   ) {}
 
   async create(
@@ -84,8 +86,25 @@ export class SupportService {
     if (updateReportDto.status === ReportStatus.RESOLVED) {
       report.resolvedAt = new Date();
     }
+    const updatedReport = await this.supportReportRepository.save(report);
 
-    return await this.supportReportRepository.save(report);
+    const hasAdminResponse = !!(updateReportDto.adminResponse || "").trim();
+    const userPhone = report.user?.phoneNumber;
+
+    if (hasAdminResponse && userPhone) {
+      this.smsService
+        .sendSupportReportResponseSMS(userPhone, {
+          responseMessage: updateReportDto.adminResponse || "",
+        })
+        .catch((error) => {
+          console.error(
+            `Failed to send support-response SMS for report ${id}:`,
+            error,
+          );
+        });
+    }
+
+    return updatedReport;
   }
 
   async delete(id: string): Promise<void> {

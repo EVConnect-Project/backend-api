@@ -343,6 +343,34 @@ export class SmsService {
     }
   }
 
+  /**
+   * Send SMS to user when admin responds/updates a support report.
+   */
+  async sendSupportReportResponseSMS(
+    phoneNumber: string,
+    payload: {
+      responseMessage: string;
+    },
+  ): Promise<void> {
+    try {
+      const condensedResponse = payload.responseMessage
+        .replace(/\s+/g, " ")
+        .trim();
+      const clippedResponse =
+        condensedResponse.length > 160
+          ? `${condensedResponse.slice(0, 157)}...`
+          : condensedResponse;
+      const message = clippedResponse || "No additional details provided.";
+
+      await this.sendMessage(phoneNumber, message);
+    } catch (error) {
+      this.logger.error(
+        `Failed to send support-response SMS to ${phoneNumber}:`,
+        error,
+      );
+    }
+  }
+
   private formatDateTime(input: Date): string {
     const date = input instanceof Date ? input : new Date(input);
     if (Number.isNaN(date.getTime())) {
