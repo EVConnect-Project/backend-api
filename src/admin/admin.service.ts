@@ -389,6 +389,127 @@ export class AdminService {
     }));
   }
 
+  async getPaymentAccountVerificationQueue(params: {
+    page: number;
+    limit: number;
+    search?: string;
+    status?: string;
+  }) {
+    const { page, limit, search, status } = params;
+    const skip = (page - 1) * limit;
+
+    const qb = this.paymentAccountRepository
+      .createQueryBuilder('account')
+      .leftJoin(UserEntity, 'user', 'user.id = account.userId')
+      .where('account.isActive = true')
+      .select('account.id', 'accountId')
+      .addSelect('account.userId', 'userId')
+      .addSelect('user.name', 'userName')
+      .addSelect('user.phoneNumber', 'userPhone')
+      .addSelect('account.accountHolderName', 'accountHolderName')
+      .addSelect('account.bankName', 'bankName')
+      .addSelect('account.accountNumber', 'accountNumber')
+      .addSelect('account.accountType', 'accountType')
+      .addSelect('account.branchCode', 'branchCode')
+      .addSelect('account.verificationStatus', 'verificationStatus')
+      .addSelect('account.verificationNotes', 'verificationNotes')
+      .addSelect('account.isPrimary', 'isPrimary')
+      .addSelect('account.createdAt', 'createdAt')
+      .addSelect('account.updatedAt', 'updatedAt')
+      .orderBy('account.createdAt', 'DESC');
+
+    if (status && status !== 'all') {
+      qb.andWhere('account.verificationStatus = :status', { status });
+    }
+
+    if (search && search.trim()) {
+      qb.andWhere(
+        '(user.name ILIKE :search OR user.phoneNumber ILIKE :search OR account.bankName ILIKE :search OR account.accountHolderName ILIKE :search OR account.accountNumber ILIKE :search)',
+        { search: `%${search.trim()}%` },
+      );
+    }
+
+    const total = await qb.clone().getCount();
+    const rows = await qb.skip(skip).take(limit).getRawMany();
+
+    const items = rows.map((row) => {
+      const rawAccountNumber = row.accountNumber as string;
+      const accountNumberMasked = rawAccountNumber
+        ? rawAccountNumber.length > 4
+          ? `****${rawAccountNumber.slice(-4)}`
+          : rawAccountNumber
+        : null;
+
+      return {
+        accountId: row.accountId,
+        userId: row.userId,
+        userName: row.userName || 'Unknown user',
+        userPhone: row.userPhone || null,
+        accountHolderName: row.accountHolderName || null,
+        bankName: row.bankName || null,
+        accountNumberMasked,
+        accountType: row.accountType || null,
+        branchCode: row.branchCode || null,
+        verificationStatus: row.verificationStatus,
+        verificationNotes: row.verificationNotes || null,
+        isPrimary: !!row.isPrimary,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+      };
+    });
+
+    return {
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async updatePaymentAccountVerification(
+    accountId: string,
+    dto: { status: string; notes?: string },
+  ) {
+    const statusValue = dto.status?.toLowerCase();
+    const validStatuses = [
+      VerificationStatus.PENDING,
+      VerificationStatus.VERIFIED,
+      VerificationStatus.REJECTED,
+    ];
+
+    if (!statusValue || !validStatuses.includes(statusValue as VerificationStatus)) {
+      throw new BadRequestException('Invalid verification status');
+    }
+
+    const account = await this.paymentAccountRepository.findOne({ where: { id: accountId } });
+    if (!account) {
+      throw new NotFoundException('Payment account not found');
+    }
+
+    account.verificationStatus = statusValue as VerificationStatus;
+    account.verificationNotes = dto.notes?.trim() || null;
+    await this.paymentAccountRepository.save(account);
+
+    const masked = account.accountNumber
+      ? account.accountNumber.length > 4
+        ? `****${account.accountNumber.slice(-4)}`
+        : account.accountNumber
+      : null;
+
+    return {
+      message: 'Payment account verification updated',
+      account: {
+        accountId: account.id,
+        userId: account.userId,
+        verificationStatus: account.verificationStatus,
+        verificationNotes: account.verificationNotes,
+        accountNumberMasked: masked,
+        updatedAt: account.updatedAt,
+      },
+    };
+  }
+
   async banUser(id: string) {
     const user = await this.userRepository.findOne({ where: { id } });
     if (!user) {

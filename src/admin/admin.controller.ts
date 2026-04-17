@@ -101,6 +101,30 @@ export class AdminController {
     return this.adminService.getUserPaymentAccounts(id);
   }
 
+  @Get('payment-accounts')
+  async getPaymentAccounts(
+    @Query('page') page: string,
+    @Query('limit') limit: string,
+    @Query('search') search: string,
+    @Query('status') status: string,
+  ) {
+    return this.adminService.getPaymentAccountVerificationQueue({
+      page: page ? parseInt(page) : 1,
+      limit: limit ? parseInt(limit) : 20,
+      search,
+      status,
+    });
+  }
+
+  @Patch('payment-accounts/:accountId/verification')
+  async updatePaymentAccountVerification(
+    @Param('accountId') accountId: string,
+    @Body('status') status: string,
+    @Body('notes') notes: string,
+  ) {
+    return this.adminService.updatePaymentAccountVerification(accountId, { status, notes });
+  }
+
   @Post('users/:id/ban')
   async banUser(@Param('id') id: string) {
     const user = await this.adminService.banUser(id);
