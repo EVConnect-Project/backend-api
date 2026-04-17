@@ -694,7 +694,7 @@ export class OwnerService {
   }
 
   /**
-   * Delete a pending booking (ownership verification)
+   * Delete a booking record (ownership verification)
    */
   async deletePendingBooking(id: string, ownerId: string) {
     const booking = await this.bookingRepository.findOne({
@@ -711,9 +711,13 @@ export class OwnerService {
       throw new ForbiddenException('You can only delete bookings for your own chargers');
     }
 
-    // Only allow deleting pending bookings
-    if (booking.status !== 'pending') {
-      throw new BadRequestException('Only pending bookings can be deleted. This booking is ' + booking.status);
+    // Allow deleting terminal records and still-pending requests.
+    const allowedStatuses = ['pending', 'cancelled', 'completed'];
+    if (!allowedStatuses.includes(booking.status)) {
+      throw new BadRequestException(
+        'Only pending, cancelled, or completed bookings can be deleted. This booking is ' +
+            booking.status,
+      );
     }
 
     // Delete the booking

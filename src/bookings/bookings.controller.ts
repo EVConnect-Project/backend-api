@@ -5,6 +5,7 @@ import {
   Body,
   Param,
   Patch,
+  Delete,
   UseGuards,
   Request,
   ValidationPipe,
@@ -50,6 +51,11 @@ export class BookingsController {
   @Patch(':id/cancel')
   cancel(@Param('id') id: string, @Request() req) {
     return this.bookingsService.cancel(id, req.user.userId);
+  }
+
+  @Delete(':id')
+  deleteBooking(@Param('id') id: string, @Request() req) {
+    return this.bookingsService.deleteForUser(id, req.user.userId);
   }
 
   @Patch(':id/status')

@@ -225,6 +225,23 @@ export class BookingsService {
     return saved;
   }
 
+  async deleteForUser(id: string, userId: string): Promise<{ message: string }> {
+    const booking = await this.findOne(id);
+
+    if (booking.userId !== userId) {
+      throw new ForbiddenException('You can only delete your own bookings');
+    }
+
+    if (booking.status != 'cancelled' && booking.status != 'completed') {
+      throw new BadRequestException(
+        'Only cancelled or completed bookings can be deleted',
+      );
+    }
+
+    await this.bookingRepository.remove(booking);
+    return { message: 'Booking deleted successfully' };
+  }
+
   async updateStatus(id: string, status: string): Promise<BookingEntity> {
     const booking = await this.findOne(id);
     const normalizedStatus = status.toLowerCase();
