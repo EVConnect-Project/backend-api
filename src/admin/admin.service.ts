@@ -585,20 +585,79 @@ export class AdminService {
   }
 
   async deleteUser(id: string) {
-    const user = await this.userRepository.findOne({ where: { id } });
-    if (!user) {
-      throw new NotFoundException("User not found");
+    const result = await this.userRepository.manager.transaction(
+      async (manager) => {
+        const userRepo = manager.getRepository(UserEntity);
+        const user = await userRepo.findOne({ where: { id } });
+
+        if (!user) {
+          throw new NotFoundException("User not found");
+        }
+
+        // Prevent deleting admin users
+        if (user.role === "admin") {
+          throw new BadRequestException("Cannot delete admin users");
+        }
+
+        // Remove rows from all tables that have FK references to users.id.
+        await this.deleteRowsReferencingUser(manager, id);
+
+        await userRepo.delete({ id });
+        return { message: "User permanently deleted" };
+      },
+    );
+
+    return result;
+  }
+
+  private async deleteRowsReferencingUser(manager: any, userId: string) {
+    const references = (await manager.query(
+      `
+        SELECT
+          tc.table_name,
+          kcu.column_name
+        FROM information_schema.table_constraints tc
+        JOIN information_schema.key_column_usage kcu
+          ON tc.constraint_name = kcu.constraint_name
+          AND tc.table_schema = kcu.table_schema
+        JOIN information_schema.constraint_column_usage ccu
+          ON tc.constraint_name = ccu.constraint_name
+          AND tc.table_schema = ccu.table_schema
+        WHERE tc.constraint_type = 'FOREIGN KEY'
+          AND tc.table_schema = 'public'
+          AND ccu.table_name = 'users'
+          AND ccu.column_name = 'id'
+      `,
+    )) as Array<{ table_name: string; column_name: string }>;
+
+    const seen = new Set<string>();
+
+    for (const ref of references) {
+      const tableName = ref.table_name;
+      const columnName = ref.column_name;
+
+      if (!tableName || !columnName || tableName === "users") {
+        continue;
+      }
+
+      const key = `${tableName}.${columnName}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+
+      const safeTable = this.quoteIdentifier(tableName);
+      const safeColumn = this.quoteIdentifier(columnName);
+
+      await manager.query(
+        `DELETE FROM ${safeTable} WHERE ${safeColumn} = $1`,
+        [userId],
+      );
     }
+  }
 
-    // Prevent deleting admin users
-    if (user.role === "admin") {
-      throw new BadRequestException("Cannot delete admin users");
-    }
-
-    // The cascade delete in the database schema will handle related records
-    await this.userRepository.remove(user);
-
-    return { message: "User permanently deleted" };
+  private quoteIdentifier(identifier: string): string {
+    return `"${identifier.replace(/"/g, '""')}"`;
   }
 
   // Charger Management
