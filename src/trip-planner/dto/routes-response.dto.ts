@@ -17,6 +17,7 @@ export class RouteOptionDto {
   estimatedArrivalTime: string;
   routeScore: number;
   routePolyline: string;
+  routeCoordinates?: Array<{ lat: number; lng: number }>;
   routeSummary: string;
   isRecommended: boolean;
   safetyWarnings: SafetyWarningDto[];

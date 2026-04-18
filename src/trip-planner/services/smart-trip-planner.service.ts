@@ -504,6 +504,7 @@ export class SmartTripPlannerService {
     );
 
     const routePolyline = googleRoute.overview_polyline?.points || "";
+    const decodedRoutePoints = this.decodePolyline(routePolyline);
     const geometryAssessment = this.assessRouteGeometry(
       googleRoute,
       routePolyline,
@@ -523,6 +524,10 @@ export class SmartTripPlannerService {
       chargingStops,
       routeScore: Math.round(routeScore),
       routePolyline,
+      routeCoordinates: decodedRoutePoints.map((point) => ({
+        lat: point.lat,
+        lng: point.lng,
+      })),
       routePolylineGeometryStatus: geometryAssessment.status,
       routePolylinePointsCount: geometryAssessment.pointsCount,
       routeSummary: googleRoute.summary || "Route via main roads",
