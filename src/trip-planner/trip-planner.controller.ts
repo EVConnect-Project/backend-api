@@ -203,6 +203,8 @@ export class TripPlannerController {
         estimatedArrivalTime: route.estimatedArrivalTime,
         routeScore: route.routeScore,
         routePolyline: route.routePolyline,
+        routePolylineGeometryStatus: route.routePolylineGeometryStatus,
+        routePolylinePointsCount: route.routePolylinePointsCount,
         routeSummary: route.routeSummary,
         isRecommended: route.isRecommended,
         safetyWarnings: route.safetyWarnings,

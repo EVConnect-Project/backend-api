@@ -503,6 +503,13 @@ export class SmartTripPlannerService {
       finalBatteryPercent,
     );
 
+    const routePolyline = googleRoute.overview_polyline?.points || "";
+    const geometryAssessment = this.assessRouteGeometry(
+      googleRoute,
+      routePolyline,
+      totalDistanceKm,
+    );
+
     return {
       routeNumber,
       totalDistanceKm: Math.round(totalDistanceKm * 10) / 10,
@@ -515,7 +522,9 @@ export class SmartTripPlannerService {
       ).toISOString(),
       chargingStops,
       routeScore: Math.round(routeScore),
-      routePolyline: googleRoute.overview_polyline?.points || "",
+      routePolyline,
+      routePolylineGeometryStatus: geometryAssessment.status,
+      routePolylinePointsCount: geometryAssessment.pointsCount,
       routeSummary: googleRoute.summary || "Route via main roads",
       isRecommended: false,
       safetyWarnings,
@@ -1370,6 +1379,77 @@ export class SmartTripPlannerService {
 
   private toRadians(degrees: number): number {
     return degrees * (Math.PI / 180);
+  }
+
+  private assessRouteGeometry(
+    googleRoute: any,
+    routePolyline: string,
+    totalDistanceKm: number,
+  ): { status: "valid" | "degraded" | "missing"; pointsCount: number } {
+    if (!routePolyline || routePolyline.trim().length === 0) {
+      return { status: "missing", pointsCount: 0 };
+    }
+
+    let points: Array<{ lat: number; lng: number }>;
+    try {
+      points = this.decodePolyline(routePolyline);
+    } catch {
+      return { status: "degraded", pointsCount: 0 };
+    }
+
+    if (points.length < 2) {
+      return {
+        status: points.length === 0 ? "missing" : "degraded",
+        pointsCount: points.length,
+      };
+    }
+
+    let polylineDistanceKm = 0;
+    let hasLargeJump = false;
+    for (let i = 1; i < points.length; i++) {
+      const segmentKm = this.calculateHaversineDistance(
+        points[i - 1].lat,
+        points[i - 1].lng,
+        points[i].lat,
+        points[i].lng,
+      );
+      polylineDistanceKm += segmentKm;
+      if (segmentKm > 35) {
+        hasLargeJump = true;
+      }
+    }
+
+    const firstLeg = googleRoute?.legs?.[0];
+    const lastLeg = googleRoute?.legs?.[googleRoute.legs.length - 1];
+    const firstPoint = points[0];
+    const lastPoint = points[points.length - 1];
+    const startOk =
+      firstLeg?.start_location != null
+        ? this.calculateHaversineDistance(
+            firstPoint.lat,
+            firstPoint.lng,
+            firstLeg.start_location.lat,
+            firstLeg.start_location.lng,
+          ) <= 20
+        : true;
+    const endOk =
+      lastLeg?.end_location != null
+        ? this.calculateHaversineDistance(
+            lastPoint.lat,
+            lastPoint.lng,
+            lastLeg.end_location.lat,
+            lastLeg.end_location.lng,
+          ) <= 20
+        : true;
+
+    const minExpectedDistanceKm = Math.max(1.0, totalDistanceKm * 0.35);
+    const distanceLooksReasonable = polylineDistanceKm >= minExpectedDistanceKm;
+
+    const isValid = !hasLargeJump && startOk && endOk && distanceLooksReasonable;
+    return {
+      status: isValid ? "valid" : "degraded",
+      pointsCount: points.length,
+    };
   }
 
   /**

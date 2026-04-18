@@ -47,6 +47,8 @@ export class RouteAlternativeDto {
   chargingStops: ChargerStopDto[];
   routeScore: number; // Lower is better
   routePolyline: string; // Google Maps encoded polyline
+  routePolylineGeometryStatus?: "valid" | "degraded" | "missing";
+  routePolylinePointsCount?: number;
   routeSummary: string; // e.g., "Route via A1 Highway"
   isRecommended: boolean;
   safetyWarnings: SafetyWarningDto[];
