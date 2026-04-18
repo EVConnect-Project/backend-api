@@ -1450,12 +1450,31 @@ export class AdminService {
       throw new NotFoundException("Service station application not found");
     }
 
-    const approvedStation = await this.serviceStationRepository.findOne({
-      where: { applicationId: station.id },
-    });
+    let approvedStation: ServiceStationEntity | null = null;
+    try {
+      approvedStation = await this.serviceStationRepository.findOne({
+        where: { applicationId: station.id },
+      });
+    } catch (error) {
+      // Some environments may not yet have service_stations.application_id.
+      // Fallback to owner+name match so details page can still load.
+      console.warn(
+        "Service station lookup by application_id failed; falling back to owner/name lookup:",
+        error?.message || error,
+      );
+
+      approvedStation = await this.serviceStationRepository.findOne({
+        where: {
+          ownerId: station.userId,
+          stationName: station.stationName,
+        },
+        order: { createdAt: "DESC" },
+      });
+    }
 
     return {
       id: station.id,
+      stationId: approvedStation?.id ?? null,
       stationName: station.stationName,
       city: station.city,
       address: station.address,
