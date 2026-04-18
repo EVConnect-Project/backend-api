@@ -32,6 +32,7 @@ import { ServiceStationEntity } from "../service-stations/entities/service-stati
 import { PaymentEntity } from "../payments/entities/payment.entity";
 import { OwnerPayout, OwnerPayoutStatus } from "./entities/owner-payout.entity";
 import { OwnerPayoutItem } from "./entities/owner-payout-item.entity";
+import { SmsService } from "../auth/sms.service";
 
 @Injectable()
 export class AdminService {
@@ -70,6 +71,7 @@ export class AdminService {
     private ownerPayoutItemRepository: Repository<OwnerPayoutItem>,
     private notificationsService: NotificationsService,
     private chargingService: ChargingService,
+    private smsService: SmsService,
   ) {}
 
   // Dashboard Stats
@@ -4450,5 +4452,25 @@ export class AdminService {
     }
     await this.notificationLogRepository.remove(log);
     return { success: true, message: "Notification log deleted" };
+  }
+
+  async sendSmsToPhoneNumber(phoneNumber: string, message: string) {
+    const normalizedPhone = String(phoneNumber || "").trim();
+    const normalizedMessage = String(message || "").trim();
+
+    if (!normalizedPhone) {
+      throw new BadRequestException("Phone number is required");
+    }
+
+    if (!normalizedMessage) {
+      throw new BadRequestException("Message is required");
+    }
+
+    await this.smsService.sendCustomSMS(normalizedPhone, normalizedMessage);
+
+    return {
+      success: true,
+      message: `SMS sent to ${normalizedPhone}`,
+    };
   }
 }

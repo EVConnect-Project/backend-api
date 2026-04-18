@@ -11,11 +11,13 @@ import {
   UseGuards,
   Request,
   Ip,
+  ValidationPipe,
 } from "@nestjs/common";
 import { AdminService } from "./admin.service";
 import { AdminChatService } from "./admin-chat.service";
 import { AdminAuditService } from "./admin-audit.service";
 import { SupportService } from "../support/support.service";
+import { SendExternalSmsDto } from "./dto/send-external-sms.dto";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { RolesGuard } from "../auth/guards/roles.guard";
 import { Roles } from "../auth/decorators/roles.decorator";
@@ -1409,6 +1411,33 @@ export class AdminController {
       `Deleted notification log ${id}`,
       ip,
     );
+    return result;
+  }
+
+  /**
+   * Send SMS to any phone number (including non-user numbers)
+   */
+  @Post("sms/send")
+  async sendExternalSms(
+    @Body(ValidationPipe) body: SendExternalSmsDto,
+    @Request() req,
+    @Ip() ip: string,
+  ) {
+    const result = await this.adminService.sendSmsToPhoneNumber(
+      body.phoneNumber,
+      body.message,
+    );
+
+    await this.adminAuditService.logAction(
+      req.user.userId,
+      "SEND_EXTERNAL_SMS",
+      "sms",
+      req.user.userId,
+      { phoneNumber: body.phoneNumber, messageLength: body.message.length },
+      `Sent SMS to ${body.phoneNumber}`,
+      ip,
+    );
+
     return result;
   }
 

@@ -2,6 +2,7 @@ import {
   Injectable,
   Logger,
   InternalServerErrorException,
+  BadRequestException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 
@@ -218,6 +219,19 @@ export class SmsService {
   async sendOTP(phoneNumber: string, otp: string): Promise<void> {
     const message = `Your EVRS verification code is: ${otp}. Valid for 5 minutes. Do not share this code.`;
     await this.sendMessage(phoneNumber, message);
+  }
+
+  /**
+   * Send a custom plain-text SMS message.
+   */
+  async sendCustomSMS(phoneNumber: string, message: string): Promise<void> {
+    const trimmedMessage = String(message || "").trim();
+    if (!trimmedMessage) {
+      throw new BadRequestException("SMS message cannot be empty");
+    }
+
+    // Preserve provider/configuration errors so admins see actionable messages.
+    await this.sendMessage(phoneNumber, trimmedMessage);
   }
 
   /**

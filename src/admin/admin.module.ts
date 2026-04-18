@@ -27,6 +27,7 @@ import { SupportModule } from "../support/support.module";
 import { PaymentEntity } from "../payments/entities/payment.entity";
 import { OwnerPayout } from "./entities/owner-payout.entity";
 import { OwnerPayoutItem } from "./entities/owner-payout-item.entity";
+import { AuthModule } from "../auth/auth.module";
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { OwnerPayoutItem } from "./entities/owner-payout-item.entity";
     NotificationsModule,
     ChargingModule,
     SupportModule,
+    AuthModule,
   ],
   controllers: [AdminController],
   providers: [AdminService, AdminChatService, AdminAuditService],
