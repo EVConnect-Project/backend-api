@@ -1366,6 +1366,39 @@ export class AdminService {
     };
   }
 
+  async deleteServiceStation(id: string) {
+    const approvedStation = await this.serviceStationRepository.findOne({
+      where: { id },
+    });
+
+    if (!approvedStation) {
+      throw new NotFoundException("Service station not found");
+    }
+
+    const linkedApplicationId = approvedStation.applicationId;
+
+    await this.serviceStationRepository.remove(approvedStation);
+
+    let deletedApplicationId: string | null = null;
+    if (linkedApplicationId) {
+      const linkedApplication =
+        await this.serviceStationApplicationRepository.findOne({
+          where: { id: linkedApplicationId },
+        });
+
+      if (linkedApplication) {
+        await this.serviceStationApplicationRepository.remove(linkedApplication);
+        deletedApplicationId = linkedApplication.id;
+      }
+    }
+
+    return {
+      message: "Service station deleted successfully",
+      deletedStationId: id,
+      deletedApplicationId,
+    };
+  }
+
   async getServiceStationApplications(params: {
     page: number;
     limit: number;

@@ -272,6 +272,11 @@ export class AdminController {
     return this.adminService.deleteStation(id);
   }
 
+  @Delete("service-stations/:id")
+  async deleteServiceStation(@Param("id") id: string) {
+    return this.adminService.deleteServiceStation(id);
+  }
+
   // Service Station Application Management
   @Get("service-station-applications")
   async getServiceStationApplications(
