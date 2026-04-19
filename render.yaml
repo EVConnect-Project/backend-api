@@ -1,0 +1,74 @@
+services:
+  - type: web
+    name: evrs-backend-staging
+    runtime: node
+    plan: starter
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start:prod
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_EXPIRES_IN
+        value: 24h
+      - key: JWT_REFRESH_SECRET
+        sync: false
+      - key: JWT_REFRESH_EXPIRES_IN
+        value: 7d
+      - key: ALLOWED_ORIGINS
+        sync: false
+
+      # Optional integrations for staging
+      - key: AI_SERVICE_URL
+        sync: false
+      - key: PAYHERE_BASE_URL
+        value: https://sandbox.payhere.lk
+      - key: PAYHERE_MERCHANT_ID
+        sync: false
+      - key: PAYHERE_MERCHANT_SECRET
+        sync: false
+      - key: PAYHERE_NOTIFY_URL
+        sync: false
+      - key: PAYHERE_RETURN_URL
+        sync: false
+      - key: PAYHERE_CANCEL_URL
+        sync: false
+      - key: PAYHERE_CARD_SETUP_URL
+        sync: false
+      - key: MOBILE_CARD_SETUP_CALLBACK_URL
+        value: evrs://wallet/card-setup
+
+      - key: TEXTLK_API_TOKEN
+        sync: false
+      - key: TEXTLK_SENDER_ID
+        value: EVRS
+      - key: TEXTLK_OAUTH_API_ENDPOINT
+        value: https://app.text.lk/api/v3/
+      - key: TEXTLK_HTTP_API_ENDPOINT
+        value: https://app.text.lk/api/http/
+      - key: SMS_APP_NAME
+        value: EVRS
+
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: FIREBASE_PRIVATE_KEY
+        sync: false
+      - key: FIREBASE_CLIENT_EMAIL
+        sync: false
+
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false
+      - key: MAPBOX_API_KEY
+        sync: false
