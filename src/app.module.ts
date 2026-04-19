@@ -49,16 +49,21 @@ import { WalletModule } from "./wallet/wallet.module";
     ]),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
-        type: "postgres",
-        url: configService.get("DATABASE_URL"),
-        entities: [__dirname + "/**/*.entity{.ts,.js}"],
-        migrations: [__dirname + "/migrations/**/*{.ts,.js}"],
-        synchronize: false, // CRITICAL: Must be false to prevent schema destruction
-        migrationsRun: false,
-        autoLoadEntities: true, // Allow auto-loading but don't sync
-        logging: false,
-      }),
+      useFactory: (configService: ConfigService) => {
+        const enableSynchronize =
+          configService.get<string>("TYPEORM_SYNCHRONIZE") === "true";
+
+        return {
+          type: "postgres",
+          url: configService.get("DATABASE_URL"),
+          entities: [__dirname + "/**/*.entity{.ts,.js}"],
+          migrations: [__dirname + "/migrations/**/*{.ts,.js}"],
+          synchronize: enableSynchronize,
+          migrationsRun: false,
+          autoLoadEntities: true,
+          logging: false,
+        };
+      },
       inject: [ConfigService],
     }),
     AuthModule,
