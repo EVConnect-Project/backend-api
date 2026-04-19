@@ -80,6 +80,9 @@ export class ChargingStation {
   @Column({ name: "is_banned", default: false })
   isBanned: boolean;
 
+  @OneToMany(() => Charger, (charger) => charger.station)
+  chargers: Charger[];
+
   @CreateDateColumn({ name: "created_at" })
   createdAt: Date;
 

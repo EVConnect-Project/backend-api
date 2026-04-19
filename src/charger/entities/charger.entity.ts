@@ -13,7 +13,7 @@ import { ChargerSocket } from "../../owner/entities/charger-socket.entity";
 import { BookingMode } from "../enums/booking-mode.enum";
 import { ChargerStatus } from "../enums/charger-status.enum";
 import type { BookingSettings } from "../interfaces/booking-settings.interface";
-import { Station } from "../../station/entities/station.entity";
+import { ChargingStation } from "../../owner/entities/charging-station.entity";
 
 @Entity("chargers")
 export class Charger {
@@ -192,9 +192,9 @@ export class Charger {
   @Column({ name: "station_id", type: "uuid", nullable: true })
   stationId: string | null;
 
-  @ManyToOne(() => Station, (station) => station.chargers)
+  @ManyToOne(() => ChargingStation, (station) => station.chargers)
   @JoinColumn({ name: "station_id" })
-  station: Station;
+  station: ChargingStation;
 
   @Column({ type: "varchar", length: 100, nullable: true })
   chargerIdentifier: string | null;
