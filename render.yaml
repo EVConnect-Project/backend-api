@@ -1,3 +1,9 @@
+databases:
+  - name: evrs-db-staging
+    plan: free
+    databaseName: evrs_staging
+    user: evrs_staging_user
+
 services:
   - type: web
     name: evrs-backend-staging
@@ -11,7 +17,9 @@ services:
       - key: NODE_ENV
         value: production
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: evrs-db-staging
+          property: connectionString
       - key: JWT_SECRET
         sync: false
       - key: JWT_EXPIRES_IN
