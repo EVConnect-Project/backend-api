@@ -1,15 +1,30 @@
-import { Test, TestingModule } from "@nestjs/testing";
 import { AdminService } from "./admin.service";
 
 describe("AdminService", () => {
   let service: AdminService;
 
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [AdminService],
-    }).compile();
-
-    service = module.get<AdminService>(AdminService);
+  beforeEach(() => {
+    service = new AdminService(
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+    );
   });
 
   it("should be defined", () => {
