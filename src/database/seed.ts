@@ -11,10 +11,10 @@ export async function seedDatabase(dataSource: DataSource) {
   const chargerRepository = dataSource.getRepository(Charger);
   const mechanicRepository = dataSource.getRepository(MechanicEntity);
 
-  // Check if users already exist
+  // Check existing users. If only the bootstrap admin exists, continue full seeding.
   const existingUsers = await userRepository.count();
-  if (existingUsers > 0) {
-    console.log("⚠️  Database already has users.");
+  if (existingUsers > 1) {
+    console.log("⚠️  Database already has multiple users.");
 
     // Check if we need to add mechanics
     const existingMechanics = await mechanicRepository.count();
