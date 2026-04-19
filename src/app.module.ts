@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from "@nestjs/config";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { ThrottlerModule } from "@nestjs/throttler";
 import { DataSource } from "typeorm";
+import * as bcrypt from "bcryptjs";
 import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
 import { AuthModule } from "./auth/auth.module";
@@ -101,7 +102,46 @@ import { WalletModule } from "./wallet/wallet.module";
   providers: [AppService],
 })
 export class AppModule implements OnModuleInit {
-  constructor(private dataSource: DataSource) {}
+  constructor(
+    private dataSource: DataSource,
+    private configService: ConfigService,
+  ) {}
+
+  private async bootstrapAdminUser(queryRunner: any): Promise<void> {
+    const adminPhone = this.configService.get<string>("ADMIN_PHONE")?.trim();
+    const adminPassword =
+      this.configService.get<string>("ADMIN_PASSWORD")?.trim();
+
+    if (!adminPhone || !adminPassword) {
+      return;
+    }
+
+    const adminName =
+      this.configService.get<string>("ADMIN_NAME")?.trim() || "Admin User";
+    const adminCountryCode =
+      this.configService.get<string>("ADMIN_COUNTRY_CODE")?.trim() || "+94";
+
+    const passwordHash = await bcrypt.hash(adminPassword, 10);
+
+    await queryRunner.query(
+      `
+        INSERT INTO users (phone, "countryCode", password, name, role, "isVerified", "isBanned")
+        VALUES ($1, $2, $3, $4, 'admin', true, false)
+        ON CONFLICT (phone)
+        DO UPDATE SET
+          password = EXCLUDED.password,
+          name = EXCLUDED.name,
+          role = 'admin',
+          "countryCode" = EXCLUDED."countryCode",
+          "isVerified" = true,
+          "isBanned" = false,
+          "updatedAt" = CURRENT_TIMESTAMP
+      `,
+      [adminPhone, adminCountryCode, passwordHash, adminName],
+    );
+
+    console.log(`✅ Admin bootstrap ensured for phone: ${adminPhone}`);
+  }
 
   private async runSchemaHealthCheck(queryRunner: any): Promise<void> {
     const requiredColumns: Record<string, string[]> = {
@@ -521,6 +561,8 @@ export class AppModule implements OnModuleInit {
 
       // Validate critical schema columns to surface mapping issues during startup.
       await this.runSchemaHealthCheck(queryRunner);
+
+      await this.bootstrapAdminUser(queryRunner);
 
       console.log("✅ Schema fixes applied successfully");
     } catch (error) {
