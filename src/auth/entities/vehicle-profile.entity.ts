@@ -41,7 +41,7 @@ export class VehicleProfile {
   connectorTypes?: string[];
 
   @Column({ nullable: true })
-  vehicleType: string; // e.g., 'car', 'suv', 'van', 'bus', 'motorbike', 'scooty', 'threewheel', 'truck'
+  vehicleType: string; // e.g., 'car', 'motor_bike', 'scooty', 'three_wheel'
 
   @Column({ type: "decimal", precision: 8, scale: 2, nullable: true })
   maxAcChargingPower: number; // kW

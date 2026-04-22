@@ -17,12 +17,9 @@ import {
 // Enums for vehicle information
 export enum VehicleType {
   CAR = "car",
-  MOTORBIKE = "motorbike",
+  MOTOR_BIKE = "motor_bike",
   SCOOTY = "scooty",
-  THREEWHEEL = "threewheel",
-  VAN = "van",
-  SUV = "suv",
-  BUS = "bus",
+  THREE_WHEEL = "three_wheel",
 }
 
 export enum ConnectorType {
@@ -64,7 +61,7 @@ export class EnhancedRegisterDto {
   )
   @IsEnum(VehicleType, {
     message:
-      "Vehicle type must be one of: car, motorbike, scooty, threewheel, van, suv, bus",
+      "Vehicle type must be one of: car, motor_bike, scooty, three_wheel",
   })
   vehicleType?: VehicleType;
 
