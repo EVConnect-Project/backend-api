@@ -11,6 +11,7 @@ import {
   DataSource,
   EntityManager,
   FindOptionsWhere,
+  LessThan,
   Repository,
 } from "typeorm";
 import { ChargingService } from "../charging/charging.service";
@@ -120,6 +121,9 @@ export class WalletService {
   }
 
   async listTransactions(userId: string, limit = 50, offset = 0) {
+    // Clean up old transactions (older than 2 weeks)
+    await this.deleteOldTransactions(userId);
+
     const safeLimit = Math.min(Math.max(limit || 50, 1), 100);
     const safeOffset = Math.max(offset || 0, 0);
 
@@ -132,6 +136,18 @@ export class WalletService {
       });
 
     return { transactions, total, limit: safeLimit, offset: safeOffset };
+  }
+
+  private async deleteOldTransactions(userId: string) {
+    // Calculate the date 2 weeks ago
+    const twoWeeksAgo = new Date();
+    twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+
+    // Delete transactions older than 2 weeks
+    await this.walletTransactionRepository.delete({
+      userId,
+      createdAt: LessThan(twoWeeksAgo),
+    });
   }
 
   async listSessions(
