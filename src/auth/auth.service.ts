@@ -6,7 +6,7 @@ import {
   Logger,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository, DataSource } from "typeorm";
+import { Repository, DataSource, In } from "typeorm";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcryptjs";
@@ -314,8 +314,132 @@ export class AuthService {
     const phoneNumber = user.phoneNumber;
     const userName = user.name;
 
-    await this.userRepository.remove(user);
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
 
+    try {
+      // Delete all related data in the correct order to avoid foreign key constraints
+      // Dependency chain: payments → bookings → chargers
+      
+      // 1. Delete wallet transactions and charging sessions (wallet module)
+      await queryRunner.manager.delete("wallet_transactions", { userId });
+      await queryRunner.manager.delete("wallet_charging_sessions", { userId });
+      await queryRunner.manager.delete("wallets", { userId });
+
+      // 2. Delete payments (via booking relationship - payments.bookingId -> bookings)
+      // Get all booking IDs for this user
+      const userBookings = await queryRunner.manager.find("bookings", {
+        where: { userId },
+      });
+      const bookingIds = userBookings.map((booking: any) => booking.id);
+
+      if (bookingIds.length > 0) {
+        const userPayments = await queryRunner.manager.find("payments", {
+          where: { bookingId: In(bookingIds) },
+        });
+        const paymentIds = userPayments.map((payment: any) => payment.id);
+
+        if (paymentIds.length > 0) {
+          await queryRunner.manager.delete("owner_payout_items", {
+            paymentId: In(paymentIds),
+          });
+        }
+
+        await queryRunner.manager.delete("payments", {
+          bookingId: In(bookingIds),
+        });
+      }
+
+      // 3. Delete bookings (bookings.chargerId references chargers)
+      await queryRunner.manager.delete("bookings", { userId });
+
+      // 4. Delete chargers (owned by user)
+      await queryRunner.manager.delete("chargers", { ownerId: userId });
+
+      // 5. Delete marketplace listings and reviews
+      await queryRunner.manager.delete("marketplace_listings", { sellerId: userId });
+      await queryRunner.manager.delete("charger_reviews", { userId });
+
+      // 6. Delete vehicle profiles and favorites
+      await queryRunner.manager.delete("vehicle_profiles", { userId });
+      await queryRunner.manager.delete("favorite_chargers", { userId });
+
+      // 7. Delete remaining payment records
+      await queryRunner.manager.delete("payment_methods", { userId });
+      await queryRunner.manager.delete("user_payment_settings", { userId });
+
+      // 8. Delete notifications
+      await queryRunner.manager.delete("notification_logs", { userId });
+      await queryRunner.manager.delete("fcm_tokens", { userId });
+
+      // 9. Delete mechanic-related records
+      await queryRunner.manager.delete("mechanic_applications", { userId });
+
+      const emergencyRequests = await queryRunner.manager.find(
+        "emergency_requests",
+        {
+          where: { userId },
+        },
+      );
+      const emergencyRequestIds = emergencyRequests.map(
+        (request: any) => request.id,
+      );
+
+      if (emergencyRequestIds.length > 0) {
+        await queryRunner.manager.delete("mechanic_responses", {
+          emergencyRequestId: In(emergencyRequestIds),
+        });
+        await queryRunner.manager.delete("emergency_requests", {
+          id: In(emergencyRequestIds),
+        });
+      }
+
+      const userMechanics = await queryRunner.manager.find("mechanics", {
+        where: { userId },
+      });
+      const mechanicIds = userMechanics.map((mechanic: any) => mechanic.id);
+
+      if (mechanicIds.length > 0) {
+        await queryRunner.manager.delete("mechanic_responses", {
+          mechanicId: In(mechanicIds),
+        });
+        await queryRunner.manager.delete("mechanic_analytics", {
+          mechanicId: In(mechanicIds),
+        });
+        await queryRunner.manager.delete("mechanic_expertise", {
+          mechanicId: In(mechanicIds),
+        });
+        await queryRunner.manager.delete("mechanics", {
+          id: In(mechanicIds),
+        });
+      }
+
+      // 10. Delete service provider records
+      await queryRunner.manager.delete("service_station_bookings", { userId });
+      await queryRunner.manager.delete("service_provider_signals", { userId });
+
+      // 11. Delete payment accounts
+      await queryRunner.manager.delete("owner_payment_accounts", { userId });
+
+      // 12. Delete the user itself (last, after all dependents)
+      await queryRunner.manager.delete("users", { id: userId });
+
+      await queryRunner.commitTransaction();
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      this.logger.error(
+        `Failed to delete account for user ${userId}: ${(error as Error).message}`,
+        error,
+      );
+      throw new BadRequestException(
+        `Failed to delete account: ${(error as Error).message}`,
+      );
+    } finally {
+      await queryRunner.release();
+    }
+
+    // Send SMS notification after successful deletion
     if (phoneNumber) {
       try {
         await this.smsService.sendAccountDeletedSMS(phoneNumber, userName);
