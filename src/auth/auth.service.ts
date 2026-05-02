@@ -6,7 +6,7 @@ import {
   Logger,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { Repository, DataSource } from "typeorm";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcryptjs";
@@ -55,6 +55,7 @@ export class AuthService {
     private chargerRepository: Repository<Charger>,
     @InjectRepository(MechanicEntity)
     private mechanicRepository: Repository<MechanicEntity>,
+    private dataSource: DataSource,
     private jwtService: JwtService,
     private otpService: OtpService,
     private smsService: SmsService,
