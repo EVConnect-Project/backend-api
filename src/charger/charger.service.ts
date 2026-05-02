@@ -802,7 +802,55 @@ export class ChargerService {
       });
 
       // Merge all results
-      const allResults = [...stations, ...individuals];
+      let allResults = [...stations, ...individuals];
+
+      // Apply station type filter
+      if (filters.stationType) {
+        allResults = allResults.filter((result) => {
+          if (filters.stationType === "station") {
+            return result.type === "station";
+          } else if (filters.stationType === "individual") {
+            return result.type === "individual";
+          }
+          return true;
+        });
+      }
+
+      // Apply price range filter
+      if (filters.minPrice !== undefined) {
+        allResults = allResults.filter((result) => result.minPrice >= filters.minPrice);
+      }
+      if (filters.maxPrice !== undefined) {
+        allResults = allResults.filter((result) => result.minPrice <= filters.maxPrice);
+      }
+
+      // Apply minimum power filter
+      if (filters.minPowerKw !== undefined) {
+        allResults = allResults.filter((result) => result.maxPowerKw >= filters.minPowerKw);
+      }
+
+      // Apply amenities filter
+      if (filters.amenities && filters.amenities.length > 0) {
+        allResults = allResults.filter((result) => {
+          return filters.amenities.some((amenity: string) =>
+            result.amenities?.includes(amenity),
+          );
+        });
+      }
+
+      // Apply booking modes filter
+      if (filters.bookingModes && filters.bookingModes.length > 0) {
+        allResults = allResults.filter((result) => {
+          return result.chargers.some((charger: any) =>
+            filters.bookingModes.includes(charger.bookingMode),
+          );
+        });
+      }
+
+      // Apply verified only filter
+      if (filters.verifiedOnly) {
+        allResults = allResults.filter((result) => result.verified === true);
+      }
 
       // Sort by distance if location filter applied
       if (filters.lat && filters.lng) {
