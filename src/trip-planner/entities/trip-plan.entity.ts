@@ -23,88 +23,76 @@ export class TripPlanEntity {
   @JoinColumn({ name: "userId" })
   user: UserEntity;
 
-  @Column({ type: "uuid" })
+  @Column({ type: "uuid", nullable: true, name: "vehicleProfileId" })
   vehicleId: string;
 
   @ManyToOne(() => VehicleProfile, { onDelete: "SET NULL", nullable: true })
-  @JoinColumn({ name: "vehicleId" })
+  @JoinColumn({ name: "vehicleProfileId" })
   vehicle: VehicleProfile;
 
   // Start location
-  @Column({ type: "decimal", precision: 10, scale: 7 })
+  @Column({ type: "decimal", precision: 10, scale: 7, name: "origin_lat" })
   startLat: number;
 
-  @Column({ type: "decimal", precision: 10, scale: 7 })
+  @Column({ type: "decimal", precision: 10, scale: 7, name: "origin_lng" })
   startLng: number;
 
-  @Column({ nullable: true })
+  // Transient property - not persisted in database
   startAddress: string;
 
   // Destination
-  @Column({ type: "decimal", precision: 10, scale: 7 })
+  @Column({ type: "decimal", precision: 10, scale: 7, name: "destination_lat" })
   destLat: number;
 
-  @Column({ type: "decimal", precision: 10, scale: 7 })
+  @Column({ type: "decimal", precision: 10, scale: 7, name: "destination_lng" })
   destLng: number;
 
-  @Column({ nullable: true })
+  // Transient property - not persisted in database
   destAddress: string;
 
-  // Waypoints (JSON array)
-  @Column({ type: "jsonb", nullable: true, default: "[]" })
+  // Waypoints (JSON array) - not persisted
   waypoints: { lat: number; lng: number; address?: string }[];
 
-  // Route summary
-  @Column({ type: "decimal", precision: 8, scale: 1 })
+  // Route summary - not persisted
   totalDistanceKm: number;
 
-  @Column({ type: "int" })
   totalDurationMinutes: number;
 
-  @Column({ type: "int" })
   drivingDurationMinutes: number;
 
-  @Column({ type: "int", default: 0 })
   totalChargingTimeMinutes: number;
 
-  @Column({ type: "int", default: 0 })
   totalChargingCostLkr: number;
 
-  @Column({ type: "int" })
   routeScore: number;
 
-  @Column({ type: "text", nullable: true })
+  @Column({ type: "jsonb", nullable: true, name: "route_data" })
   routePolyline: string;
 
-  @Column({ nullable: true })
   routeSummary: string;
 
-  @Column({ type: "varchar", length: 20, default: "normal" })
   drivingMode: string;
 
-  @Column({ type: "int", default: 80 })
   startBatteryPercent: number;
 
-  @Column({ type: "int", default: 0 })
   arrivalBatteryPercent: number;
 
-  @Column({ type: "decimal", precision: 10, scale: 7, nullable: true })
+  @Column({ type: "decimal", precision: 10, scale: 7, nullable: true, name: "currentLat" })
   currentLat?: number;
 
-  @Column({ type: "decimal", precision: 10, scale: 7, nullable: true })
+  @Column({ type: "decimal", precision: 10, scale: 7, nullable: true, name: "currentLng" })
   currentLng?: number;
 
-  @Column({ type: "decimal", precision: 6, scale: 2, nullable: true })
+  @Column({ type: "decimal", precision: 6, scale: 2, nullable: true, name: "currentHeading" })
   currentHeading?: number;
 
-  @Column({ type: "decimal", precision: 7, scale: 2, nullable: true })
+  @Column({ type: "decimal", precision: 7, scale: 2, nullable: true, name: "currentSpeedKph" })
   currentSpeedKph?: number;
 
-  @Column({ type: "timestamp", nullable: true })
+  @Column({ type: "timestamp", nullable: true, name: "lastLocationAt" })
   lastLocationAt?: Date;
 
-  // Charging stops (JSON array for simplicity)
-  @Column({ type: "jsonb", default: "[]" })
+  // Charging stops (JSON array for simplicity) - transient property
   chargingStops: {
     chargerId: string;
     chargerName: string;
@@ -121,8 +109,7 @@ export class TripPlanEntity {
     chargerType: string;
   }[];
 
-  // Safety warnings (JSON array)
-  @Column({ type: "jsonb", default: "[]" })
+  // Safety warnings (JSON array) - transient property
   safetyWarnings: {
     type: string;
     severity: string;
@@ -133,8 +120,21 @@ export class TripPlanEntity {
     type: "varchar",
     length: 20,
     default: "planned",
+    name: "status"
   })
   status: "planned" | "active" | "completed" | "cancelled";
+
+  @Column({ type: "int", nullable: true, name: "startBatteryLevel" })
+  startBatteryLevel?: number;
+
+  @Column({ type: "int", nullable: true, name: "targetArrivalBattery" })
+  targetArrivalBattery?: number;
+
+  @Column({ type: "decimal", precision: 10, scale: 2, nullable: true, name: "totalDistance" })
+  totalDistance?: number;
+
+  @Column({ type: "int", nullable: true, name: "estimatedDuration" })
+  estimatedDuration?: number;
 
   @CreateDateColumn()
   createdAt: Date;

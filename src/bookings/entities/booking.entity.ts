@@ -30,7 +30,7 @@ export class BookingEntity {
   @JoinColumn({ name: "chargerId" })
   charger: Charger;
 
-  @Column({ type: "uuid", nullable: true, name: "socket_id" })
+  @Column({ type: "uuid", nullable: true, name: "socketId" })
   socketId: string | null;
 
   @Column({ type: "timestamp" })
@@ -42,9 +42,9 @@ export class BookingEntity {
   @Column({ type: "varchar", default: "pending" })
   status: string;
 
-  // Maps to DB column "price"
+  // Maps to DB column "totalCost"
   @Column({
-    name: "price",
+    name: "totalCost",
     type: "decimal",
     precision: 10,
     scale: 2,
@@ -52,9 +52,9 @@ export class BookingEntity {
   })
   price: number;
 
-  // Maps to DB column "energyConsumed"
+  // Maps to DB column "estimatedEnergy"
   @Column({
-    name: "energyConsumed",
+    name: "estimatedEnergy",
     type: "decimal",
     precision: 10,
     scale: 2,
@@ -80,12 +80,12 @@ export class BookingEntity {
   })
   bookingType: BookingType;
 
-  // Maps to DB column "checkInTime"
-  @Column({ name: "checkInTime", type: "timestamp", nullable: true })
+  // Maps to DB column "checkedInAt"
+  @Column({ name: "checkedInAt", type: "timestamp", nullable: true })
   checkInTime: Date | null;
 
-  // Maps to DB column "gracePeriodExpiresAt"
-  @Column({ name: "gracePeriodExpiresAt", type: "timestamp", nullable: true })
+  // Maps to DB column "gracePeriodEndsAt"
+  @Column({ name: "gracePeriodEndsAt", type: "timestamp", nullable: true })
   gracePeriodExpiresAt: Date | null;
 
   @Column({ default: false, nullable: true })

@@ -14,11 +14,11 @@ export class ServiceStationEntity {
   @PrimaryGeneratedColumn("uuid")
   id: string;
 
-  @Column({ name: "owner_user_id", type: "uuid" })
+  @Column({ name: "owner_id", type: "uuid" })
   ownerId: string;
 
   @ManyToOne(() => UserEntity)
-  @JoinColumn({ name: "owner_user_id" })
+  @JoinColumn({ name: "owner_id" })
   owner: UserEntity;
 
   @Column({
@@ -35,10 +35,10 @@ export class ServiceStationEntity {
   @Column({ name: "location_url", type: "text" })
   locationUrl: string;
 
-  @Column({ type: "decimal", precision: 10, scale: 7 })
+  @Column({ name: "lat", type: "decimal", precision: 10, scale: 7 })
   lat: number;
 
-  @Column({ type: "decimal", precision: 10, scale: 7 })
+  @Column({ name: "lng", type: "decimal", precision: 10, scale: 7 })
   lng: number;
 
   @Column({ type: "text" })
@@ -61,7 +61,7 @@ export class ServiceStationEntity {
   @Column({ name: "service_categories", type: "jsonb", default: [] })
   serviceCategories: string[];
 
-  @Column({ type: "jsonb", default: [] })
+  @Column({ name: "amenities", type: "jsonb", default: [] })
   amenities: string[];
 
   @Column({
@@ -80,7 +80,7 @@ export class ServiceStationEntity {
   @Column({ type: "jsonb", default: [] })
   images: string[];
 
-  @Column({ default: true })
+  @Column({ name: "verified", default: true })
   verified: boolean;
 
   @Column({ name: "is_banned", default: false })

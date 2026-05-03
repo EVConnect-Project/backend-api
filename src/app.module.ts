@@ -330,10 +330,10 @@ export class AppModule implements OnModuleInit {
       await queryRunner.query(`
         CREATE TABLE IF NOT EXISTS service_stations (
           id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-          owner_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          owner_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
           application_id UUID,
           station_name VARCHAR(255) NOT NULL,
-          contact_phone VARCHAR(24),
+          phone_number VARCHAR(24),
           city VARCHAR(120),
           address TEXT NOT NULL,
           lat DECIMAL(10,7) NOT NULL,
@@ -358,7 +358,7 @@ export class AppModule implements OnModuleInit {
         `CREATE INDEX IF NOT EXISTS idx_service_station_applications_status ON service_station_applications(application_status)`,
       );
       await queryRunner.query(
-        `CREATE INDEX IF NOT EXISTS idx_service_stations_owner ON service_stations(owner_user_id)`,
+        `CREATE INDEX IF NOT EXISTS idx_service_stations_owner ON service_stations(owner_id)`,
       );
       await queryRunner.query(
         `CREATE INDEX IF NOT EXISTS idx_service_stations_city ON service_stations(city)`,
