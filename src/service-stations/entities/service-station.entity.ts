@@ -48,7 +48,7 @@ export class ServiceStationEntity {
   city: string | null;
 
   @Column({
-    name: "contact_phone",
+    name: "phone_number",
     type: "varchar",
     length: 24,
     nullable: true,

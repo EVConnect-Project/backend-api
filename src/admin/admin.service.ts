@@ -419,12 +419,14 @@ export class AdminService {
       accountHolderName: account.accountHolderName,
       bankName: account.bankName,
       accountNumber: account.accountNumber,
-      accountType: account.accountType,
+      accountType: null,
       branchCode: account.branchCode,
-      verificationStatus: account.verificationStatus,
-      verificationNotes: account.verificationNotes,
+      verificationStatus: account.verified
+        ? VerificationStatus.VERIFIED
+        : VerificationStatus.PENDING,
+      verificationNotes: null,
       isPrimary: account.isPrimary,
-      isActive: account.isActive,
+      isActive: true,
       createdAt: account.createdAt,
       updatedAt: account.updatedAt,
     }));
@@ -442,7 +444,6 @@ export class AdminService {
     const qb = this.paymentAccountRepository
       .createQueryBuilder("account")
       .leftJoin(UserEntity, "user", "user.id = account.userId")
-      .where("account.isActive = true")
       .select("account.id", "accountId")
       .addSelect("account.userId", "userId")
       .addSelect("user.name", "userName")
@@ -450,17 +451,21 @@ export class AdminService {
       .addSelect("account.accountHolderName", "accountHolderName")
       .addSelect("account.bankName", "bankName")
       .addSelect("account.accountNumber", "accountNumber")
-      .addSelect("account.accountType", "accountType")
       .addSelect("account.branchCode", "branchCode")
-      .addSelect("account.verificationStatus", "verificationStatus")
-      .addSelect("account.verificationNotes", "verificationNotes")
+      .addSelect("account.verified", "verified")
       .addSelect("account.isPrimary", "isPrimary")
       .addSelect("account.createdAt", "createdAt")
       .addSelect("account.updatedAt", "updatedAt")
       .orderBy("account.createdAt", "DESC");
 
     if (status && status !== "all") {
-      qb.andWhere("account.verificationStatus = :status", { status });
+      const normalized = status.toLowerCase();
+      if (normalized === "verified") {
+        qb.andWhere("account.verified = true");
+      } else if (normalized === "pending") {
+        qb.andWhere("account.verified = false");
+      }
+      // 'rejected' is not representable in the slim schema — skip filter.
     }
 
     if (search && search.trim()) {
@@ -489,10 +494,12 @@ export class AdminService {
         accountHolderName: row.accountHolderName || null,
         bankName: row.bankName || null,
         accountNumberMasked,
-        accountType: row.accountType || null,
+        accountType: null,
         branchCode: row.branchCode || null,
-        verificationStatus: row.verificationStatus,
-        verificationNotes: row.verificationNotes || null,
+        verificationStatus: row.verified
+          ? VerificationStatus.VERIFIED
+          : VerificationStatus.PENDING,
+        verificationNotes: null,
         isPrimary: !!row.isPrimary,
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
@@ -533,8 +540,9 @@ export class AdminService {
       throw new NotFoundException("Payment account not found");
     }
 
-    account.verificationStatus = statusValue as VerificationStatus;
-    account.verificationNotes = dto.notes?.trim() || null;
+    // Slim DB schema only stores a `verified` boolean.
+    // Rejected maps to false (same as pending) — notes are not persisted.
+    account.verified = statusValue === VerificationStatus.VERIFIED;
     await this.paymentAccountRepository.save(account);
 
     const masked = account.accountNumber
@@ -548,8 +556,10 @@ export class AdminService {
       account: {
         accountId: account.id,
         userId: account.userId,
-        verificationStatus: account.verificationStatus,
-        verificationNotes: account.verificationNotes,
+        verificationStatus: account.verified
+          ? VerificationStatus.VERIFIED
+          : VerificationStatus.PENDING,
+        verificationNotes: null,
         accountNumberMasked: masked,
         updatedAt: account.updatedAt,
       },
@@ -1967,11 +1977,8 @@ export class AdminService {
     const eligibleOwnerRows = await this.paymentAccountRepository
       .createQueryBuilder("account")
       .select("DISTINCT account.userId", "ownerId")
-      .where("account.isActive = true")
-      .andWhere("account.isPrimary = true")
-      .andWhere("account.verificationStatus = :verificationStatus", {
-        verificationStatus: VerificationStatus.VERIFIED,
-      })
+      .where("account.isPrimary = true")
+      .andWhere("account.verified = true")
       .getRawMany();
 
     const eligibleOwnerSet = new Set(
@@ -1984,10 +1991,8 @@ export class AdminService {
       .addSelect("account.accountHolderName", "accountHolderName")
       .addSelect("account.bankName", "bankName")
       .addSelect("account.accountNumber", "accountNumber")
-      .addSelect("account.accountType", "accountType")
-      .addSelect("account.verificationStatus", "verificationStatus")
-      .where("account.isActive = true")
-      .andWhere("account.isPrimary = true")
+      .addSelect("account.verified", "verified")
+      .where("account.isPrimary = true")
       .getRawMany();
 
     const primaryAccountByOwner = new Map<
@@ -1996,7 +2001,7 @@ export class AdminService {
         accountHolderName: string;
         bankName: string;
         accountNumber: string;
-        accountType: string;
+        accountType: string | null;
         verificationStatus: string;
       }
     >();
@@ -2008,8 +2013,10 @@ export class AdminService {
         accountHolderName: row.accountHolderName,
         bankName: row.bankName,
         accountNumber: row.accountNumber,
-        accountType: row.accountType,
-        verificationStatus: row.verificationStatus,
+        accountType: null,
+        verificationStatus: row.verified
+          ? VerificationStatus.VERIFIED
+          : VerificationStatus.PENDING,
       });
     }
 

@@ -111,17 +111,13 @@ export class OwnerPaymentAccountService {
 
   async getPrimaryAccount(userId: string): Promise<OwnerPaymentAccount | null> {
     return this.paymentAccountRepository.findOne({
-      where: { userId, isPrimary: true, isActive: true },
+      where: { userId, isPrimary: true },
     });
   }
 
   async hasVerifiedAccount(userId: string): Promise<boolean> {
     const count = await this.paymentAccountRepository.count({
-      where: {
-        userId,
-        verificationStatus: "verified" as any,
-        isActive: true,
-      },
+      where: { userId, verified: true },
     });
     return count > 0;
   }

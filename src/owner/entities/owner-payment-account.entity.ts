@@ -9,6 +9,9 @@ import {
 } from "typeorm";
 import { UserEntity } from "../../users/entities/user.entity";
 
+// Retained for callers that still import these enums; the slimmer DB
+// schema only stores a `verified` boolean, so the enum values exist for
+// API-contract continuity but are not persisted to columns of their own.
 export enum AccountType {
   SAVINGS = "savings",
   CHECKING = "checking",
@@ -21,65 +24,45 @@ export enum VerificationStatus {
   REJECTED = "rejected",
 }
 
+// The deployed `owner_payment_accounts` table was created by the
+// ensure-all-tables bootstrap script with these columns:
+//   id, ownerId, accountHolderName, bankName, accountNumber,
+//   branchCode, isPrimary, verified, createdAt, updatedAt
+// All @Column names are pinned explicitly so the SnakeNamingStrategy
+// doesn't rewrite them to snake_case.
 @Entity("owner_payment_accounts")
 export class OwnerPaymentAccount {
   @PrimaryGeneratedColumn("uuid")
   id: string;
 
-  @Column({ type: "uuid" })
+  @Column({ name: "ownerId", type: "uuid" })
   userId: string;
 
   @ManyToOne(() => UserEntity)
-  @JoinColumn({ name: "userId" })
+  @JoinColumn({ name: "ownerId" })
   user: UserEntity;
 
-  @Column({ type: "varchar", length: 255 })
+  @Column({ name: "accountHolderName", type: "varchar", length: 255 })
   accountHolderName: string;
 
-  @Column({ type: "varchar", length: 255 })
+  @Column({ name: "bankName", type: "varchar", length: 255 })
   bankName: string;
 
-  @Column({ type: "varchar", length: 100 })
+  @Column({ name: "accountNumber", type: "varchar", length: 100 })
   accountNumber: string;
 
-  @Column({ type: "varchar", length: 34, nullable: true })
-  iban: string | null;
-
-  @Column({ type: "varchar", length: 11, nullable: true })
-  swiftCode: string | null;
-
-  @Column({ type: "varchar", length: 20, nullable: true })
-  routingNumber: string | null;
-
-  @Column({ type: "varchar", length: 100, nullable: true })
+  @Column({ name: "branchCode", type: "varchar", length: 100, nullable: true })
   branchCode: string | null;
 
-  @Column({
-    type: "enum",
-    enum: AccountType,
-    default: AccountType.SAVINGS,
-  })
-  accountType: AccountType;
-
-  @Column({
-    type: "enum",
-    enum: VerificationStatus,
-    default: VerificationStatus.PENDING,
-  })
-  verificationStatus: VerificationStatus;
-
-  @Column({ type: "text", nullable: true })
-  verificationNotes: string | null;
-
-  @Column({ default: true })
-  isActive: boolean;
-
-  @Column({ default: false })
+  @Column({ name: "isPrimary", default: false })
   isPrimary: boolean;
 
-  @CreateDateColumn()
+  @Column({ name: "verified", default: false })
+  verified: boolean;
+
+  @CreateDateColumn({ name: "createdAt" })
   createdAt: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ name: "updatedAt" })
   updatedAt: Date;
 }

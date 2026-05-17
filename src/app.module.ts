@@ -55,12 +55,16 @@ import { WalletModule } from "./wallet/wallet.module";
         const enableSynchronize =
           configService.get<string>("TYPEORM_SYNCHRONIZE") === "true";
 
-        // Minimal snake_case naming strategy
+        // Minimal snake_case naming strategy.
+        // IMPORTANT: explicit `@Column({ name: ... })` overrides MUST be respected
+        // as-is — they may intentionally point to camelCase legacy columns.
         class SnakeNamingStrategy extends DefaultNamingStrategy {
           columnName(propertyName: string, customName: string, embeddedPrefixes: string[]) {
-            const name = customName || propertyName;
             const prefix = embeddedPrefixes.join("");
-            return (prefix + name).replace(/([A-Z])/g, "_$1").toLowerCase();
+            if (customName) {
+              return prefix ? prefix + customName : customName;
+            }
+            return (prefix + propertyName).replace(/([A-Z])/g, "_$1").toLowerCase();
           }
 
           relationName(propertyName: string) {
