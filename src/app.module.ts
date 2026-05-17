@@ -2,7 +2,8 @@ import { Module, OnModuleInit } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { ThrottlerModule } from "@nestjs/throttler";
-import { DataSource } from "typeorm";
+import { DataSource, DefaultNamingStrategy } from "typeorm";
+import { Client } from "pg";
 import * as bcrypt from "bcryptjs";
 import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
@@ -50,19 +51,79 @@ import { WalletModule } from "./wallet/wallet.module";
     ]),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => {
+      useFactory: async (configService: ConfigService) => {
         const enableSynchronize =
           configService.get<string>("TYPEORM_SYNCHRONIZE") === "true";
 
+        // Minimal snake_case naming strategy
+        class SnakeNamingStrategy extends DefaultNamingStrategy {
+          columnName(propertyName: string, customName: string, embeddedPrefixes: string[]) {
+            const name = customName || propertyName;
+            const prefix = embeddedPrefixes.join("");
+            return (prefix + name).replace(/([A-Z])/g, "_$1").toLowerCase();
+          }
+
+          relationName(propertyName: string) {
+            return propertyName.replace(/([A-Z])/g, "_$1").toLowerCase();
+          }
+
+          tableName(className: string, customName: string) {
+            return customName || className.replace(/([A-Z])/g, "_$1").toLowerCase();
+          }
+
+          joinColumnName(relationName: string, referencedColumnName: string) {
+            return `${relationName.replace(/([A-Z])/g, "_$1").toLowerCase()}_${referencedColumnName}`;
+          }
+        }
+
+        // Decide naming strategy by probing a few known columns in the DB.
+        const databaseUrl = configService.get<string>("DATABASE_URL");
+        let useSnake = false;
+        if (databaseUrl) {
+          const client = new Client({ connectionString: databaseUrl });
+          try {
+            await client.connect();
+
+            // checks: users.created_at, chargers.owner_id, promotions.start_date, wallet_transactions.user_id, notification_logs.user_id
+            const checks = [
+              { table: "users", col: "created_at" },
+              { table: "chargers", col: "owner_id" },
+              { table: "promotions", col: "start_date" },
+              { table: "wallet_transactions", col: "user_id" },
+              { table: "notification_logs", col: "user_id" },
+            ];
+
+            let found = 0;
+            for (const c of checks) {
+              const res = await client.query(
+                `SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1 AND column_name = $2 LIMIT 1`,
+                [c.table, c.col],
+              );
+              if (res.rowCount > 0) found++;
+            }
+
+            // If majority of checked columns use snake_case, enable snake strategy
+            useSnake = found >= Math.ceil(checks.length / 2);
+          } catch (e) {
+            // best-effort only — fall back to default
+            useSnake = false;
+          } finally {
+            try {
+              await client.end();
+            } catch {}
+          }
+        }
+
         return {
           type: "postgres",
-          url: configService.get("DATABASE_URL"),
+          url: databaseUrl,
           entities: [__dirname + "/**/*.entity{.ts,.js}"],
           migrations: [__dirname + "/migrations/**/*{.ts,.js}"],
           synchronize: enableSynchronize,
           migrationsRun: false,
           autoLoadEntities: true,
           logging: false,
+          namingStrategy: useSnake ? new SnakeNamingStrategy() : new DefaultNamingStrategy(),
         };
       },
       inject: [ConfigService],
