@@ -12,7 +12,6 @@ import {
 } from "@nestjs/common";
 import { ChargingService } from "./charging.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
-import { WebhookAuthGuard } from "./guards/webhook-auth.guard";
 
 @Controller("charging")
 @UseGuards(JwtAuthGuard)
@@ -135,32 +134,7 @@ export class ChargingController {
     return this.chargingService.setAvailability(chargerId, connectorId, type);
   }
 
-  // OCPP Webhooks - API key authenticated endpoints for ev-charging-service callbacks
-  @Post("webhooks/session-started")
-  @UseGuards(WebhookAuthGuard)
-  @HttpCode(HttpStatus.OK)
-  async handleSessionStarted(@Body() payload: any) {
-    return this.chargingService.handleSessionStartedWebhook(payload);
-  }
-
-  @Post("webhooks/meter-values")
-  @UseGuards(WebhookAuthGuard)
-  @HttpCode(HttpStatus.OK)
-  async handleMeterValues(@Body() payload: any) {
-    return this.chargingService.handleMeterValuesWebhook(payload);
-  }
-
-  @Post("webhooks/session-completed")
-  @UseGuards(WebhookAuthGuard)
-  @HttpCode(HttpStatus.OK)
-  async handleSessionCompleted(@Body() payload: any) {
-    return this.chargingService.handleSessionCompletedWebhook(payload);
-  }
-
-  @Post("webhooks/session-completed-full")
-  @UseGuards(WebhookAuthGuard)
-  @HttpCode(HttpStatus.OK)
-  async handleSessionCompletedFull(@Body() payload: any) {
-    return this.chargingService.handleSessionCompletedWebhook(payload);
-  }
+  // OCPP webhooks live in ChargingWebhooksController so the class-level
+  // JwtAuthGuard above does not stack with WebhookAuthGuard and lock the
+  // external ev-charging-service out of /api/charging/webhooks/*.
 }

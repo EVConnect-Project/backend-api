@@ -5,6 +5,7 @@ import { ServiceStationEntity } from "../service-stations/entities/service-stati
 import { ServiceProviderSignalEntity } from "./entities/service-provider-signal.entity";
 import { ServiceProvidersController } from "./service-providers.controller";
 import { ServiceProvidersService } from "./service-providers.service";
+import { AiServicesModule } from "../ai-services/ai-services.module";
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { ServiceProvidersService } from "./service-providers.service";
       ServiceStationEntity,
       ServiceProviderSignalEntity,
     ]),
+    AiServicesModule,
   ],
   controllers: [ServiceProvidersController],
   providers: [ServiceProvidersService],

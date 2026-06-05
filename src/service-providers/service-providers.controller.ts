@@ -30,6 +30,7 @@ export class ServiceProvidersController {
     @Query("issueType") issueType?: string,
     @Query("userId") userId?: string,
     @Query("providerType") providerType?: ProviderType,
+    @Query("urgency") urgency?: "low" | "medium" | "high" | "critical",
   ) {
     const parsedMode: ServiceMode =
       mode === "emergency" ? "emergency" : "planned";
@@ -45,6 +46,7 @@ export class ServiceProvidersController {
       issueType: issueType?.trim() || undefined,
       userId: userId?.trim() || undefined,
       providerType,
+      urgencyLevel: urgency,
     });
   }
 

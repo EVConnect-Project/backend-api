@@ -1,10 +1,12 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   BadRequestException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { LessThan, Repository } from "typeorm";
+import { Cron, CronExpression } from "@nestjs/schedule";
 import {
   EmergencyRequestEntity,
   EmergencyStatus,
@@ -21,6 +23,17 @@ import { NotificationType } from "../notifications/types/notification-types";
 
 @Injectable()
 export class EmergencyService {
+  private readonly logger = new Logger(EmergencyService.name);
+
+  /**
+   * Maximum number of minutes an emergency request can stay in `pending`
+   * (no mechanic accepted) before the cron auto-expires it. Configurable
+   * via env so ops can tune it per region without code changes.
+   */
+  private readonly autoExpireAfterMinutes = Number(
+    process.env.EMERGENCY_AUTO_EXPIRE_MINUTES || 5,
+  );
+
   constructor(
     @InjectRepository(EmergencyRequestEntity)
     private emergencyRequestRepository: Repository<EmergencyRequestEntity>,
@@ -32,6 +45,77 @@ export class EmergencyService {
     private userRepository: Repository<UserEntity>,
     private notificationsService: NotificationsService,
   ) {}
+
+  /**
+   * Auto-cancel emergency requests that have been pending too long without
+   * any mechanic accepting. Runs every minute.
+   *
+   * Edge cases handled:
+   * - Only `pending` requests are touched; accepted/in_progress/completed
+   *   are intentionally left alone.
+   * - We update via a single SQL statement so the cron is safe to run on
+   *   multiple instances simultaneously (the row-level write is atomic;
+   *   the second instance simply sees zero affected rows).
+   */
+  @Cron(CronExpression.EVERY_MINUTE)
+  async autoExpireStalePendingRequests(): Promise<void> {
+    const cutoff = new Date(
+      Date.now() - this.autoExpireAfterMinutes * 60_000,
+    );
+
+    try {
+      const result = await this.emergencyRequestRepository
+        .createQueryBuilder()
+        .update(EmergencyRequestEntity)
+        .set({
+          status: "cancelled",
+          cancelledAt: () => "NOW()",
+          mechanicFeedback:
+            "Auto-cancelled: no mechanic accepted within the response window.",
+        })
+        .where("status = :status", { status: "pending" })
+        .andWhere("createdAt < :cutoff", { cutoff })
+        .execute();
+
+      if (result.affected && result.affected > 0) {
+        this.logger.warn(
+          `Auto-expired ${result.affected} stale pending emergency request(s) (cutoff ${cutoff.toISOString()})`,
+        );
+
+        // Best-effort notify users their request expired. Errors here are
+        // intentionally swallowed — the cancel itself is what matters and
+        // the user will see the status in-app.
+        try {
+          const cancelled = await this.emergencyRequestRepository.find({
+            where: {
+              status: "cancelled",
+              cancelledAt: LessThan(new Date(Date.now() + 1000)),
+              createdAt: LessThan(cutoff),
+            },
+            order: { cancelledAt: "DESC" },
+            take: result.affected,
+          });
+
+          await Promise.allSettled(
+            cancelled.map((req) =>
+              this.notificationsService.sendEmergencyExpired(
+                req.userId,
+                req.id,
+              ),
+            ),
+          );
+        } catch (notifyErr) {
+          this.logger.warn(
+            `Auto-expire notification fan-out failed: ${String(notifyErr)}`,
+          );
+        }
+      }
+    } catch (err) {
+      this.logger.error(
+        `Auto-expire cron failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
 
   /**
    * Create a new emergency request and alert mechanics

@@ -1,9 +1,20 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { MechanicEntity } from "../mechanics/entities/mechanic.entity";
 import { ServiceStationEntity } from "../service-stations/entities/service-station.entity";
 import { ServiceProviderSignalEntity } from "./entities/service-provider-signal.entity";
+import {
+  AiServicesClient,
+  MechanicFeatureVector,
+} from "../ai-services/ai-services.client";
+
+const URGENCY_LEVEL_MAP: Record<string, 0 | 1 | 2 | 3> = {
+  low: 0,
+  medium: 1,
+  high: 2,
+  critical: 3,
+};
 
 type ProviderType = "individual_mechanic" | "service_station";
 type ServiceMode = "emergency" | "planned";
@@ -16,6 +27,7 @@ interface SearchProvidersOptions {
   issueType?: string;
   userId?: string;
   providerType?: ProviderType;
+  urgencyLevel?: "low" | "medium" | "high" | "critical";
 }
 
 interface RecordProviderSignalInput {
@@ -34,6 +46,8 @@ interface UserSignalProfile {
 
 @Injectable()
 export class ServiceProvidersService {
+  private readonly logger = new Logger(ServiceProvidersService.name);
+
   constructor(
     @InjectRepository(MechanicEntity)
     private readonly mechanicRepository: Repository<MechanicEntity>,
@@ -41,6 +55,7 @@ export class ServiceProvidersService {
     private readonly stationRepository: Repository<ServiceStationEntity>,
     @InjectRepository(ServiceProviderSignalEntity)
     private readonly providerSignalRepository: Repository<ServiceProviderSignalEntity>,
+    private readonly aiServices: AiServicesClient,
   ) {}
 
   async searchProviders(options: SearchProvidersOptions) {
@@ -143,14 +158,40 @@ export class ServiceProvidersService {
       ? await this.getUserSignalProfile(options.userId, options.mode)
       : null;
 
+    // Optional AI assist: ask ai-services for mechanic-ranking scores.
+    // We only ask in emergency mode (where the ML model was trained to be
+    // most useful) and we never block on it — null result = rule-based only.
+    const aiScoresByProviderId = await this.maybeFetchAiMechanicScores(
+      providers,
+      options,
+    );
+
     const scoredProviders: Array<
       Record<string, unknown> & { score: number; matchReasons: string[] }
     > = providers.map((provider) => {
-      const score = this.computeProviderScore(provider, options, signalProfile);
+      const baseScore = this.computeProviderScore(
+        provider,
+        options,
+        signalProfile,
+      );
+      const aiScore = aiScoresByProviderId.get(provider.id as string) ?? null;
+      const score =
+        aiScore != null
+          ? // Blend: 60% rule-based (already includes preference/signals), 40% AI.
+            this.roundScore(baseScore * 0.6 + (aiScore / 100) * 0.4)
+          : baseScore;
+      const matchReasons = this.buildMatchReasons(
+        provider,
+        options,
+        signalProfile,
+      );
+      if (aiScore != null && aiScore >= 80) {
+        matchReasons.push("AI top match");
+      }
       return {
         ...provider,
         score,
-        matchReasons: this.buildMatchReasons(provider, options, signalProfile),
+        matchReasons,
       };
     });
 
@@ -217,6 +258,79 @@ export class ServiceProvidersService {
       estimatedArrivalMinutes: null,
       responseSlaMinutes: null,
     };
+  }
+
+  /**
+   * Call ai-services /predict/mechanic-ranking for individual mechanics in
+   * the provider list. Returns a map from providerId -> AI score (0..100).
+   * Empty map = AI unavailable / non-emergency mode / no mechanic candidates.
+   *
+   * Never throws — the caller treats absence as "AI down, use rule score".
+   */
+  private async maybeFetchAiMechanicScores(
+    providers: Array<Record<string, unknown>>,
+    options: SearchProvidersOptions,
+  ): Promise<Map<string, number>> {
+    const empty = new Map<string, number>();
+
+    // Only enrich the emergency flow today — that's what the model was
+    // trained for and what the user-perceived latency budget allows.
+    if (options.mode !== "emergency") {
+      return empty;
+    }
+
+    const mechanicProviders = providers.filter(
+      (p) => p.providerType === "individual_mechanic",
+    );
+    if (mechanicProviders.length === 0) {
+      return empty;
+    }
+
+    const urgency =
+      URGENCY_LEVEL_MAP[options.urgencyLevel ?? "medium"] ?? 1;
+
+    const features: MechanicFeatureVector[] = mechanicProviders.map(
+      (provider) => {
+        const distance =
+          this.numberOrNull(provider.distance) ?? options.radiusKm;
+        const rating = this.numberOrZero(provider.rating);
+        const reviewCount = this.numberOrZero(provider.reviewCount);
+        const available = provider.available === true ? 1 : 0;
+        const pricePerHour =
+          this.numberOrNull(provider.pricePerHour) ?? 0;
+        const issueScore = this.computeIssueMatchScore(
+          provider,
+          options.issueType,
+        );
+
+        return {
+          distance_km: Math.max(0, distance),
+          rating: Math.min(5, Math.max(0, rating)),
+          available: available as 0 | 1,
+          service_match: issueScore,
+          completed_jobs: Math.max(0, Math.round(reviewCount)),
+          // No real "years_experience" column in the entity today — proxy
+          // with completed_jobs / 25 capped at 20.
+          years_experience: Math.min(20, Math.max(0, reviewCount / 25)),
+          urgency_level: urgency,
+          price_per_hour: Math.max(0, pricePerHour),
+        };
+      },
+    );
+
+    const scores = await this.aiServices.rankMechanics(features);
+    if (!scores) {
+      return empty;
+    }
+
+    const result = new Map<string, number>();
+    scores.forEach((entry) => {
+      const provider = mechanicProviders[entry.mechanic_index];
+      if (provider) {
+        result.set(provider.id as string, entry.predicted_score);
+      }
+    });
+    return result;
   }
 
   private async getUserSignalProfile(

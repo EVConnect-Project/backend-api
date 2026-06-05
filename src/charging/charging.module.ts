@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { HttpModule } from "@nestjs/axios";
 import { ChargingController } from "./charging.controller";
+import { ChargingWebhooksController } from "./charging-webhooks.controller";
 import { ChargingService } from "./charging.service";
 import { NotificationsModule } from "../notifications/notifications.module";
 
@@ -9,7 +10,7 @@ import { NotificationsModule } from "../notifications/notifications.module";
     HttpModule,
     NotificationsModule, // For charging event notifications
   ],
-  controllers: [ChargingController],
+  controllers: [ChargingController, ChargingWebhooksController],
   providers: [ChargingService],
   exports: [ChargingService],
 })

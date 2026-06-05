@@ -30,6 +30,7 @@ export enum NotificationType {
   MECHANIC_ASSIGNED = "mechanic_assigned",
   MECHANIC_ON_WAY = "mechanic_on_way",
   SERVICE_COMPLETED = "service_completed",
+  EMERGENCY_EXPIRED = "emergency_expired",
 
   // Location-based (NEW)
   CHARGER_AVAILABLE_NEARBY = "charger_available_nearby",

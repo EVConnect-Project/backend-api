@@ -465,6 +465,20 @@ export class NotificationsService implements OnModuleInit {
     });
   }
 
+  async sendEmergencyExpired(
+    userId: string,
+    requestId: string,
+  ): Promise<void> {
+    await this.sendToUser(userId, NotificationType.EMERGENCY_EXPIRED, {
+      title: "No mechanic accepted",
+      body: "Your emergency request expired without a mechanic accepting. Try again or call support.",
+      data: {
+        requestId,
+        navigate: `/emergency/${requestId}`,
+      },
+    });
+  }
+
   /**
    * Send charger available nearby notification
    */
