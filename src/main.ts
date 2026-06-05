@@ -1,6 +1,7 @@
 import { NestFactory } from "@nestjs/core";
 import { ValidationPipe } from "@nestjs/common";
 import helmet from "helmet";
+import cookieParser from "cookie-parser";
 import { AppModule } from "./app.module";
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 import { RequestIdMiddleware } from "./common/middleware/request-id.middleware";
@@ -27,6 +28,9 @@ async function bootstrap() {
     }),
   );
 
+  // Parse cookies — required for the HttpOnly admin auth cookie path.
+  app.use(cookieParser());
+
   // Request correlation IDs (x-request-id) used by the global exception filter
   // and any structured logger.
   app.use(new RequestIdMiddleware().use);
@@ -42,6 +46,7 @@ async function bootstrap() {
       "X-Requested-With",
       "Origin",
       "X-Request-Id",
+      "X-XSRF-TOKEN",
     ],
     exposedHeaders: [
       "Content-Range",

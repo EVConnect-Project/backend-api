@@ -4,7 +4,27 @@ import { ExtractJwt, Strategy } from "passport-jwt";
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
+import type { Request } from "express";
 import { UserEntity } from "../../users/entities/user.entity";
+
+export const ADMIN_ACCESS_COOKIE = "evrs_access";
+
+/**
+ * Pull a JWT out of either the Authorization: Bearer header (mobile clients)
+ * OR the HttpOnly admin cookie (admin dashboard). Tried in that order so the
+ * mobile flow keeps its existing behaviour and only browser sessions benefit
+ * from the cookie path.
+ */
+function extractJwtFromHeaderOrCookie(req: Request): string | null {
+  const fromHeader = ExtractJwt.fromAuthHeaderAsBearerToken()(req);
+  if (fromHeader) return fromHeader;
+
+  const cookies = (req as Request & { cookies?: Record<string, string> }).cookies;
+  const fromCookie = cookies?.[ADMIN_ACCESS_COOKIE];
+  return typeof fromCookie === "string" && fromCookie.length > 0
+    ? fromCookie
+    : null;
+}
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -16,7 +36,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     const secret = configService.get<string>("JWT_SECRET");
     if (!secret) throw new Error("JWT_SECRET environment variable is not set");
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      jwtFromRequest: extractJwtFromHeaderOrCookie,
       ignoreExpiration: false,
       secretOrKey: secret,
     });

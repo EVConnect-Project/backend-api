@@ -5,12 +5,14 @@ import {
   Get,
   UseGuards,
   Request,
+  Res,
   Inject,
   Patch,
   Delete,
   HttpCode,
   HttpStatus,
 } from "@nestjs/common";
+import type { Response } from "express";
 import { AuthService } from "./auth.service";
 import { RegisterDto } from "./dto/register.dto";
 import { LoginDto } from "./dto/login.dto";
@@ -23,6 +25,10 @@ import {
   ResetPasswordDto,
 } from "./dto/phone-auth.dto";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
+import {
+  clearAdminSessionCookies,
+  setAdminSessionCookies,
+} from "./utils/auth-cookies";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { Charger } from "../charger/entities/charger.entity";
@@ -104,8 +110,33 @@ export class AuthController {
   }
 
   @Post("admin/login")
-  async adminLogin(@Body() loginDto: LoginDto) {
-    return this.authService.adminLogin(loginDto);
+  async adminLogin(
+    @Body() loginDto: LoginDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.authService.adminLogin(loginDto);
+
+    // Issue HttpOnly access + refresh + XSRF-TOKEN cookies. The body
+    // intentionally no longer carries the access/refresh tokens for browser
+    // clients — the dashboard reads `csrfToken` and the `user` block only.
+    // Mobile / server-to-server clients can still hit /auth/login which keeps
+    // returning tokens in the response body.
+    const csrfToken = setAdminSessionCookies(res, {
+      accessToken: result.access_token,
+      refreshToken: result.refresh_token,
+    });
+
+    return {
+      user: result.user,
+      csrfToken,
+    };
+  }
+
+  @Post("admin/logout")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async adminLogout(@Res({ passthrough: true }) res: Response) {
+    clearAdminSessionCookies(res);
+    return;
   }
 
   @Get("admin/verify")

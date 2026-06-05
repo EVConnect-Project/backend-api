@@ -1,7 +1,9 @@
 import { Module, OnModuleInit } from "@nestjs/common";
+import { APP_GUARD } from "@nestjs/core";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { ThrottlerModule } from "@nestjs/throttler";
+import { CsrfGuard } from "./common/guards/csrf.guard";
 import { DataSource, DefaultNamingStrategy } from "typeorm";
 import { Client } from "pg";
 import * as bcrypt from "bcryptjs";
@@ -164,7 +166,12 @@ import { WalletModule } from "./wallet/wallet.module";
     WalletModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    // Global CSRF guard. Only fires when the request is authenticated via the
+    // admin HttpOnly cookie — Bearer-authed requests (mobile app) skip it.
+    { provide: APP_GUARD, useClass: CsrfGuard },
+  ],
 })
 export class AppModule implements OnModuleInit {
   constructor(
