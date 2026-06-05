@@ -6,7 +6,7 @@ import {
   Logger,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository, LessThan } from "typeorm";
+import { DataSource, Repository, LessThan } from "typeorm";
 import { BookingEntity } from "./entities/booking.entity";
 import { CreateBookingDto } from "./dto/create-booking.dto";
 import { Charger } from "../charger/entities/charger.entity";
@@ -51,6 +51,7 @@ export class BookingsService {
     private socketRepository: Repository<ChargerSocket>,
     private notificationsService: NotificationsService,
     private smsService: SmsService,
+    private readonly dataSource: DataSource,
   ) {}
 
   /**
@@ -75,7 +76,8 @@ export class BookingsService {
         throw new BadRequestException("Start time cannot be in the past");
       }
 
-      // Fetch charger with owner relationship
+      // Pre-flight: charger must exist and be verified. We do this outside
+      // the transaction to fail fast on bad input without holding a row lock.
       const charger = await this.chargerRepository.findOne({
         where: { id: chargerId },
         relations: ["owner"],
@@ -85,41 +87,20 @@ export class BookingsService {
         throw new NotFoundException(`Charger with ID ${chargerId} not found`);
       }
 
-      // Check if charger is verified by admin
       if (!charger.verified) {
         throw new BadRequestException(
           "This charger is not yet verified by admin and cannot accept bookings",
         );
       }
 
-      // Initialize warnings array
       const warnings: BookingWarning[] = [];
-
-      // Check for overlapping bookings (with grace period consideration)
       const gracePeriod = charger.bookingGracePeriod || 0;
       const effectiveStartTime = new Date(
         start.getTime() - gracePeriod * 60 * 1000,
       );
 
-      const overlappingBooking = await this.bookingRepository
-        .createQueryBuilder("booking")
-        .where("booking.chargerId = :chargerId", { chargerId })
-        .andWhere("booking.status NOT IN (:...statuses)", {
-          statuses: ["cancelled", "completed"],
-        })
-        .andWhere(
-          "(booking.startTime < :endTime AND booking.endTime > :effectiveStartTime)",
-          { effectiveStartTime, endTime: end },
-        )
-        .getOne();
-
-      if (overlappingBooking) {
-        throw new BadRequestException(
-          "Charger is already booked for this time slot",
-        );
-      }
-
-      // Calculate price
+      // Price calculation is deterministic given the charger; compute outside
+      // the lock window so we hold the row for as little time as possible.
       let finalPrice = 0;
       const durationMs = end.getTime() - start.getTime();
       const durationHours = durationMs / (1000 * 60 * 60);
@@ -133,7 +114,6 @@ export class BookingsService {
         finalPrice = Number(calculatedPrice.toFixed(2));
       }
 
-      // Validate price is not NaN or negative
       if (isNaN(finalPrice) || finalPrice < 0) {
         finalPrice = 0;
         this.logger.warn(
@@ -141,17 +121,45 @@ export class BookingsService {
         );
       }
 
-      // Create booking
-      const booking = this.bookingRepository.create({
-        userId,
-        chargerId,
-        startTime: start,
-        endTime: end,
-        price: finalPrice,
-        status: "pending",
-      });
+      // Serialize concurrent bookings for the same charger: take a row lock
+      // on the charger before the overlap check and insert. Two requests for
+      // the same charger queue here and the second one sees the first one's
+      // booking when it runs its overlap check.
+      const savedBooking = await this.dataSource.transaction(async (em) => {
+        await em.query(`SELECT id FROM chargers WHERE id = $1 FOR UPDATE`, [
+          chargerId,
+        ]);
 
-      const savedBooking = await this.bookingRepository.save(booking);
+        const overlappingBooking = await em
+          .getRepository(BookingEntity)
+          .createQueryBuilder("booking")
+          .where("booking.chargerId = :chargerId", { chargerId })
+          .andWhere("booking.status NOT IN (:...statuses)", {
+            statuses: ["cancelled", "completed"],
+          })
+          .andWhere(
+            "(booking.startTime < :endTime AND booking.endTime > :effectiveStartTime)",
+            { effectiveStartTime, endTime: end },
+          )
+          .getOne();
+
+        if (overlappingBooking) {
+          throw new BadRequestException(
+            "Charger is already booked for this time slot",
+          );
+        }
+
+        const bookingRepo = em.getRepository(BookingEntity);
+        const booking = bookingRepo.create({
+          userId,
+          chargerId,
+          startTime: start,
+          endTime: end,
+          price: finalPrice,
+          status: "pending",
+        });
+        return bookingRepo.save(booking);
+      });
 
       this.logger.log(
         `Booking created: ${savedBooking.id} for charger ${chargerId} by user ${userId}`,

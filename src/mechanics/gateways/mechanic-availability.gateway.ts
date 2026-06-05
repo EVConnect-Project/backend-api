@@ -12,6 +12,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { MechanicEntity } from "../entities/mechanic.entity";
+import { resolveCorsOrigins } from "../../common/utils/cors-origins";
 
 interface MechanicLocation {
   mechanicId: string;
@@ -24,7 +25,7 @@ interface MechanicLocation {
 
 @WebSocketGateway({
   cors: {
-    origin: "*", // Configure for production
+    origin: resolveCorsOrigins("ALLOWED_WS_ORIGINS"),
     credentials: true,
   },
   namespace: "/mechanics",

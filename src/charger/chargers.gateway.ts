@@ -16,10 +16,11 @@ import {
 } from "@nestjs/common";
 import { ChargerService } from "./charger.service";
 import { JwtService } from "@nestjs/jwt";
+import { resolveCorsOrigins } from "../common/utils/cors-origins";
 
 @WebSocketGateway({
   cors: {
-    origin: "*", // Allow all origins for development
+    origin: resolveCorsOrigins("ALLOWED_WS_ORIGINS"),
     credentials: true,
   },
   namespace: "/chargers",

@@ -1,20 +1,38 @@
 import { NestFactory } from "@nestjs/core";
 import { ValidationPipe } from "@nestjs/common";
+import helmet from "helmet";
 import { AppModule } from "./app.module";
+import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
+import { RequestIdMiddleware } from "./common/middleware/request-id.middleware";
+import { resolveCorsOrigins } from "./common/utils/cors-origins";
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    // We attach our own filter below; this just ensures the framework does
+    // not silently swallow shutdown-time exceptions.
+    abortOnError: false,
+  });
 
-  // Configure CORS based on environment
-  const isDevelopment = process.env.NODE_ENV !== "production";
-  const allowedOrigins = isDevelopment
-    ? /^http:\/\/(localhost|127\.0\.0\.1|192\.168\..*):/ // Match any localhost or 192.168.x.x port
-    : process.env.ALLOWED_ORIGINS?.split(",") || [
-        "https://your-frontend-url.com",
-      ];
+  const isProduction = process.env.NODE_ENV === "production";
+
+  // Security headers. CSP is intentionally disabled here because this is a
+  // pure JSON API and clients (Flutter, Next.js admin) are served elsewhere.
+  app.use(
+    helmet({
+      contentSecurityPolicy: false,
+      crossOriginResourcePolicy: { policy: "cross-origin" },
+      hsts: isProduction
+        ? { maxAge: 31536000, includeSubDomains: true, preload: true }
+        : false,
+    }),
+  );
+
+  // Request correlation IDs (x-request-id) used by the global exception filter
+  // and any structured logger.
+  app.use(new RequestIdMiddleware().use);
 
   app.enableCors({
-    origin: isDevelopment ? true : allowedOrigins,
+    origin: resolveCorsOrigins("ALLOWED_ORIGINS"),
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"],
     allowedHeaders: [
@@ -23,8 +41,14 @@ async function bootstrap() {
       "Accept",
       "X-Requested-With",
       "Origin",
+      "X-Request-Id",
     ],
-    exposedHeaders: ["Content-Range", "X-Content-Range", "X-Total-Count"],
+    exposedHeaders: [
+      "Content-Range",
+      "X-Content-Range",
+      "X-Total-Count",
+      "X-Request-Id",
+    ],
     preflightContinue: false,
     optionsSuccessStatus: 200,
   });
@@ -40,19 +64,31 @@ async function bootstrap() {
     }),
   );
 
+  app.useGlobalFilters(new AllExceptionsFilter());
+
   // API prefix
   app.setGlobalPrefix("api");
 
+  // Graceful shutdown: drain in-flight requests, close DB pool, disconnect sockets.
+  app.enableShutdownHooks();
+
   const port = process.env.PORT || 3001;
-  // Listen on all network interfaces to allow mobile devices to connect
   await app.listen(port, "0.0.0.0");
   console.log(`🚀 Application is running on: http://localhost:${port}`);
   console.log(`📚 API available at: http://localhost:${port}/api`);
+  if (!isProduction) {
+    console.log(
+      `📱 Mobile devices can connect at: http://192.168.2.1:${port}/api`,
+    );
+  }
   console.log(
-    `📱 Mobile devices can connect at: http://192.168.2.1:${port}/api`,
-  );
-  console.log(
-    `🔐 CORS enabled for: ${isDevelopment ? "all localhost origins (dev mode)" : process.env.ALLOWED_ORIGINS || "https://your-frontend-url.com"}`,
+    `🔐 CORS: ${
+      process.env.ALLOWED_ORIGINS
+        ? `prod allowlist (${process.env.ALLOWED_ORIGINS})`
+        : isProduction
+          ? "CLOSED — set ALLOWED_ORIGINS to open"
+          : "dev localhost/LAN pattern"
+    }`,
   );
 }
 bootstrap();

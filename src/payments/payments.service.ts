@@ -5,7 +5,7 @@ import {
   Logger,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { DataSource, Repository } from "typeorm";
 import { ConfigService } from "@nestjs/config";
 import { createHash, randomUUID, timingSafeEqual } from "crypto";
 import { PaymentEntity } from "./entities/payment.entity";
@@ -46,6 +46,7 @@ export class PaymentsService {
     private notificationsService: NotificationsService,
     private smsService: SmsService,
     private paymentMethodsService: PaymentMethodsService,
+    private readonly dataSource: DataSource,
   ) {
     this.payhereBaseUrl = (
       this.configService.get<string>("PAYHERE_BASE_URL") ||
@@ -418,72 +419,116 @@ export class PaymentsService {
   }
 
   async handleWebhook(payload: any): Promise<any> {
-    try {
-      const {
-        merchant_id,
-        order_id,
-        payhere_amount,
-        payhere_currency,
-        status_code,
-        md5sig,
-        payment_id,
-      } = payload;
+    const {
+      merchant_id,
+      order_id,
+      payhere_amount,
+      payhere_currency,
+      status_code,
+      md5sig,
+      payment_id,
+    } = payload || {};
 
-      const merchantSecretHash = createHash("md5")
-        .update(this.payhereMerchantSecret)
-        .digest("hex")
-        .toUpperCase();
-
-      const localHash = createHash("md5")
-        .update(
-          `${merchant_id}${order_id}${payhere_amount}${String(payhere_currency).toUpperCase()}${status_code}${merchantSecretHash}`,
-        )
-        .digest("hex")
-        .toUpperCase();
-
-      const incoming = Buffer.from(String(md5sig).toUpperCase());
-      const expected = Buffer.from(localHash);
-
-      if (
-        incoming.length !== expected.length ||
-        !timingSafeEqual(incoming, expected)
-      ) {
-        console.error("PayHere hash verification failed");
-        throw new BadRequestException("Invalid webhook signature");
-      }
-
-      const payment = await this.paymentRepository.findOne({
-        where: { id: order_id },
-      });
-
-      if (!payment) {
-        throw new NotFoundException("Payment not found");
-      }
-
-      switch (parseInt(status_code)) {
-        case 2:
-          await this.handlePaymentSuccess(payment, payment_id);
-          break;
-        case 0:
-          await this.paymentRepository.update(payment.id, {
-            status: "processing",
-            txnId: payment_id,
-          });
-          break;
-        case -1:
-        case -2:
-        case -3:
-          await this.handlePaymentFailure(payment, status_code);
-          break;
-        default:
-          console.warn(`Unknown PayHere status code: ${status_code}`);
-      }
-
-      return { received: true };
-    } catch (error) {
-      console.error("PayHere webhook error:", error);
-      throw error;
+    if (!order_id || !status_code || !md5sig) {
+      throw new BadRequestException("Malformed webhook payload");
     }
+
+    // 1. Signature check (timing-safe).
+    const merchantSecretHash = createHash("md5")
+      .update(this.payhereMerchantSecret)
+      .digest("hex")
+      .toUpperCase();
+
+    const localHash = createHash("md5")
+      .update(
+        `${merchant_id}${order_id}${payhere_amount}${String(payhere_currency).toUpperCase()}${status_code}${merchantSecretHash}`,
+      )
+      .digest("hex")
+      .toUpperCase();
+
+    const incoming = Buffer.from(String(md5sig).toUpperCase());
+    const expected = Buffer.from(localHash);
+
+    if (
+      incoming.length !== expected.length ||
+      !timingSafeEqual(incoming, expected)
+    ) {
+      this.logger.warn(
+        `PayHere webhook rejected: signature mismatch for order_id=${order_id}`,
+      );
+      throw new BadRequestException("Invalid webhook signature");
+    }
+
+    // 2. Look up the originating payment row.
+    const payment = await this.paymentRepository.findOne({
+      where: { id: order_id },
+    });
+
+    if (!payment) {
+      throw new NotFoundException("Payment not found");
+    }
+
+    // 3. Server-side amount tampering check. Webhook amount must match what
+    //    we wrote when we created the payment row.
+    const reportedAmount = Number(payhere_amount);
+    if (
+      Number.isFinite(reportedAmount) &&
+      Number(payment.amount).toFixed(2) !== reportedAmount.toFixed(2)
+    ) {
+      this.logger.error(
+        `PayHere webhook rejected: amount mismatch for order_id=${order_id} expected=${payment.amount} got=${reportedAmount}`,
+      );
+      throw new BadRequestException("Webhook amount mismatch");
+    }
+
+    // 4. Idempotency: PayHere retries on non-2xx. Re-applying success or
+    //    failure logic would double-credit wallets / double-notify users.
+    //    The unique (provider, externalReference) index in
+    //    processed_payment_webhooks acts as the deduplication lock.
+    const externalReference =
+      typeof payment_id === "string" && payment_id.length > 0
+        ? payment_id
+        : `order:${order_id}:status:${status_code}`;
+
+    try {
+      await this.dataSource.query(
+        `INSERT INTO processed_payment_webhooks
+           (provider, "externalReference", "paymentId", "statusCode")
+         VALUES ($1, $2, $3, $4)`,
+        ["payhere", externalReference, payment.id, String(status_code)],
+      );
+    } catch (err: any) {
+      // 23505 = unique_violation. We have already processed this webhook.
+      if (err?.code === "23505") {
+        this.logger.log(
+          `PayHere webhook replay ignored for payment ${payment.id} ref ${externalReference}`,
+        );
+        return { received: true, duplicate: true };
+      }
+      throw err;
+    }
+
+    // 5. Apply the state transition exactly once.
+    switch (parseInt(status_code)) {
+      case 2:
+        await this.handlePaymentSuccess(payment, payment_id);
+        break;
+      case 0:
+        await this.paymentRepository.update(payment.id, {
+          status: "processing",
+          txnId: payment_id,
+        });
+        break;
+      case -1:
+      case -2:
+      case -3:
+        await this.handlePaymentFailure(payment, status_code);
+        break;
+      default:
+        this.logger.warn(`Unknown PayHere status code: ${status_code}`);
+    }
+
+    return { received: true };
   }
 
   private async handlePaymentSuccess(

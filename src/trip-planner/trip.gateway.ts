@@ -18,6 +18,7 @@ import { JwtService } from "@nestjs/jwt";
 import { Repository } from "typeorm";
 import { Server, Socket } from "socket.io";
 import { TripPlanEntity } from "./entities/trip-plan.entity";
+import { resolveCorsOrigins } from "../common/utils/cors-origins";
 
 interface TripLocationPayload {
   tripId: string;
@@ -41,7 +42,7 @@ interface LiveTripLocation {
 @WebSocketGateway({
   namespace: "/trip",
   cors: {
-    origin: "*",
+    origin: resolveCorsOrigins("ALLOWED_WS_ORIGINS"),
     credentials: true,
   },
 })

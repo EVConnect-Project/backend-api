@@ -53,9 +53,7 @@ const DEFAULT_CHARGING_CURVE = [
 export class SmartTripPlannerService {
   private readonly logger = new Logger(SmartTripPlannerService.name);
   private readonly GOOGLE_MAPS_API_KEY =
-    process.env.GOOGLE_MAPS_API_KEY ||
-    process.env.GOOGLE_API_KEY ||
-    "AIzaSyC9HoLlBFBxkOADOS5OXBU1nF2Rbw5os6w";
+    process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_API_KEY || "";
   private readonly SAFETY_BUFFER = 0.8; // 20% reserve
   private readonly CHARGER_SEARCH_RADIUS = 10; // km
   private readonly ROUTE_SEGMENT_LENGTH = 25; // km

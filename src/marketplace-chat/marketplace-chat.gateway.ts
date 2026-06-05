@@ -11,10 +11,12 @@ import { Server, Socket } from "socket.io";
 import { UseGuards } from "@nestjs/common";
 import { MarketplaceChatService } from "./marketplace-chat.service";
 import { SendMessageDto } from "./dto/send-message.dto";
+import { resolveCorsOrigins } from "../common/utils/cors-origins";
 
 @WebSocketGateway({
   cors: {
-    origin: "*", // Configure this properly for production
+    origin: resolveCorsOrigins("ALLOWED_WS_ORIGINS"),
+    credentials: true,
   },
   namespace: "/marketplace-chat",
 })
