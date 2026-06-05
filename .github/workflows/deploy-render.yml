@@ -1,0 +1,43 @@
+name: Deploy to Render
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Why are you deploying manually?"
+        required: false
+
+# Don't queue concurrent deploys to the same service — only the latest matters.
+concurrency:
+  group: render-deploy-${{ github.ref }}
+  cancel-in-progress: false  # let an in-flight deploy finish; just queue one behind it
+
+jobs:
+  wait-for-ci:
+    name: Gate on CI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for CI workflow to succeed on this SHA
+        uses: lewagon/wait-on-check-action@v1.3.4
+        with:
+          ref: ${{ github.sha }}
+          check-name: Lint, typecheck, test
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 15
+
+  deploy:
+    name: Trigger Render deploy
+    needs: wait-for-ci
+    runs-on: ubuntu-latest
+    steps:
+      - name: Kick Render deploy hook
+        # RENDER_DEPLOY_HOOK_URL is created in the Render dashboard
+        # (Service -> Settings -> Deploy Hook) and saved as a repo secret.
+        run: |
+          if [ -z "${{ secrets.RENDER_DEPLOY_HOOK_URL }}" ]; then
+            echo "::error::RENDER_DEPLOY_HOOK_URL secret is not set."
+            exit 1
+          fi
+          curl -fsSL -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
