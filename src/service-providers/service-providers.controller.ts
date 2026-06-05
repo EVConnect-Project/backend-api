@@ -11,6 +11,12 @@ import {
 } from "@nestjs/common";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { ServiceProvidersService } from "./service-providers.service";
+import { ServiceStationBookingsService } from "./service-station-bookings.service";
+import {
+  CompleteServiceStationBookingDto,
+  CreateServiceStationBookingDto,
+  RateServiceStationBookingDto,
+} from "./dto/service-station-booking.dto";
 
 type ServiceMode = "emergency" | "planned";
 type ProviderType = "individual_mechanic" | "service_station";
@@ -19,6 +25,7 @@ type ProviderType = "individual_mechanic" | "service_station";
 export class ServiceProvidersController {
   constructor(
     private readonly serviceProvidersService: ServiceProvidersService,
+    private readonly stationBookingsService: ServiceStationBookingsService,
   ) {}
 
   @Get("search")
@@ -73,5 +80,75 @@ export class ServiceProvidersController {
       action,
       issueType,
     });
+  }
+
+  // --- Service-station appointment bookings -------------------------------
+
+  @Get("stations/:id/slots")
+  async listStationSlots(
+    @Param("id") stationId: string,
+    @Query("date") date: string,
+  ) {
+    return this.stationBookingsService.listAvailableSlots(stationId, date);
+  }
+
+  @Post("stations/:id/bookings")
+  @UseGuards(JwtAuthGuard)
+  async createStationBooking(
+    @Param("id") stationId: string,
+    @Body() dto: CreateServiceStationBookingDto,
+    @Request() req,
+  ) {
+    return this.stationBookingsService.createBooking(
+      req.user.userId,
+      stationId,
+      dto,
+    );
+  }
+
+  @Get("stations/bookings/me")
+  @UseGuards(JwtAuthGuard)
+  async listMyStationBookings(@Request() req) {
+    return this.stationBookingsService.listMyBookings(req.user.userId);
+  }
+
+  @Patch("stations/bookings/:id/cancel")
+  @UseGuards(JwtAuthGuard)
+  async cancelStationBooking(
+    @Param("id") bookingId: string,
+    @Request() req,
+  ) {
+    return this.stationBookingsService.cancelBooking(
+      req.user.userId,
+      bookingId,
+    );
+  }
+
+  @Post("stations/bookings/:id/complete")
+  @UseGuards(JwtAuthGuard)
+  async completeStationBooking(
+    @Param("id") bookingId: string,
+    @Body() dto: CompleteServiceStationBookingDto,
+    @Request() req,
+  ) {
+    return this.stationBookingsService.completeBooking(
+      req.user.userId,
+      bookingId,
+      dto,
+    );
+  }
+
+  @Post("stations/bookings/:id/rate")
+  @UseGuards(JwtAuthGuard)
+  async rateStationBooking(
+    @Param("id") bookingId: string,
+    @Body() dto: RateServiceStationBookingDto,
+    @Request() req,
+  ) {
+    return this.stationBookingsService.rateBooking(
+      req.user.userId,
+      bookingId,
+      dto,
+    );
   }
 }
