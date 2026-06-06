@@ -8,6 +8,7 @@ import {
   AiServicesClient,
   MechanicFeatureVector,
 } from "../ai-services/ai-services.client";
+import { CacheService } from "../common/cache/cache.service";
 
 const URGENCY_LEVEL_MAP: Record<string, 0 | 1 | 2 | 3> = {
   low: 0,
@@ -15,6 +16,13 @@ const URGENCY_LEVEL_MAP: Record<string, 0 | 1 | 2 | 3> = {
   high: 2,
   critical: 3,
 };
+
+// Same naming convention as ChargerService — short shared prefixes so a single
+// invalidatePrefix call wipes everything under a concept.
+export const SERVICE_PROVIDERS_SEARCH_PREFIX = "service-providers:search";
+// 30s TTL: a fair bit tighter than the charger list because emergency-mode
+// availability is more time-sensitive (mechanic could go off-duty mid-second).
+const SEARCH_CACHE_TTL_MS = 30_000;
 
 type ProviderType = "individual_mechanic" | "service_station";
 type ServiceMode = "emergency" | "planned";
@@ -56,9 +64,48 @@ export class ServiceProvidersService {
     @InjectRepository(ServiceProviderSignalEntity)
     private readonly providerSignalRepository: Repository<ServiceProviderSignalEntity>,
     private readonly aiServices: AiServicesClient,
+    private readonly cacheService: CacheService,
   ) {}
 
+  /**
+   * Build a deterministic cache key from a search request. lat/lng snapped to
+   * 4 decimal places (~111m) so two users in the same neighbourhood share an
+   * entry instead of each getting a unique key. Personalisation (userId in
+   * the cache key) is intentionally omitted — the user-signal blending in
+   * computeProviderScore is light enough that a shared key beats per-user
+   * cache fragmentation.
+   */
+  private buildSearchCacheKey(options: SearchProvidersOptions): string | null {
+    if (options.lat == null || options.lng == null) {
+      // No coordinates means no distance filtering — the result set is huge
+      // and the savings are small; skip caching.
+      return null;
+    }
+    const lat = options.lat.toFixed(4);
+    const lng = options.lng.toFixed(4);
+    const providerType = options.providerType ?? "any";
+    const issue = options.issueType ?? "any";
+    const urgency = options.urgencyLevel ?? "med";
+    return `${SERVICE_PROVIDERS_SEARCH_PREFIX}:${options.mode}:${providerType}:${lat},${lng}:${options.radiusKm}:${issue}:${urgency}`;
+  }
+
+  async invalidateSearchCache(): Promise<void> {
+    await this.cacheService.invalidatePrefix(SERVICE_PROVIDERS_SEARCH_PREFIX);
+  }
+
   async searchProviders(options: SearchProvidersOptions) {
+    // Cache-aside: heavy code path (DB scan + AI ranking call + scoring).
+    // Two users searching the same neighbourhood within 30s share an entry.
+    const cacheKey = this.buildSearchCacheKey(options);
+    if (cacheKey) {
+      const cached = await this.cacheService.get<{
+        mode: ServiceMode;
+        total: number;
+        providers: Array<Record<string, unknown>>;
+      }>(cacheKey);
+      if (cached) return cached;
+    }
+
     const includeMechanics =
       !options.providerType || options.providerType === "individual_mechanic";
     const includeStations =
@@ -207,11 +254,22 @@ export class ServiceProvidersService {
       return aDistance - bDistance;
     });
 
-    return {
+    const result = {
       mode: options.mode,
       total: scoredProviders.length,
       providers: scoredProviders,
     };
+
+    if (cacheKey) {
+      await this.cacheService.setWithIndex(
+        SERVICE_PROVIDERS_SEARCH_PREFIX,
+        cacheKey,
+        result,
+        SEARCH_CACHE_TTL_MS,
+      );
+    }
+
+    return result;
   }
 
   async recordProviderSignal(input: RecordProviderSignalInput) {

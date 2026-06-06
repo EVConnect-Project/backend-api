@@ -21,6 +21,11 @@ import { EmergencyService } from "../emergency/emergency.service";
 import { TrafficService } from "./services/traffic.service";
 import { ServiceMatcherService } from "./services/service-matcher.service";
 import axios from "axios";
+import { CacheService } from "../common/cache/cache.service";
+import { SERVICE_PROVIDERS_SEARCH_PREFIX } from "../service-providers/service-providers.service";
+
+const MECHANIC_NEARBY_PREFIX = "mechanics:nearby";
+const MECHANIC_NEARBY_TTL_MS = 30_000;
 
 @Injectable()
 export class MechanicsService {
@@ -41,7 +46,20 @@ export class MechanicsService {
     private emergencyService: EmergencyService,
     private trafficService: TrafficService,
     private serviceMatcherService: ServiceMatcherService,
+    private readonly cacheService: CacheService,
   ) {}
+
+  /**
+   * Wipe both the mechanics-nearby cache and the service-providers search
+   * cache — a write to mechanic availability changes the result set of
+   * both surfaces.
+   */
+  private async invalidateMechanicReadCaches(): Promise<void> {
+    await Promise.all([
+      this.cacheService.invalidatePrefix(MECHANIC_NEARBY_PREFIX),
+      this.cacheService.invalidatePrefix(SERVICE_PROVIDERS_SEARCH_PREFIX),
+    ]);
+  }
 
   async register(
     createMechanicDto: CreateMechanicDto,
@@ -85,6 +103,28 @@ export class MechanicsService {
     lat: number,
     lng: number,
     radiusKm: number = 10,
+  ): Promise<any[]> {
+    // Cache key snaps to a ~111m grid so neighbours share an entry.
+    const gridLat = lat.toFixed(4);
+    const gridLng = lng.toFixed(4);
+    const cacheKey = `${MECHANIC_NEARBY_PREFIX}:${gridLat},${gridLng}:${radiusKm}`;
+    const cached = await this.cacheService.get<any[]>(cacheKey);
+    if (cached) return cached;
+
+    const result = await this.findNearbyUncached(lat, lng, radiusKm);
+    await this.cacheService.setWithIndex(
+      MECHANIC_NEARBY_PREFIX,
+      cacheKey,
+      result,
+      MECHANIC_NEARBY_TTL_MS,
+    );
+    return result;
+  }
+
+  private async findNearbyUncached(
+    lat: number,
+    lng: number,
+    radiusKm: number,
   ): Promise<any[]> {
     try {
       // Get all available, non-banned mechanics
@@ -175,12 +215,17 @@ export class MechanicsService {
   ): Promise<MechanicEntity> {
     const mechanic = await this.findOne(id);
     Object.assign(mechanic, updateMechanicDto);
-    return this.mechanicRepository.save(mechanic);
+    const saved = await this.mechanicRepository.save(mechanic);
+    // Availability / location / ban-status can all change here — wipe both
+    // caches so the next discovery query reflects the change.
+    await this.invalidateMechanicReadCaches();
+    return saved;
   }
 
   async remove(id: string): Promise<void> {
     const mechanic = await this.findOne(id);
     await this.mechanicRepository.remove(mechanic);
+    await this.invalidateMechanicReadCaches();
   }
 
   async updateRating(id: string, newRating: number): Promise<MechanicEntity> {

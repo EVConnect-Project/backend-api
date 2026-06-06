@@ -23,6 +23,15 @@ import { ChargingStation } from "../owner/entities/charging-station.entity";
 import { VehicleProfileService } from "../auth/vehicle-profile.service";
 import { VehicleProfile } from "../auth/entities/vehicle-profile.entity";
 import { BookingEntity } from "../bookings/entities/booking.entity";
+import { CacheService } from "../common/cache/cache.service";
+
+// Cache namespacing — short prefixes so we can wipe everything under a
+// concept (e.g. "chargers:list:*") on a single write.
+const CHARGER_LIST_PREFIX = "chargers:list";
+const CHARGER_NEARBY_PREFIX = "chargers:nearby";
+// 60s TTL: short enough that operators see a fresh status within a minute,
+// long enough to cushion the >90% of repeated reads on hot regions.
+const CHARGER_READ_TTL_MS = 60_000;
 
 @Injectable()
 export class ChargerService {
@@ -38,7 +47,25 @@ export class ChargerService {
     @Inject(forwardRef(() => ChargersGateway))
     private chargersGateway: ChargersGateway,
     private vehicleProfileService: VehicleProfileService,
+    private readonly cacheService: CacheService,
   ) {}
+
+  /**
+   * Wipe all cached charger read results. Call from any write that could
+   * invalidate `findAll` / `findNearby` results — create, update, verify,
+   * ban, status change, etc.
+   *
+   * Conservative invalidation: drop everything rather than try to predict
+   * which rows changed. With a 60s TTL the worst case is one extra DB hit
+   * per geo region per minute, which is far cheaper than a stale charger
+   * search result.
+   */
+  private async invalidateChargerReadCaches(): Promise<void> {
+    await Promise.all([
+      this.cacheService.invalidatePrefix(CHARGER_LIST_PREFIX),
+      this.cacheService.invalidatePrefix(CHARGER_NEARBY_PREFIX),
+    ]);
+  }
 
   private isStatusOperationalNow(status: string | null | undefined): boolean {
     const normalized = String(status ?? "")
@@ -136,6 +163,9 @@ export class ChargerService {
     // Reload charger to get updated OCPP fields
     const updatedCharger = await this.findOne(savedCharger.id);
 
+    // Drop cached charger lists so the new row is visible immediately
+    await this.invalidateChargerReadCaches();
+
     // Broadcast new charger via WebSocket
     try {
       this.chargersGateway.broadcastChargerUpdate(updatedCharger, "created");
@@ -157,6 +187,13 @@ export class ChargerService {
   }
 
   async findAll(): Promise<Charger[]> {
+    // Cache-aside: every call from every user hits the same key, so the
+    // first user pays the DB cost and the next N (within 60s) get a
+    // pointer-flick from Redis.
+    const cacheKey = `${CHARGER_LIST_PREFIX}:all`;
+    const cached = await this.cacheService.get<Charger[]>(cacheKey);
+    if (cached) return cached;
+
     const query = `
       SELECT c.*, cs.station_name AS "stationName"
       FROM chargers c
@@ -166,7 +203,14 @@ export class ChargerService {
         AND c.status != 'offline'
       ORDER BY c."createdAt" DESC
     `;
-    return this.chargerRepository.query(query);
+    const result = (await this.chargerRepository.query(query)) as Charger[];
+    await this.cacheService.setWithIndex(
+      CHARGER_LIST_PREFIX,
+      cacheKey,
+      result,
+      CHARGER_READ_TTL_MS,
+    );
+    return result;
   }
 
   async findOne(id: string): Promise<Charger> {
@@ -186,6 +230,32 @@ export class ChargerService {
     lat: number,
     lng: number,
     radiusKm: number = 10,
+  ): Promise<Charger[]> {
+    // Snap lat/lng to ~111m grid (4 decimals) before keying. This means
+    // requests from the same neighbourhood share a cache entry instead of
+    // each user getting a unique key. The cost is geographic precision in
+    // cache key only — the actual returned chargers are still computed
+    // against the exact query coordinates on miss.
+    const gridLat = lat.toFixed(4);
+    const gridLng = lng.toFixed(4);
+    const cacheKey = `${CHARGER_NEARBY_PREFIX}:${gridLat},${gridLng}:${radiusKm}`;
+    const cached = await this.cacheService.get<Charger[]>(cacheKey);
+    if (cached) return cached;
+
+    const result = await this.findNearbyUncached(lat, lng, radiusKm);
+    await this.cacheService.setWithIndex(
+      CHARGER_NEARBY_PREFIX,
+      cacheKey,
+      result,
+      CHARGER_READ_TTL_MS,
+    );
+    return result;
+  }
+
+  private async findNearbyUncached(
+    lat: number,
+    lng: number,
+    radiusKm: number,
   ): Promise<Charger[]> {
     // Two query implementations, runtime-selectable via the USE_POSTGIS env
     // flag. The flag exists so we can roll forward to PostGIS in production
@@ -273,6 +343,8 @@ export class ChargerService {
 
     const updatedCharger = await this.chargerRepository.save(charger);
 
+    await this.invalidateChargerReadCaches();
+
     // Broadcast update via WebSocket
     try {
       this.chargersGateway.broadcastChargerUpdate(updatedCharger, "updated");
@@ -299,6 +371,7 @@ export class ChargerService {
     }
 
     await this.chargerRepository.remove(charger);
+    await this.invalidateChargerReadCaches();
   }
 
   async findByOwner(ownerId: string): Promise<Charger[]> {
@@ -324,6 +397,11 @@ export class ChargerService {
     const oldStatus = charger.status;
     charger.status = newStatus;
     const updatedCharger = await this.chargerRepository.save(charger);
+
+    // Status change is the most-frequent invalidator (availability matters
+    // most in nearby-search results) — wipe caches before broadcasting so
+    // any client that re-fetches in response to the WS event gets fresh data.
+    await this.invalidateChargerReadCaches();
 
     // Broadcast status change via WebSocket
     try {
@@ -1148,6 +1226,8 @@ export class ChargerService {
     }
 
     const updatedCharger = await this.chargerRepository.save(charger);
+
+    await this.invalidateChargerReadCaches();
 
     // Broadcast update via WebSocket
     try {

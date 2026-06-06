@@ -40,6 +40,7 @@ import { LeadsModule } from "./leads/leads.module";
 import { ServiceProvidersModule } from "./service-providers/service-providers.module";
 import { WalletModule } from "./wallet/wallet.module";
 import { ReceiptsModule } from "./receipts/receipts.module";
+import { AppCacheModule } from "./common/cache/cache.module";
 
 @Module({
   imports: [
@@ -166,6 +167,7 @@ import { ReceiptsModule } from "./receipts/receipts.module";
     ServiceProvidersModule,
     WalletModule,
     ReceiptsModule,
+    AppCacheModule,
   ],
   controllers: [AppController],
   providers: [
