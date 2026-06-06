@@ -187,26 +187,61 @@ export class ChargerService {
     lng: number,
     radiusKm: number = 10,
   ): Promise<Charger[]> {
-    // Simple distance calculation using Haversine formula
-    // Includes stationName via LEFT JOIN so clients can display "Station · Charger" labels
+    // Two query implementations, runtime-selectable via the USE_POSTGIS env
+    // flag. The flag exists so we can roll forward to PostGIS in production
+    // and roll back at the application level without a schema migration.
+    // The migration 1788000000000-EnablePostGISGeometry installs the column
+    // and index either way; this flag just decides whether we USE them.
+    const usePostGIS = process.env.USE_POSTGIS === "true";
+
+    if (usePostGIS) {
+      // PostGIS path: GIST index on chargers.geom narrows the candidate set
+      // to a bounding box around the query point, then ST_Distance_Sphere
+      // computes the exact great-circle distance only on those candidates.
+      // At ~100K rows this is O(log n) instead of O(n).
+      const query = `
+        SELECT c.*,
+               cs.station_name AS "stationName",
+               ST_Distance_Sphere(c.geom, ST_SetSRID(ST_MakePoint($2, $1), 4326)) / 1000.0
+                 AS distance
+        FROM chargers c
+        LEFT JOIN charging_stations cs ON c.station_id = cs.id
+        WHERE c.verified = true
+          AND c."isBanned" = false
+          AND c.status != 'offline'
+          AND c.geom IS NOT NULL
+          AND ST_DWithin(
+                c.geom::geography,
+                ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography,
+                $3 * 1000
+              )
+        ORDER BY distance
+      `;
+      return this.chargerRepository.query(query, [lat, lng, radiusKm]);
+    }
+
+    // Fallback path: original Haversine. Kept identical to pre-PostGIS
+    // behaviour so flipping USE_POSTGIS=false is a true rollback.
+    // Includes stationName via LEFT JOIN so clients can display
+    // "Station · Charger" labels.
     const query = `
       SELECT cwd.*, cs.station_name AS "stationName"
       FROM (
-        SELECT *, 
-          ( 6371 * acos( 
-            cos( radians($1) ) * 
-            cos( radians(lat) ) * 
-            cos( radians(lng) - radians($2) ) + 
-            sin( radians($1) ) * 
-            sin( radians(lat) ) 
-          ) ) AS distance 
+        SELECT *,
+          ( 6371 * acos(
+            cos( radians($1) ) *
+            cos( radians(lat) ) *
+            cos( radians(lng) - radians($2) ) +
+            sin( radians($1) ) *
+            sin( radians(lat) )
+          ) ) AS distance
         FROM chargers
         WHERE verified = true
           AND "isBanned" = false
           AND status != 'offline'
       ) AS cwd
       LEFT JOIN charging_stations cs ON cwd.station_id = cs.id
-      WHERE cwd.distance < $3 
+      WHERE cwd.distance < $3
       ORDER BY cwd.distance
     `;
 
