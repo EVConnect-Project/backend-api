@@ -13,6 +13,7 @@ import { NotificationsModule } from "../notifications/notifications.module";
 import { WalletEntity } from "../wallet/entities/wallet.entity";
 import { WalletTransactionEntity } from "../wallet/entities/wallet-transaction.entity";
 import { AuthModule } from "../auth/auth.module";
+import { ReceiptsModule } from "../receipts/receipts.module";
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { AuthModule } from "../auth/auth.module";
     ConfigModule,
     NotificationsModule,
     AuthModule,
+    ReceiptsModule,
   ],
   controllers: [PaymentsController],
   providers: [PaymentsService, PaymentMethodsService, PaymentSettingsService],

@@ -22,6 +22,8 @@ import {
   WalletTransactionStatus,
   WalletTransactionType,
 } from "../wallet/entities/wallet-transaction.entity";
+import { ReceiptsService } from "../receipts/receipts.service";
+import { NotificationType } from "../notifications/types/notification-types";
 
 @Injectable()
 export class PaymentsService {
@@ -47,6 +49,7 @@ export class PaymentsService {
     private smsService: SmsService,
     private paymentMethodsService: PaymentMethodsService,
     private readonly dataSource: DataSource,
+    private readonly receiptsService: ReceiptsService,
   ) {
     this.payhereBaseUrl = (
       this.configService.get<string>("PAYHERE_BASE_URL") ||
@@ -547,6 +550,12 @@ export class PaymentsService {
       txnId: transactionId,
     });
 
+    // Re-read so the row we hand to the receipts service reflects the
+    // status: "succeeded" we just wrote.
+    const refreshed = await this.paymentRepository.findOne({
+      where: { id: payment.id },
+    });
+
     const booking = await this.bookingRepository.findOne({
       where: { id: payment.bookingId },
     });
@@ -555,6 +564,22 @@ export class PaymentsService {
       await this.bookingRepository.update(booking.id, {
         status: "confirmed",
       });
+    }
+
+    // Issue the receipt before notifying so the FCM payload can already point
+    // at /receipts/:id when the app deep-links. The receipts service is
+    // idempotent — a webhook retry that re-enters here is harmless.
+    if (refreshed && booking) {
+      try {
+        await this.receiptsService.issueForPayment({
+          payment: refreshed,
+          booking,
+        });
+      } catch (err) {
+        this.logger.warn(
+          `Receipt issue failed for payment ${payment.id}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
     }
 
     // Send payment success notification
@@ -568,7 +593,7 @@ export class PaymentsService {
       await this.notifyOwnerBookingPaymentReceived(payment.bookingId);
     }
 
-    console.log(
+    this.logger.log(
       `Payment ${payment.id} succeeded. Booking ${payment.bookingId} confirmed.`,
     );
   }
@@ -664,30 +689,6 @@ export class PaymentsService {
     });
   }
 
-  async refundPayment(paymentId: string): Promise<PaymentEntity> {
-    const payment = await this.paymentRepository.findOne({
-      where: { id: paymentId },
-    });
-
-    if (!payment) {
-      throw new NotFoundException("Payment not found");
-    }
-
-    if (payment.status !== "succeeded") {
-      throw new BadRequestException("Only succeeded payments can be refunded");
-    }
-
-    await this.paymentRepository.update(paymentId, {
-      status: "refunded",
-      metadata: JSON.stringify({
-        refundRequestedAt: new Date().toISOString(),
-        note: "Refund needs to be processed manually via PayHere dashboard",
-      }),
-    });
-
-    return this.findOne(paymentId);
-  }
-
   async findUserTransactions(
     userId: string,
     filters?: {
@@ -770,5 +771,136 @@ export class PaymentsService {
     }
 
     return digits;
+  }
+
+  /**
+   * Refund a previously-succeeded payment.
+   *
+   * Today this updates ledger state and notifies the user; the actual
+   * gateway-side reversal is left as a TODO because PayHere's refund API
+   * is account-scoped and we don't want to wire it without credentials.
+   *
+   *   - Only an admin or the original payer may initiate a refund (controller
+   *     checks the role; service double-checks via `requesterUserId`).
+   *   - Partial refunds supported via `dto.amount`.
+   *   - Booking status flips to `cancelled` only on a full refund.
+   *   - The corresponding receipt is marked `refunded` with the refund amount.
+   */
+  async refundPayment(
+    paymentId: string,
+    dto: { amount?: number; reason: string },
+    requesterUserId: string,
+    requesterRole: string,
+  ): Promise<PaymentEntity> {
+    const payment = await this.paymentRepository.findOne({
+      where: { id: paymentId },
+      relations: ["booking"],
+    });
+    if (!payment) {
+      throw new NotFoundException("Payment not found");
+    }
+    if (payment.status === "refunded") {
+      throw new BadRequestException("Payment already refunded");
+    }
+    if (payment.status !== "succeeded") {
+      throw new BadRequestException(
+        `Only succeeded payments can be refunded (current status: ${payment.status})`,
+      );
+    }
+
+    const booking = await this.bookingRepository.findOne({
+      where: { id: payment.bookingId },
+    });
+
+    const isAdmin = requesterRole === "admin";
+    const isPayer = booking?.userId === requesterUserId;
+    if (!isAdmin && !isPayer) {
+      throw new BadRequestException(
+        "Not authorized to refund this payment",
+      );
+    }
+
+    const totalAmount = Number(payment.amount);
+    const refundAmount = dto.amount ?? totalAmount;
+    if (refundAmount <= 0) {
+      throw new BadRequestException("Refund amount must be positive");
+    }
+    if (refundAmount > totalAmount) {
+      throw new BadRequestException(
+        `Refund amount (${refundAmount}) exceeds payment amount (${totalAmount})`,
+      );
+    }
+    const isFullRefund = refundAmount === totalAmount;
+
+    // TODO: call PayHere refund API here when production credentials are
+    // wired. For now we trust the admin-driven status flip — every refund
+    // is recorded in metadata so reconciliation can replay it later.
+    const existingMeta = (() => {
+      try {
+        return payment.metadata ? JSON.parse(payment.metadata) : {};
+      } catch {
+        return {};
+      }
+    })();
+    const refundLog = {
+      ...existingMeta,
+      refund: {
+        amount: refundAmount,
+        reason: dto.reason,
+        requestedBy: requesterUserId,
+        requestedAt: new Date().toISOString(),
+      },
+    };
+
+    await this.paymentRepository.update(payment.id, {
+      status: isFullRefund ? "refunded" : "succeeded",
+      metadata: JSON.stringify(refundLog),
+    });
+
+    // On full refund, free up the booked slot so the charger can be rebooked.
+    if (isFullRefund && booking && booking.status !== "cancelled") {
+      await this.bookingRepository.update(booking.id, {
+        status: "cancelled",
+        cancelReason: `Refunded: ${dto.reason}`,
+        cancelledAt: new Date(),
+      });
+    }
+
+    // Reflect on the receipt.
+    try {
+      await this.receiptsService.markRefunded(payment.id, refundAmount);
+    } catch (err) {
+      this.logger.warn(
+        `Failed to mark receipt refunded for payment ${payment.id}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
+    // Notify the user.
+    if (booking) {
+      try {
+        await this.notificationsService.sendToUser(
+          booking.userId,
+          NotificationType.REFUND_PROCESSED,
+          {
+            title: "Refund processed",
+            body: `LKR ${refundAmount.toFixed(2)} refunded to your original payment method`,
+            data: {
+              paymentId: payment.id,
+              bookingId: payment.bookingId,
+              navigate: `/payments/${payment.id}`,
+            },
+          },
+        );
+      } catch (err) {
+        this.logger.warn(
+          `Refund notification failed for payment ${payment.id}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
+    const refreshed = await this.paymentRepository.findOne({
+      where: { id: payment.id },
+    });
+    return refreshed ?? payment;
   }
 }

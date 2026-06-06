@@ -24,6 +24,7 @@ import { UpdatePaymentMethodDto } from "./dto/update-payment-method.dto";
 import { UpdatePaymentSettingsDto } from "./dto/update-payment-settings.dto";
 import { ConfirmCardSetupDto } from "./dto/confirm-card-setup.dto";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
+import { RefundPaymentDto } from "../receipts/dto/refund.dto";
 
 @Controller("payments")
 export class PaymentsController {
@@ -49,6 +50,21 @@ export class PaymentsController {
   handleWebhook(@Body() payload: any) {
     // PayHere sends webhook data as form-urlencoded
     return this.paymentsService.handleWebhook(payload);
+  }
+
+  @Post(":id/refund")
+  @UseGuards(JwtAuthGuard)
+  refundPayment(
+    @Param("id") paymentId: string,
+    @Body(ValidationPipe) dto: RefundPaymentDto,
+    @Request() req,
+  ) {
+    return this.paymentsService.refundPayment(
+      paymentId,
+      dto,
+      req.user.userId,
+      req.user.role,
+    );
   }
 
   // Payment Methods endpoints - MUST come before :id routes to avoid route conflicts
@@ -194,12 +210,6 @@ export class PaymentsController {
       offset: offset ? parseInt(offset) : 0,
     };
     return this.paymentsService.findUserTransactions(req.user.userId, filters);
-  }
-
-  @Post(":id/refund")
-  @UseGuards(JwtAuthGuard)
-  refundPayment(@Param("id") id: string) {
-    return this.paymentsService.refundPayment(id);
   }
 
   @Post(":id/confirm")
