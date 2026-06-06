@@ -114,10 +114,11 @@ export class ServiceProvidersService {
     const providers: Array<Record<string, unknown>> = [];
 
     if (includeMechanics) {
-      const mechanics = await this.mechanicRepository.find({
-        where: { isBanned: false, available: true },
-        order: { rating: "DESC" },
-      });
+      const mechanics = await this.fetchEligibleMechanics(
+        options.lat,
+        options.lng,
+        options.radiusKm,
+      );
 
       for (const mechanic of mechanics) {
         const distance = this.maybeDistance(
@@ -160,9 +161,11 @@ export class ServiceProvidersService {
     }
 
     if (includeStations) {
-      const stations = await this.stationRepository.find({
-        where: { isBanned: false, verified: true },
-      });
+      const stations = await this.fetchEligibleStations(
+        options.lat,
+        options.lng,
+        options.radiusKm,
+      );
       for (const station of stations) {
         const distance = this.maybeDistance(
           options.lat,
@@ -325,6 +328,98 @@ export class ServiceProvidersService {
    *
    * Never throws — the caller treats absence as "AI down, use rule score".
    */
+  /**
+   * Fetch the candidate mechanic set for `searchProviders`.
+   *
+   * Two paths, selected at runtime via `USE_POSTGIS`:
+   * - PostGIS path: ST_DWithin filters by bbox in SQL using the GIST index.
+   *   We still fetch entity-shaped rows so the scoring code below sees the
+   *   same field names as today.
+   * - Fallback: original behaviour — fetch all `available && !isBanned`
+   *   mechanics and let the caller filter in-app by distance.
+   *
+   * When coords are missing or the PostGIS query throws (e.g. extension not
+   * installed in this env), we fall back to the original `find()` so the
+   * endpoint never breaks because of an unavailable geo path.
+   */
+  private async fetchEligibleMechanics(
+    lat: number | undefined,
+    lng: number | undefined,
+    radiusKm: number,
+  ): Promise<MechanicEntity[]> {
+    if (
+      process.env.USE_POSTGIS === "true" &&
+      lat != null &&
+      lng != null
+    ) {
+      try {
+        const rows = await this.mechanicRepository.query(
+          `
+          SELECT m.*
+          FROM mechanics m
+          WHERE m.available = true
+            AND m."isBanned" = false
+            AND m.geom IS NOT NULL
+            AND ST_DWithin(
+                  m.geom::geography,
+                  ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography,
+                  $3 * 1000
+                )
+          ORDER BY m.rating DESC
+          `,
+          [lat, lng, radiusKm],
+        );
+        return rows as MechanicEntity[];
+      } catch (err) {
+        this.logger.warn(
+          `PostGIS mechanic fetch failed, falling back to repository.find: ${String(err)}`,
+        );
+      }
+    }
+    return this.mechanicRepository.find({
+      where: { isBanned: false, available: true },
+      order: { rating: "DESC" },
+    });
+  }
+
+  private async fetchEligibleStations(
+    lat: number | undefined,
+    lng: number | undefined,
+    radiusKm: number,
+  ): Promise<ServiceStationEntity[]> {
+    if (
+      process.env.USE_POSTGIS === "true" &&
+      lat != null &&
+      lng != null
+    ) {
+      try {
+        const rows = await this.stationRepository.query(
+          `
+          SELECT s.*
+          FROM service_stations s
+          WHERE s."isBanned" = false
+            AND s.verified = true
+            AND s.geom IS NOT NULL
+            AND ST_DWithin(
+                  s.geom::geography,
+                  ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography,
+                  $3 * 1000
+                )
+          `,
+          [lat, lng, radiusKm],
+        );
+        return rows as ServiceStationEntity[];
+      } catch (err) {
+        this.logger.warn(
+          `PostGIS station fetch failed, falling back to repository.find: ${String(err)}`,
+        );
+      }
+    }
+    return this.stationRepository.find({
+      where: { isBanned: false, verified: true },
+    });
+  }
+
   private async maybeFetchAiMechanicScores(
     providers: Array<Record<string, unknown>>,
     options: SearchProvidersOptions,

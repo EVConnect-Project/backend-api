@@ -126,6 +126,62 @@ export class MechanicsService {
     lng: number,
     radiusKm: number,
   ): Promise<any[]> {
+    // PostGIS opt-in path: GIST index narrows candidates to the bbox before
+    // computing exact sphere distance, AND filters by each mechanic's own
+    // service_radius (which we cannot index but at least confine to a small
+    // post-filter on the bbox-narrowed set).
+    if (process.env.USE_POSTGIS === "true") {
+      try {
+        const rows = await this.mechanicRepository.query(
+          `
+          SELECT m.*,
+                 ST_Distance_Sphere(
+                   m.geom,
+                   ST_SetSRID(ST_MakePoint($2, $1), 4326)
+                 ) / 1000.0 AS distance
+          FROM mechanics m
+          WHERE m.available = true
+            AND m."isBanned" = false
+            AND m.geom IS NOT NULL
+            AND ST_DWithin(
+                  m.geom::geography,
+                  ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography,
+                  $3 * 1000
+                )
+            AND ST_Distance_Sphere(
+                  m.geom,
+                  ST_SetSRID(ST_MakePoint($2, $1), 4326)
+                ) / 1000.0 <= COALESCE(m."serviceRadius", 5)
+          ORDER BY distance
+          `,
+          [lat, lng, radiusKm],
+        );
+        return (rows as any[]).map((m) => ({
+          id: m.id,
+          userId: m.userId,
+          name: m.name,
+          services: m.services,
+          lat: parseFloat(m.lat as any),
+          lng: parseFloat(m.lng as any),
+          rating: parseFloat(m.rating as any),
+          phone: m.phone,
+          description: m.description,
+          available: m.available,
+          pricePerHour: m.pricePerHour ? parseFloat(m.pricePerHour as any) : null,
+          serviceRadius: m.serviceRadius ? parseFloat(m.serviceRadius as any) : 5,
+          distance: parseFloat(m.distance as any),
+        }));
+      } catch (error) {
+        // If anything goes wrong with the PostGIS path, fall through to the
+        // Haversine implementation below. Logged so an ops runbook can spot
+        // chronic PostGIS issues (e.g. missing extension on a deploy).
+        console.error(
+          "PostGIS mechanic findNearby failed, falling back to Haversine:",
+          (error as Error).message,
+        );
+      }
+    }
+
     try {
       // Get all available, non-banned mechanics
       const allMechanics = await this.mechanicRepository.find({
